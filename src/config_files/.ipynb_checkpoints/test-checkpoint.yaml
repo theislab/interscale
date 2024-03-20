@@ -1,0 +1,21 @@
+out_dir: results
+dataloader:
+  data_path: ''
+  radius: 30
+dataset:
+  prediction_task: node # node, graph
+  num_classes: 4 
+gnn:
+  gnn_type: GCN
+  num_layers: 2
+  num_features: 20 
+  hidden_dim: 16
+  embed_dim: 8
+transformer: 
+  d_model: 128
+  n_heads: 4
+  dim_feedforward: 512
+  dropout: 0.3
+  num_layers: 4 
+  activation_func: relu
+  num_encoder_layers: 4

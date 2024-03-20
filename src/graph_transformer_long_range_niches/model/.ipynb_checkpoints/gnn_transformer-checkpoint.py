@@ -47,16 +47,16 @@ class GNNTransformer(nn.Module):
                 batched_data.x = [N, F]
         """
         h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
-        print('GNN out: ',h_node.shape, 'z', z.shape)
-        print('GNN predicted node label accuracy: ', (z.argmax(dim=1) == batched_data.y).sum() / len(batched_data.y))
+        # print('GNN out: ',h_node.shape, 'z', z.shape)
+        # print('GNN predicted node label accuracy: ', (z.argmax(dim=1) == batched_data.y).sum() / len(batched_data.y))
         h_node = self.gnn2transformer(h_node)  # [s, b, d_model]
-        print('After gnn2transformer: ', h_node.shape)
+        # print('After gnn2transformer: ', h_node.shape)
 
         padded_h_node, src_padding_mask, num_nodes, mask, max_num_nodes = pad_batch(
             h_node, batched_data.batch, self.transformer_encoder.max_input_len, get_mask=True
-        )  # Pad in the front batched_data.batch before
+        )  # Pad in the front
 
-        print("After Pad: ", padded_h_node.shape)
+        # print("After Pad: ", padded_h_node.shape)
 
         transformer_out = padded_h_node
         transformer_out, src_padding_mask = self.transformer_encoder(transformer_out, src_padding_mask)  # [s, B, h], [B, s]

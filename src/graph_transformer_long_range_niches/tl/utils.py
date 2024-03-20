@@ -2,10 +2,10 @@
 
 def pad_batch(h_node, batch, max_input_len, get_mask=False):
     """
-    from https://github.com/ucbrise/graphtrans/blob/main/modules/utils.py#L5
+    adjusted from: https://github.com/ucbrise/graphtrans/blob/main/modules/utils.py#L5
     """
 
-    num_batch = batch[-1] + 1
+    num_batch = batch[-1] + 1 
     num_nodes = []
     masks = []
     for i in range(num_batch):
@@ -15,7 +15,10 @@ def pad_batch(h_node, batch, max_input_len, get_mask=False):
         num_nodes.append(num_node)
 
     # logger.info(max(num_nodes))
-    max_num_nodes = min(max(num_nodes), max_input_len)
+    if max_input_len:
+        max_num_nodes = min(max(num_nodes), max_input_len)
+    else:
+        max_num_nodes = max(num_nodes)
     padded_h_node = h_node.data.new(max_num_nodes, num_batch, h_node.size(-1)).fill_(0)
     src_padding_mask = h_node.data.new(num_batch, max_num_nodes).fill_(0).bool()
 

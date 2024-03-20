@@ -1,0 +1,16 @@
+GNN out:  torch.Size([103, 8]) z torch.Size([103, 4])
+GNN predicted node label accuracy:  tensor(0.2330)
+After gnn2transformer:  torch.Size([103, 128])
+After Pad:  torch.Size([45, 5, 128])
+Input padded_h_node:  torch.Size([45, 5, 128])
+CLS + Normalized padded_h_node:  torch.Size([46, 5, 128])
+Padding mask:  torch.Size([5, 46])
+TransformerEncoder output:  torch.Size([46, 5, 128])
+hgraph output:  torch.Size([45, 5, 128])
+Permuted h_graph: torch.Size([5, 45, 128])
+Padding mask: torch.Size([5, 45])
+Masked output: torch.Size([103, 128])
+Traceback (most recent call last):
+  File "/tmp/ipykernel_4078725/3921658975.py", line 21, in train
+    out_gnn, out_transformer = model(batch) # [B, C] with C being the number of tasks to predict, e.i.
+ValueError: too many values to unpack (expected 2)

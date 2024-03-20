@@ -34,7 +34,6 @@ class GCN(torch.nn.Module):
             x: Adjacency matrix (n x obs)
             edge_index: gene expressiong (var x obs)
         """
-        print('GNN x: ', x.shape)
         for layer in self.layers:
             if isinstance(layer, MessagePassing):
                 x = layer(x, edge_index)

@@ -13,7 +13,7 @@ class TransformerNodeEncoder(nn.Module):
 
         # Save model parameters
         self.model_type = 'TransformerEncoder'
-        self.max_input_len = 1000
+        self.max_input_len = 10000
         self.d_model = cfg['d_model']
         self.n_heads = cfg['n_heads']
         self.dropout = cfg['dropout']
