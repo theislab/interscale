@@ -21,3 +21,4 @@ transformer:
   num_layers: 4 
   activation_func: relu
   num_encoder_layers: 4
+  max_input_len: 1000

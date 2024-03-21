@@ -1,0 +1,11 @@
+## 
+# ignore ALL .out files
+*.out
+*.csv
+*.png
+*.yaml
+*.log
+
+# ignore ALL files in ANY directory named 
+figures/
+wandb/

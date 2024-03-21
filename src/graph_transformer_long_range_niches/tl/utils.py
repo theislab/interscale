@@ -1,13 +1,25 @@
 
+import random
 
 def pad_batch(h_node, batch, max_input_len, get_mask=False):
     """
     adjusted from: https://github.com/ucbrise/graphtrans/blob/main/modules/utils.py#L5
+    Input: 
+        h_node: [S, D_transformer_in]
+        batch: graph index for each sequence token [S]
+    Output:
+        padded_h_node: representation values for each node such that sequence is not larger than max_input_len
+            [max_input_len, D_transformer_in]
+        src_padding_mask: indicates the transformer which nodes it should take into account for learning and which not. False = valid node, True = padded node
+            [B, max_input_len]
+        
+        
     """
 
     num_batch = batch[-1] + 1 
     num_nodes = []
     masks = []
+
     for i in range(num_batch):
         mask = batch.eq(i)
         masks.append(mask)
@@ -19,16 +31,27 @@ def pad_batch(h_node, batch, max_input_len, get_mask=False):
         max_num_nodes = min(max(num_nodes), max_input_len)
     else:
         max_num_nodes = max(num_nodes)
+    
+    # initialize padded_h_node with 0.0 and src_padding_mask with False (valid node)
     padded_h_node = h_node.data.new(max_num_nodes, num_batch, h_node.size(-1)).fill_(0)
     src_padding_mask = h_node.data.new(num_batch, max_num_nodes).fill_(0).bool()
 
+    index_nodes = []
     for i, mask in enumerate(masks):
         num_node = num_nodes[i]
         if num_node > max_num_nodes:
-            num_node = max_num_nodes
-        padded_h_node[-num_node:, i] = h_node[mask][-num_node:]
+            idx_nodes = random.sample(list(range(num_node)), max_num_nodes)
+            idx_nodes.sort()
+            num_node = max_num_nodes 
+            padded_h_node[-num_node:, i] = h_node[mask][idx_nodes]
+        else:
+            idx_nodes = list(range(max_num_nodes-num_node, max_num_nodes))
+            padded_h_node[-num_node:, i] = h_node[mask][-num_node:]
+        #padded_h_node[-num_node:, i] = h_node[mask][-num_node:]
+        # src_padding_mask[i, : max_num_nodes - num_node] = True  # [b, s]
         src_padding_mask[i, : max_num_nodes - num_node] = True  # [b, s]
+        index_nodes.append(idx_nodes)
 
     if get_mask:
-        return padded_h_node, src_padding_mask, num_nodes, masks, max_num_nodes
-    return padded_h_node, src_padding_mask
+        return padded_h_node, src_padding_mask, index_nodes, num_nodes, masks, max_num_nodes
+    return padded_h_node, src_padding_mask, index_nodes

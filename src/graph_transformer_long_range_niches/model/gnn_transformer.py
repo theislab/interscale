@@ -47,44 +47,44 @@ class GNNTransformer(nn.Module):
                 batched_data.x = [N, F]
         """
         h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
-        print('GNN out: ',h_node.shape, 'z', z.shape)
-        print('GNN predicted node label accuracy: ', (z.argmax(dim=1) == batched_data.y).sum() / len(batched_data.y))
-        h_node = self.gnn2transformer(h_node)  # [s, b, d_model]
-        print('After gnn2transformer: ', h_node.shape)
+        #print('GNN out: ',h_node.shape, 'z', z.shape)
+        #print('GNN predicted node label accuracy: ', (z.argmax(dim=1) == batched_data.y).sum() / len(batched_data.y))
+        h_node = self.gnn2transformer(h_node)  # [s, d_model]
+        #print('After gnn2transformer: ', h_node.shape)
 
-        padded_h_node, src_padding_mask, num_nodes, mask, max_num_nodes = pad_batch(
+        padded_h_node, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
             h_node, batched_data.batch, self.transformer_encoder.max_input_len, get_mask=True
         )  # Pad in the front batched_data.batch before
 
-        print("After Pad: ", padded_h_node.shape)
+        #print("After Pad: ", padded_h_node.shape)
 
         transformer_out = padded_h_node
         transformer_out, src_padding_mask = self.transformer_encoder(transformer_out, src_padding_mask)  # [s, B, h], [B, s]
-        # print('TransformerEncoder output: ', transformer_out.shape)
+        #print('TransformerEncoder output: ', transformer_out.shape)
 
         # ## Graph-level prediction: get cls 
         if self.prediction_task == 'graph':
-            h_graph = transformer_out[-1] # [B, C]
+            cls = transformer_out[-1] # [B, C]
             if self.max_seq_len is None:
-                out = self.graph_pred_linear(h_graph)
+                out = self.graph_pred_linear(cls)
                 return z, out
             pred_list = []
             for i in range(self.max_seq_len):
-                pred_list.append(self.graph_pred_linear_list[i](h_graph))
+                pred_list.append(self.graph_pred_linear_list[i](cls))
                 return z, pred_list
             
         ## Node-level prediction: remove cls
         elif self.prediction_task == 'node':
             h_graph = transformer_out[:-1] # [E, B, C]
-            print('hgraph output: ', h_graph.shape) 
+            #print('hgraph output: ', h_graph.shape) 
             h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
-            print('Permuted h_graph:', h_graph.shape)
+            #print('Permuted h_graph:', h_graph.shape)
             src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
-            print('Padding mask:', src_padding_mask.shape)
+            #print('Padding mask:', src_padding_mask.shape)
             masked_output = h_graph[~ src_padding_mask] # [N, E]
-            print('Masked output:', masked_output.shape)
+            #print('Masked output:', masked_output.shape)
             out = self.graph_pred_linear(masked_output)
-            return z, out
+            return z, out, index_nodes
             
         else:
             raise Exception('Choose a valid prediction tasks (graph or node).')
