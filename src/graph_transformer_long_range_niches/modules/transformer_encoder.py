@@ -13,13 +13,13 @@ class TransformerNodeEncoder(nn.Module):
 
         # Save model parameters
         self.model_type = 'TransformerEncoder'
-        self.max_input_len = cfg['max_input_len']
-        self.d_model = cfg['d_model']
-        self.n_heads = cfg['n_heads']
-        self.dropout = cfg['dropout']
-        self.act_func = cfg['activation_func']
-        self.num_encoded_layers = cfg['num_encoder_layers']
-        self.dim_feedforward = cfg['dim_feedforward']
+        self.max_input_len = cfg.get('transformer/max_input_len')
+        self.d_model = cfg.get('transformer/d_model')
+        self.n_heads = cfg.get('transformer/n_heads')
+        self.dropout = cfg.get('transformer/dropout')
+        self.act_func = cfg.get('transformer/activation_func')
+        self.num_encoded_layers = cfg.get('transformer/num_encoder_layers')
+        self.dim_feedforward = cfg.get('transformer/dim_feedforward')
 
         ## ToDo print model parameters
 
@@ -46,12 +46,12 @@ class TransformerNodeEncoder(nn.Module):
         # normalize input
         padded_h_node = self.norm_input(padded_h_node)
 
-        print('CLS + Normalized padded_h_node: ', padded_h_node.shape)
+        # print('CLS + Normalized padded_h_node: ', padded_h_node.shape)
 
         zeros = src_padding_mask.data.new(src_padding_mask.size(0), 1).fill_(0)
         src_padding_mask = torch.cat([src_padding_mask, zeros], dim=1)
 
-        print("Padding mask: ", src_padding_mask.shape)
+        # print("Padding mask: ", src_padding_mask.shape)
 
         transformer_out = self.transformer_encoder(padded_h_node, src_key_padding_mask=src_padding_mask)  # (S, B, h_d)
         return transformer_out, src_padding_mask

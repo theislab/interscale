@@ -9,3 +9,4 @@
 # ignore ALL files in ANY directory named 
 figures/
 wandb/
+logs/

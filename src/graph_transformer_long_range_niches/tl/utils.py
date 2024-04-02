@@ -45,7 +45,8 @@ def pad_batch(h_node, batch, max_input_len, get_mask=False):
             num_node = max_num_nodes 
             padded_h_node[-num_node:, i] = h_node[mask][idx_nodes]
         else:
-            idx_nodes = list(range(max_num_nodes-num_node, max_num_nodes))
+            #idx_nodes = list(range(max_num_nodes-num_node, max_num_nodes))
+            idx_nodes = list(range(0, num_node))
             padded_h_node[-num_node:, i] = h_node[mask][-num_node:]
         #padded_h_node[-num_node:, i] = h_node[mask][-num_node:]
         # src_padding_mask[i, : max_num_nodes - num_node] = True  # [b, s]
