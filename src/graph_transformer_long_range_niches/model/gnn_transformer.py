@@ -35,6 +35,7 @@ class LitGNNTransformer(L.LightningModule):
         self.cls_embedding = nn.Parameter(torch.randn([1, 1, self.output_dim], requires_grad = True))
         self.num_classes = cfg.get('dataset/num_classes')
         self.max_seq_len = cfg.get('dataset/max_seq_len')
+        # ToDOo: refer to weighted loss
         self.loss = torch.nn.CrossEntropyLoss()
         # Define metrics
         self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)

@@ -2,6 +2,57 @@ import torch
 from torch_geometric.data import Data, Dataset
 import random
 from sklearn.model_selection import train_test_split
+from geome import iterables, transforms, ann2data, datamodule
+import json
+import scanpy as sc
+
+def prepare_geome_dataset(cfg):
+    """
+    Loads, preprocesses and transforms the defined .h5ad data to a list of PyG data.
+    """
+    adj_matrix_loc = "obsp/adj_matrix"
+    fields = {
+        "x": ["X"],
+        "y": [f"obs/{cfg.get('dataset/prediction_obs')}"],
+    }
+    category_to_iterate = str(cfg.get('dataset/graph_id'))
+    #subset_dict = json.loads(cfg.get('dataset/subset_dict')) #ToDo: works with empty subset?
+    subset_dict = cfg.get('dataset/subset_dict')
+    spatial_neigbors_kwargs = cfg.get('dataset/spatial_neigbors_kwargs')
+
+    preprocess = transforms.Compose(
+        [
+            transforms.Subset(key_value = subset_dict, axis="obs"), 
+            transforms.Categorize(keys=list(subset_dict.keys()) + [cfg.get('dataset/prediction_obs'), cfg.get('dataset/graph_id')], axis="obs"),
+            transforms.AddAdjMatrix(adj_matrix_loc, overwrite=True, **spatial_neigbors_kwargs),
+            transforms.AddEdgeIndex(adj_matrix_loc, edge_index_key="edge_index", overwrite=True)
+        ]
+    )
+
+    transform = transforms.Compose(
+        [
+            transforms.AddDesignMatrix(
+                f"obs/{cfg.get('dataset/prediction_obs')}",
+                f"obs/{cfg.get('dataset/graph_id')}",
+                adj_matrix_loc,
+                "design_matrix",
+                overwrite=True,
+            ),
+        ]
+    )
+
+    a2d = ann2data.Ann2DataByCategory(
+        fields=fields,
+        category=category_to_iterate,
+        preprocess=preprocess,
+        transform=transform,
+    )
+
+    adata = sc.read_h5ad(cfg.get('dataset/h5ad_data'))
+
+    datas = list(a2d(adata))
+    print(datas[:3])
+    return datas
 
 
 class CustomGraphDataset_graphLabel(Dataset):

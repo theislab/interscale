@@ -36,6 +36,20 @@ pip install graph-transformer-long-range-niches
 pip install git+https://github.com/theislab/GT-long-range-niches.git@main
 ```
 
+## Environment installation
+
+```bash
+mamba create -n GT_long_range python=3.11
+mamba activate GT_long_range
+mamba install pytorch==2.1.0 torchvision==0.16.0 torchaudio==2.1.0 pytorch-cuda=12.1 -c pytorch -c nvidia 
+pip install pytorch-lightning
+pip install wandb
+pip install torch-geometric
+pip install -e .
+pip install torch-scatter torch-sparse torch-cluster -f https://data.pyg.org/whl/torch-2.1.0+cu121.html 
+pip install git+ https://github.com/theislab/geome.git@main
+```
+
 ## Release notes
 
 See the [changelog][changelog].

@@ -10,9 +10,9 @@
 #SBATCH --qos=cpu_normal
 #SBATCH --nice=10000
 
-source activate exphormer
+source activate exphormer_mamba
 
 # srun necessary for running lightning on SLURM
-srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_niche.yaml
+srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_0_niche_gnn.yaml
 #python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_niche_gnn.yaml
-#python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_niche.yaml
+#python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_0_niche_gnn.yaml
