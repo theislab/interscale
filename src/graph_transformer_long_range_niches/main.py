@@ -14,7 +14,6 @@ import argparse
 import wandb
 from torch_geometric.loader import DataLoader
 from torch_geometric.data.lightning import LightningDataset
-from geome import datamodule
 from sklearn.model_selection import train_test_split
 
 def main(cfg_path, default_path=None):
@@ -28,10 +27,9 @@ def main(cfg_path, default_path=None):
     print('Load PyG data...')
     pyg_datas = prepare_geome_dataset(cfg)
     print(pyg_datas[:2])
-    train_size, val_size = float(cfg.get('dataset/train_size')), float(cfg.get('dataset/val_size'))
+    train_size, val_size, test_size = float(cfg.get('dataset/train_size')), float(cfg.get('dataset/val_size')), float(cfg.get('dataset/test_size'))
     train_ds, val_ds = train_test_split(pyg_datas, train_size=train_size, test_size=val_size+test_size, random_state=42)
-    if train_size + val_size < 1.0:
-        test_size = float(1.0 - (train_size + val_size))
+    if test_size > 0.0:
         val_ds, test_ds = train_test_split(val_ds, train_size=1-test_size, test_size=test_size, random_state=42)
         dm = LightningDataset(train_ds, val_ds, test_ds, batch_size=int(cfg.get('dataset/batch_size')), shuffle=True)
     else:
