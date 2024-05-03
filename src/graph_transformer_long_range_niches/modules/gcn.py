@@ -22,7 +22,7 @@ class LitGCN(L.LightningModule):
         #dp_rate = cfg['dp_rate'] if cfg['dp_rate'] is not None else dp_rate
         self._cfg = cfg
         self.num_classes = cfg.get('dataset/num_classes')
-        in_dim, hidden_dim, embed_dim = cfg.get('gnn/num_features'), cfg.get('gnn/hidden_dim'), cfg.get('gnn/embed_dim')
+        in_dim, hidden_dim, embed_dim = cfg.get('dataset/num_features'), cfg.get('gnn/hidden_dim'), cfg.get('gnn/embed_dim')
         self.loss_criterion = torch.nn.CrossEntropyLoss()
         self.lr = float(self._cfg.get('optim/lr'))
         self.wd = float(self._cfg.get('optim/wd'))
@@ -88,8 +88,9 @@ class LitGCN(L.LightningModule):
         gnn_x, gnn_z = self.forward(batch.x, batch.edge_index) # [B, C] with C being the number of tasks to predict, e.i.        
         # Calculate loss function
         loss = self.loss_criterion(gnn_z, batch.y)
-        print('predicted and true: ', gnn_z.argmax(dim=1)[:10], batch.y[:10])
-        acc = self.accurary(gnn_z, batch.y)
-        f1_score = self.f1_score(gnn_z, batch.y)
+        print('predicted and true: ', gnn_z.argmax(dim=1)[:10], batch.y.argmax(dim=1)[:10])
+        acc = self.accurary(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
+        f1_score = self.f1_score(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
+        print(f'acc: {acc}, f1_score: {f1_score}, loss: {loss}')
 
         return loss, acc, f1_score

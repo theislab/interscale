@@ -147,5 +147,6 @@ class LitGNNTransformer(L.LightningModule):
         print('predicted and true: ', out_transformer.argmax(dim=1)[:10], y_true[:10])
         acc = self.accurary(out_transformer, torch.LongTensor(y_true))
         f1_score = self.f1_score(out_transformer, torch.LongTensor(y_true))
+        print(f'acc: {acc}, f1_score: {f1_score}, loss: {loss}')
 
         return loss, acc, f1_score

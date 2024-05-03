@@ -26,22 +26,22 @@ def main(cfg_path, default_path=None):
     # Geome dataloader
     print('Load PyG data...')
     pyg_datas = prepare_geome_dataset(cfg)
-    print(pyg_datas[:2])
     train_size, val_size, test_size = float(cfg.get('dataset/train_size')), float(cfg.get('dataset/val_size')), float(cfg.get('dataset/test_size'))
     train_ds, val_ds = train_test_split(pyg_datas, train_size=train_size, test_size=val_size+test_size, random_state=42)
     if test_size > 0.0:
         val_ds, test_ds = train_test_split(val_ds, train_size=1-test_size, test_size=test_size, random_state=42)
-        dm = LightningDataset(train_ds, val_ds, test_ds, batch_size=int(cfg.get('dataset/batch_size')), shuffle=True)
+        dm = LightningDataset(train_dataset = train_ds, 
+                              val_dataset = val_ds, 
+                              test_dataset = test_ds, 
+                              batch_size=int(cfg.get('dataset/batch_size')), 
+                              shuffle=True)
+        print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}, test ds: {len(test_ds)}')
     else:
-        dm = LightningDataset(train_ds, val_ds, batch_size=int(cfg.get('dataset/batch_size')), shuffle=True)
-
-    # load PyTorch Geometric object
-    # print(f"Load data {cfg.get('dataset/data_name')}...")
-    # data, slices = torch.load(cfg.get('dataset/data_path'))
-    # train_size, val_size = float(cfg.get('dataset/train_size')), float(cfg.get('dataset/val_size'))
-    # datasets = prepare_dataset_split(data, slices, train_size, val_size)
-    # train_loader = DataLoader([data for data in datasets if data.train_mask], batch_size=int(cfg.get('dataset/batch_size')), shuffle=True)
-    # val_loader = DataLoader([data for data in datasets if data.val_mask], batch_size=int(cfg.get('dataset/batch_size')), shuffle=False)
+        dm = LightningDataset(train_dataset = train_ds, 
+                              val_dataset = val_ds, 
+                              batch_size=int(cfg.get('dataset/batch_size')), 
+                              shuffle=True)
+        print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}')
 
     # WandB 
     if wandb_use:

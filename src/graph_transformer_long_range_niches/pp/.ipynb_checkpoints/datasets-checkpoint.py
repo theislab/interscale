@@ -2,7 +2,7 @@ import torch
 from torch_geometric.data import Data, Dataset
 import random
 from sklearn.model_selection import train_test_split
-from geome import transforms, ann2data, iterables
+from geome import transforms, ann2data
 import json
 import scanpy as sc
 
@@ -11,22 +11,21 @@ def prepare_geome_dataset(cfg):
     Loads, preprocesses and transforms the defined .h5ad data to a list of PyG data.
     """
     adj_matrix_loc = "adj_matrix"
-    prediction_obs = cfg.get('dataset/prediction_obs')
-    category_to_iterate = str(cfg.get('dataset/library_key'))
+    fields = {
+        "x": ["X"],
+        "y": [f"obs/{cfg.get('dataset/prediction_obs')}"],
+        "edge_index": ["uns/edge_index"],
+    }
+    category_to_iterate = str(cfg.get('dataset/graph_id'))
+    #subset_dict = json.loads(cfg.get('dataset/subset_dict')) #ToDo: works with empty subset?
     subset_dict = cfg.get('dataset/subset_dict')
     spatial_neigbors_kwargs = cfg.get('dataset/spatial_neigbors_kwargs')
     spatial_neigbors_kwargs['library_key'] = category_to_iterate
 
-    fields = {
-        "x": ["X"],
-        "y": [f"obs/{prediction_obs}"],
-        "edge_index": ["uns/edge_index"],
-    }
-
     preprocess = transforms.Compose(
         [
             transforms.Subset(key_value = subset_dict, axis="obs"), 
-            transforms.Categorize(keys=list(subset_dict.keys()) + [prediction_obs], axis="obs"),
+            transforms.Categorize(keys=list(subset_dict.keys()) + [cfg.get('dataset/prediction_obs'), cfg.get('dataset/graph_id')], axis="obs"),
             #transforms.AddEdgeIndex(edge_index_key="edge_index", func_args=spatial_neigbors_kwargs, spatial_key="spatial", key_added=adj_matrix_loc)
         ]
     )
@@ -35,26 +34,26 @@ def prepare_geome_dataset(cfg):
         
         [
             transforms.AddEdgeIndex(edge_index_key="edge_index", func_args=spatial_neigbors_kwargs, spatial_key="spatial", key_added=adj_matrix_loc),
+            # transforms.AddDesignMatrix(
+            #     f"obs/{cfg.get('dataset/prediction_obs')}",
+            #     f"obs/{cfg.get('dataset/graph_id')}",
+            #     f"obsp/{adj_matrix_loc}_connectivities",
+            #     "design_matrix"
+            # ),
         ]
     )
 
-    adata = sc.read_h5ad(cfg.get('dataset/h5ad_data'))
-
-    a2d = ann2data.Ann2DataBasic(
+    a2d = ann2data.Ann2DataByCategory(
         fields=fields,
-        adata2iter=iterables.ToCategoryIterator("window", axis="obs", preserve_categories = [prediction_obs]),
+        category=category_to_iterate,
         preprocess=preprocess,
         transform=transform,
     )
 
+    adata = sc.read_h5ad(cfg.get('dataset/h5ad_data'))
+
     datas = list(a2d(adata))
-
-    # set number of classes and number of features
-    cfg.set('dataset/num_features', len(datas[0].x[1]))
-    cfg.set('dataset/num_classes', len(datas[0].y[1]))
-
     print(datas[:3])
-    print(len(datas))
     return datas
 
 

@@ -64,4 +64,21 @@ class Config(object):
             return value
         except (TypeError, AttributeError):
             return default
+        
+    def set(self, path, value):
+        """
+        Set a value in the nested dictionary using the given path.
+
+        Args:
+            path (str): The path in the nested dictionary where the value should be set.
+                        Example: "meta/dataset_name"
+            value: The value to be set at the given path.
+        """
+        path_items = path.split("/")
+        sub_dict = self._data
+
+        for path_item in path_items[:-1]:
+            sub_dict = sub_dict.setdefault(path_item, {})
+
+        sub_dict[path_items[-1]] = value
 
