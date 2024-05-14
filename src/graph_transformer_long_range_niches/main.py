@@ -1,25 +1,26 @@
 from graph_transformer_long_range_niches.tl.load_config import Config  # noqa, register custom modules
 from graph_transformer_long_range_niches.model.gnn_transformer import LitGNNTransformer
-from graph_transformer_long_range_niches._train import train_gnntransformer, train_gnn
-from graph_transformer_long_range_niches.pp.datasets import prepare_dataset, prepare_dataset_split, prepare_geome_dataset
+from graph_transformer_long_range_niches.pp.datasets import prepare_geome_dataset
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
-from graph_transformer_long_range_niches.pp.datamodule_geome import GraphAnnDataModule
+from graph_transformer_long_range_niches.tl.utils import str_to_int_or_none
+from graph_transformer_long_range_niches.model.baseline import BaselineFCNN
 
 # PyTorch Lightning
 import pytorch_lightning as pl
 from lightning.pytorch.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
+from lightning.pytorch.callbacks.early_stopping import EarlyStopping
 
 import argparse
 import wandb
 from torch_geometric.loader import DataLoader
 from torch_geometric.data.lightning import LightningDataset
 from sklearn.model_selection import train_test_split
+import math
 
-def main(cfg_path, default_path=None):
+def main(cfg_path):
 
-    default_path = '/home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/default_configs.yaml'
-    cfg = Config(cfg_path, default_path)
+    cfg = Config(cfg_path)
     wandb_use = bool(cfg.get('wandb/use'))
     wandb_logger = None
 
@@ -47,26 +48,37 @@ def main(cfg_path, default_path=None):
     if wandb_use:
         print('Wandb initialize...')
         wandb.init(project=cfg.get('wandb/project_name'), config=cfg._data, name=cfg.get('wandb/name'))
-        wandb_logger = WandbLogger(log_model="all")
+        wandb_logger = WandbLogger(log_model=True)
 
     # model initialization
     try:
         if cfg.get('model/model_type') == 'gnn-transformer':
             print('Load GNNTransfomer...')
             model = LitGNNTransformer(cfg)
-        if cfg.get('model/model_type') == 'gnn':
+        elif cfg.get('model/model_type') == 'gnn':
             print('Load GNN...')
             model = LitGCN(cfg)
+        elif cfg.get('model/model_type') == 'fcnn':
+            print('Load FCNN...')
+            model = BaselineFCNN(cfg)
     except ValueError:
         print("No valid model defined in .yaml file.")
 
-    lr_monitor = LearningRateMonitor(logging_interval='step')
+    lr_monitor = LearningRateMonitor(logging_interval='epoch')
+    #early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=5, verbose=False, mode="max")
 
-    trainer = pl.Trainer(min_epochs=1, max_epochs=int(cfg.get('model/n_epochs')), logger=wandb_logger, enable_progress_bar=False, log_every_n_steps=10,
+    steps_per_epoch = math.ceil(len(train_ds) / cfg.get('dataset/batch_size'))
+
+    trainer = pl.Trainer(min_epochs=1, 
+                         max_epochs=int(cfg.get('model/n_epochs')), 
+                         logger=wandb_logger, 
+                         enable_progress_bar=False, 
                          callbacks=[lr_monitor],
+                         log_every_n_steps=steps_per_epoch,
                          # Sanity checks: Debugging model
-                         overfit_batches=1
+                         #overfit_batches=1,
                          )
+
     print('Training...')
     trainer.fit(model, dm) 
     trainer.validate(model, dm)

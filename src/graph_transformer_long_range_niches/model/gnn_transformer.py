@@ -14,7 +14,6 @@ import pytorch_lightning as L
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
 from graph_transformer_long_range_niches.modules.transformer_encoder import TransformerNodeEncoder
 from graph_transformer_long_range_niches.tl.utils import pad_batch
-from graph_transformer_long_range_niches.tl.evaluation import accuracy  
 from graph_transformer_long_range_niches.tl.loss import weighted_cross_entropy
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
 
@@ -24,6 +23,8 @@ class LitGNNTransformer(L.LightningModule):
         # Saving hyperparameters
         self.save_hyperparameters()
         self._cfg = cfg
+        self.lr = float(self._cfg.get('optim/lr'))
+        self.wd = float(self._cfg.get('optim/wd'))
 
         self.model_type = 'GNN_Transformer'
         self.prediction_task = cfg.get('dataset/prediction_task')
@@ -106,12 +107,13 @@ class LitGNNTransformer(L.LightningModule):
         return None, z
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=float(self._cfg.get('optim/lr')), weight_decay=float(self._cfg.get('optim/wd')))
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.wd)
         lr_scheduler = CosineWarmupScheduler(optimizer,
                                              warmup=int(self._cfg.get('optim/warm_up')),
-                                             max_epochs=int(self._cfg.get('model/n_epochs')))
+                                             #max_epochs=int(self._cfg.get('model/n_epochs')))
+                                             max_epochs=100000)
         
-        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'step'}]
+        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
 
     def training_step(self, batch):
         loss, acc, f1_score = self._common_step(batch)
@@ -137,16 +139,17 @@ class LitGNNTransformer(L.LightningModule):
         for i in range(batch.batch[-1] + 1):
             mask = batch.batch.eq(i)
             y_true += batch.y[mask][index_nodes[i]]
+        y_true = torch.stack(y_true)
+        #print('predicted and true: ', out_transformer[:10].argmax(dim=1), y_true[:10].argmax(dim=1))
         if self._cfg.get('optim/loss') == 'weighted-cross-entropy':
             weight = weighted_cross_entropy(out_transformer, torch.LongTensor(y_true))
             print('weight: ', weight)
             loss_fn = nn.CrossEntropyLoss(weight=weight)
-            loss = loss_fn(out_transformer, torch.LongTensor(y_true),)
+            loss = loss_fn(out_transformer, torch.LongTensor(y_true).argmax(dim=1),)
         else:
-            loss = self.loss(out_transformer, torch.LongTensor(y_true))
-        print('predicted and true: ', out_transformer.argmax(dim=1)[:10], y_true[:10])
-        acc = self.accurary(out_transformer, torch.LongTensor(y_true))
-        f1_score = self.f1_score(out_transformer, torch.LongTensor(y_true))
-        print(f'acc: {acc}, f1_score: {f1_score}, loss: {loss}')
+            loss = self.loss(out_transformer, y_true.argmax(dim=1))
+        acc = self.accurary(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+        f1_score = self.f1_score(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+        #print(f'acc: {acc}, f1_score: {f1_score}, loss: {loss}')
 
         return loss, acc, f1_score

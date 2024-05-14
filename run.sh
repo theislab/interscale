@@ -13,6 +13,15 @@
 source activate exphormer_mamba
 
 # srun necessary for running lightning on SLURM
-srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_gnn_ct_lung5.yaml
-srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_gnntrans_ct_lung5.yaml
+## HE23 LUNG
+srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/He23/he23_gnn_ct.yaml #he23_gnn_ct_lung5.yaml #he23_gnn_ct.yaml #he23_gnn_niche_lung5.yaml
+srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/He23/he23_gnntrans_ct.yaml #he23_gnntrans_ct_lung5.yaml #he23_gnntrans_ct.yaml #he23_gnntrans_niche_lung5.yaml
 #python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_0_niche_gnn.yaml
+
+## PANCREAS
+# python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/pancreas_gnn_ct.yaml
+# python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/pancreas_gnntrans_ct.yaml
+
+
+## BASELINE
+#srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_fcnn_niche_lung5.yaml

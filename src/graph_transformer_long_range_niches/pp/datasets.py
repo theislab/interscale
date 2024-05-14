@@ -27,7 +27,6 @@ def prepare_geome_dataset(cfg):
         [
             transforms.Subset(key_value = subset_dict, axis="obs"), 
             transforms.Categorize(keys=list(subset_dict.keys()) + [prediction_obs], axis="obs"),
-            #transforms.AddEdgeIndex(edge_index_key="edge_index", func_args=spatial_neigbors_kwargs, spatial_key="spatial", key_added=adj_matrix_loc)
         ]
     )
 
@@ -42,7 +41,7 @@ def prepare_geome_dataset(cfg):
 
     a2d = ann2data.Ann2DataBasic(
         fields=fields,
-        adata2iter=iterables.ToCategoryIterator("window", axis="obs", preserve_categories = [prediction_obs]),
+        adata2iter=iterables.ToCategoryIterator(category_to_iterate, axis="obs", preserve_categories = [prediction_obs]),
         preprocess=preprocess,
         transform=transform,
     )
@@ -57,65 +56,6 @@ def prepare_geome_dataset(cfg):
     print(len(datas))
     return datas
 
-
-class CustomGraphDataset_graphLabel(Dataset):
-    def __init__(self, num_graphs, max_nodes, max_edges, nr_node_features, nr_classes):
-        self.num_graphs = num_graphs
-        self.max_nodes = max_nodes
-        self.max_edges = max_edges
-        self.nr_node_features = nr_node_features
-        self.data_list = []
-
-        for _ in range(num_graphs):
-            num_nodes = random.randint(1, max_nodes)
-            num_edges = random.randint(0, min(num_nodes * (num_nodes - 1) // 2, max_edges))
-            
-            edge_index = torch.zeros((2, num_edges), dtype=torch.long)
-            for i in range(num_edges):
-                edge_index[0, i] = random.randint(0, num_nodes - 1)
-                edge_index[1, i] = random.randint(0, num_nodes - 1)
-            
-            x = torch.rand((num_nodes, nr_node_features), dtype=torch.float)  # Node features (random for example)
-            y = torch.tensor([random.randint(0, nr_classes)], dtype=torch.long)  # Graph label (binary for example)
-
-            data = Data(x=x, edge_index=edge_index, y=y)
-            self.data_list.append(data)
-
-    def __len__(self):
-        return self.num_graphs
-
-    def __getitem__(self, idx):
-        return self.data_list[idx]
-    
-class CustomGraphDataset_nodeLabel(Dataset):
-    def __init__(self, num_graphs, max_nodes, max_edges, nr_node_features, nr_classes):
-        self.num_graphs = num_graphs
-        self.max_nodes = max_nodes
-        self.max_edges = max_edges
-        self.nr_node_features = nr_node_features
-        self.nr_classes = nr_classes
-        self.data_list = []
-
-        for _ in range(num_graphs):
-            num_nodes = random.randint(1, max_nodes)
-            num_edges = random.randint(0, min(num_nodes * (num_nodes - 1) // 2, max_edges))
-            
-            edge_index = torch.zeros((2, num_edges), dtype=torch.long)
-            for i in range(num_edges):
-                edge_index[0, i] = random.randint(0, num_nodes - 1)
-                edge_index[1, i] = random.randint(0, num_nodes - 1)
-            
-            x = torch.rand((num_nodes, nr_node_features), dtype=torch.float)  # Node features (random for example)
-            y = torch.randint(0, nr_classes, (num_nodes,), dtype=torch.long)  # Node labels
-
-            data = Data(x=x, edge_index=edge_index, y=y)
-            self.data_list.append(data)
-
-    def __len__(self):
-        return self.num_graphs
-
-    def __getitem__(self, idx):
-        return self.data_list[idx]
     
 def prepare_dataset_split(data, slices, train_size=0.8, val_size=0.2):
     """Create a PyTorch Geometric dataset with slice-level train/validation split."""

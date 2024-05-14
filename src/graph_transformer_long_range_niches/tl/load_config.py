@@ -21,18 +21,13 @@ class Config(object):
     """Simple dict wrapper that adds a thin API allowing for slash-based retrieval of
     nested elements, e.g. cfg.get_config("meta/dataset_name")
     """
-    def __init__(self, config_path, default_path=None):
+    def __init__(self, config_path):
         if not os.path.exists(config_path):
             raise FileNotFoundError(f"The config file path {config_path} does not exist.")
         
         with open(config_path) as cf_file:
             print('Load cfg file...')
             cfg = yaml.safe_load( cf_file.read() )
-
-            if default_path is not None:
-                with open(default_path) as def_cf_file:
-                    default_cfg = yaml.safe_load( def_cf_file.read() )      
-                    cfg = {**default_cfg, **cfg}
                     
             self._data = cfg
 

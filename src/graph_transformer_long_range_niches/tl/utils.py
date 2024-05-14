@@ -56,3 +56,12 @@ def pad_batch(h_node, batch, max_input_len, get_mask=False):
     if get_mask:
         return padded_h_node, src_padding_mask, index_nodes, num_nodes, masks, max_num_nodes
     return padded_h_node, src_padding_mask, index_nodes
+
+
+def str_to_int_or_none(s):
+    if s is None:
+        return None
+    try:
+        return int(s)
+    except ValueError:
+        return None

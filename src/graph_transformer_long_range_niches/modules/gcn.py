@@ -9,9 +9,6 @@ import torchmetrics
 
 # PyTorch Lightning
 import pytorch_lightning as L
-
-from graph_transformer_long_range_niches.tl.evaluation import accuracy 
-
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
     
 class LitGCN(L.LightningModule):
@@ -62,9 +59,10 @@ class LitGCN(L.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.wd)
         lr_scheduler = CosineWarmupScheduler(optimizer,
                                              warmup=int(self._cfg.get('optim/warm_up')),
-                                             max_epochs=int(self._cfg.get('model/n_epochs')))
+                                             #max_epochs=int(self._cfg.get('model/n_epochs')))
+                                             max_epochs=1000000)
         
-        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'step'}]
+        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
 
     def training_step(self, batch):
         loss, acc, f1_score = self._common_step(batch)
@@ -88,9 +86,9 @@ class LitGCN(L.LightningModule):
         gnn_x, gnn_z = self.forward(batch.x, batch.edge_index) # [B, C] with C being the number of tasks to predict, e.i.        
         # Calculate loss function
         loss = self.loss_criterion(gnn_z, batch.y)
-        print('predicted and true: ', gnn_z.argmax(dim=1)[:10], batch.y.argmax(dim=1)[:10])
+        #print('predicted and true: ', gnn_z.argmax(dim=1)[:10], batch.y.argmax(dim=1)[:10])
         acc = self.accurary(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
         f1_score = self.f1_score(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
-        print(f'acc: {acc}, f1_score: {f1_score}, loss: {loss}')
+        #print(f'acc: {acc}, f1_score: {f1_score}, loss: {loss}')
 
         return loss, acc, f1_score
