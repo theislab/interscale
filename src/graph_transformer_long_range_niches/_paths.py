@@ -7,3 +7,5 @@ HE22_HUMAN_LUNG_DATA_PATH = Path('/lustre/groups/ml01/projects/2024_spatial_long
 
 sara_spatial_pancreas = Path('/lustre/groups/ml01/datasets/projects/20230301_Sander_SpatialPancreas_sara.jimenez/spatial/S1_annotated_l0.h5ad')
 SPATIAL_PANCREAS = Path('/lustre/groups/ml01/projects/2024_spatial_long_range_GT_francesca.drummer/unprocessed_data/jimenz_spatial_pancrease.h5ad')
+
+CFG_FILES = Path('/home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files')

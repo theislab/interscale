@@ -1,6 +1,6 @@
 from graph_transformer_long_range_niches.tl.load_config import Config  # noqa, register custom modules
 from graph_transformer_long_range_niches.model.gnn_transformer import LitGNNTransformer
-from graph_transformer_long_range_niches.pp.datasets import prepare_geome_dataset
+from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
 from graph_transformer_long_range_niches.tl.utils import str_to_int_or_none
 from graph_transformer_long_range_niches.model.baseline import BaselineFCNN
@@ -47,8 +47,11 @@ def main(cfg_path):
     # WandB 
     if wandb_use:
         print('Wandb initialize...')
-        wandb.init(project=cfg.get('wandb/project_name'), config=cfg._data, name=cfg.get('wandb/name'))
-        wandb_logger = WandbLogger(log_model=True)
+        run_name = f"{cfg.get('dataset/name')}_{cfg.get('model/model_type')}"
+        wandb.init(project=cfg.get('wandb/project_name'), config=cfg._data, name=run_name, job_type = 'model_training')
+        #cfg._data = wandb.config # make sure that what is logged is same as waht is run
+        wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
+        checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max") # save model if validation accuracy increases
 
     # model initialization
     try:
@@ -73,7 +76,7 @@ def main(cfg_path):
                          max_epochs=int(cfg.get('model/n_epochs')), 
                          logger=wandb_logger, 
                          enable_progress_bar=False, 
-                         callbacks=[lr_monitor],
+                         callbacks=[lr_monitor, checkpoint_callback],
                          log_every_n_steps=steps_per_epoch,
                          # Sanity checks: Debugging model
                          #overfit_batches=1,

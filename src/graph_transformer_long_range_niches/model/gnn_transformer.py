@@ -40,7 +40,9 @@ class LitGNNTransformer(L.LightningModule):
         self.loss = torch.nn.CrossEntropyLoss()
         # Define metrics
         self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
-        self.f1_score = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes) 
+        self.f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="micro") 
+        self.f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="macro") 
+        self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
         
         # GNN initialization
         self.gnn = LitGCN(cfg)
@@ -116,18 +118,24 @@ class LitGNNTransformer(L.LightningModule):
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
 
     def training_step(self, batch):
-        loss, acc, f1_score = self._common_step(batch)
-        self.log_dict({'train_loss': loss, 'train_acc': acc, 'train_f1': f1_score}, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
+        loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
+        log_dict = {'train_loss': loss, 
+                    'train_acc': acc, 
+                    'train_f1_micro': f1_score_micro, 
+                    'train_f1_score_macro': f1_score_macro}
+        for class_idx in range(self.num_classes):
+            log_dict[f'train_f1_class_{class_idx}'] = f1_score_per_class[class_idx]
+        self.log_dict(log_dict, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch):
-        loss, acc, f1_score = self._common_step(batch)
-        self.log_dict({'val_loss': loss, 'val_acc': acc, 'val_f1': f1_score}, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
+        loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
+        self.log_dict({'val_loss': loss, 'val_acc': acc, 'val_f1_micro': f1_score_micro, 'val_f1_score_macro': f1_score_macro}, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
         return loss
 
     def test_step(self, batch):
-        loss, acc, f1_score = self._common_step(batch)
-        self.log_dict({'test_loss': loss, 'test_acc': acc, 'test_f1': f1_score}, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
+        loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
+        self.log_dict({'test_loss': loss, 'test_acc': acc, 'test_f1_micro': f1_score_micro, 'test_f1_score_macro': f1_score_macro}, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
         return loss
 
     def _common_step(self, batch):
@@ -149,7 +157,9 @@ class LitGNNTransformer(L.LightningModule):
         else:
             loss = self.loss(out_transformer, y_true.argmax(dim=1))
         acc = self.accurary(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
-        f1_score = self.f1_score(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+        f1_score_micro = self.f1_score_micro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+        f1_score_macro = self.f1_score_macro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+        f1_score_per_class = self.f1_score_per_class(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
         #print(f'acc: {acc}, f1_score: {f1_score}, loss: {loss}')
 
-        return loss, acc, f1_score
+        return loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class

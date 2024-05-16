@@ -11,3 +11,4 @@ figures/
 wandb/
 logs/
 lightning_logs/
+artifacts/
