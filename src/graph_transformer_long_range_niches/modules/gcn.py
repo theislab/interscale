@@ -25,7 +25,9 @@ class LitGCN(L.LightningModule):
         self.wd = float(self._cfg.get('optim/wd'))
         # Define metrics
         self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
-        self.f1_score = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes) 
+        self.f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="micro") 
+        self.f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="macro") 
+        self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
 
         layers = []
         for l_idx in range(cfg.get('gnn/num_layers') - 1):
@@ -65,13 +67,29 @@ class LitGCN(L.LightningModule):
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
 
     def training_step(self, batch):
-        loss, acc, f1_score = self._common_step(batch)
-        self.log_dict({'train_loss': loss, 'train_acc': acc, 'train_f1': f1_score}, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
+        loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
+        log_dict = {
+            'train_loss': loss,
+            'train_acc': acc,
+            'train_f1_micro/avg': f1_score_micro,
+            'train_f1_macro/avg': f1_score_macro,
+        }
+        for class_idx in range(self.num_classes):
+            log_dict[f'train_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
+        self.log_dict(log_dict, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch):
-        loss, acc, f1_score = self._common_step(batch)
-        self.log_dict({'val_loss': loss, 'val_acc': acc, 'val_f1': f1_score}, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
+        loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
+        log_dict = {
+            'val_loss': loss,
+            'val_acc': acc,
+            'val_f1_micro/avg': f1_score_micro,
+            'val_f1_macro/avg': f1_score_macro,
+        }
+        for class_idx in range(self.num_classes):
+            log_dict[f'val_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
+        self.log_dict(log_dict, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
         return loss
 
     def test_step(self, batch):
@@ -88,7 +106,9 @@ class LitGCN(L.LightningModule):
         loss = self.loss_criterion(gnn_z, batch.y)
         #print('predicted and true: ', gnn_z.argmax(dim=1)[:10], batch.y.argmax(dim=1)[:10])
         acc = self.accurary(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
-        f1_score = self.f1_score(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
+        f1_score_micro = self.f1_score_micro(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
+        f1_score_macro = self.f1_score_macro(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
+        f1_score_per_class = self.f1_score_per_class(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
         #print(f'acc: {acc}, f1_score: {f1_score}, loss: {loss}')
 
-        return loss, acc, f1_score
+        return loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class

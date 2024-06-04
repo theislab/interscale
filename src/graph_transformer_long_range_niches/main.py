@@ -2,7 +2,7 @@ from graph_transformer_long_range_niches.tl.load_config import Config  # noqa, r
 from graph_transformer_long_range_niches.model.gnn_transformer import LitGNNTransformer
 from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
-from graph_transformer_long_range_niches.tl.utils import str_to_int_or_none
+from graph_transformer_long_range_niches.tl.wandb import log_data
 from graph_transformer_long_range_niches.model.baseline import BaselineFCNN
 
 # PyTorch Lightning
@@ -37,21 +37,27 @@ def main(cfg_path):
                               batch_size=int(cfg.get('dataset/batch_size')), 
                               shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}, test ds: {len(test_ds)}')
+        datasets = [train_ds, val_ds, test_ds]
+        names = ["training", "validation", "test"]
     else:
         dm = LightningDataset(train_dataset = train_ds, 
                               val_dataset = val_ds, 
                               batch_size=int(cfg.get('dataset/batch_size')), 
                               shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}')
+        datasets = [train_ds, val_ds]
+        names = ["training", "validation"]
 
     # WandB 
     if wandb_use:
         print('Wandb initialize...')
-        run_name = f"{cfg.get('dataset/name')}_{cfg.get('model/model_type')}"
-        wandb.init(project=cfg.get('wandb/project_name'), config=cfg._data, name=run_name, job_type = 'model_training')
+        data_name = f"{cfg.get('dataset/name')}_{cfg.get('dataset/prediction_obs')}_{cfg.get('dataset/library_key')}"
+        run_name = f"{data_name}_{cfg.get('model/model_type')}"
+        run = wandb.init(project=cfg.get('wandb/project_name'), config=cfg._data, name=run_name, job_type = 'model_training')
+        log_data(datasets, names, cfg, run)
         #cfg._data = wandb.config # make sure that what is logged is same as waht is run
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
-        checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max") # save model if validation accuracy increases
+        checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
 
     # model initialization
     try:
@@ -86,7 +92,21 @@ def main(cfg_path):
     trainer.fit(model, dm) 
     trainer.validate(model, dm)
 
+    
+
     if wandb_use:
+        ## log model artifact
+        model_checkpoint_path = checkpoint_callback.best_model_path
+
+        if model_checkpoint_path:
+            # Create an artifact
+            artifact = wandb.Artifact(name=f"{run_name}_model", type="model")
+            artifact.add_file(model_checkpoint_path, name=f"{run_name}.ckpt")
+
+            # Log the artifact
+            run.log_artifact(artifact)
+
+        run.finish()
         wandb.finish()
 
 if __name__ == '__main__':

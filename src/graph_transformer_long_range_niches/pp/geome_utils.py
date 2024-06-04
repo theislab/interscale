@@ -6,6 +6,7 @@ from geome import transforms, ann2data, iterables
 import json
 import scanpy as sc
 from torch_geometric.data.lightning import LightningDataset
+import numpy as np
 
 
 def prepare_geome_dataset(cfg):
@@ -23,12 +24,14 @@ def prepare_geome_dataset(cfg):
         "x": ["X"],
         "y": [f"obs/{prediction_obs}"],
         "edge_index": ["uns/edge_index"],
+        "obs_names": ["obs_names"],
     }
 
     preprocess = transforms.Compose(
         [
             transforms.Subset(key_value = subset_dict, axis="obs"), 
             transforms.Categorize(keys=list(subset_dict.keys()) + [prediction_obs], axis="obs"),
+            transforms.SaveOneHotEncodeLabels(keys = [prediction_obs], axis = 'obs', key_added = prediction_obs)
         ]
     )
 
@@ -53,6 +56,9 @@ def prepare_geome_dataset(cfg):
     # set number of classes and number of features
     cfg.set('dataset/num_features', len(datas[0].x[1]))
     cfg.set('dataset/num_classes', len(datas[0].y[1]))
+
+    # save labels for evaluation
+    cfg.set('labels/prediction_obs', np.unique(adata.obs[prediction_obs]))
 
     print(datas[:3])
     print(len(datas))

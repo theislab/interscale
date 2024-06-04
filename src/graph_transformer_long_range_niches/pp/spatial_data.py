@@ -1,13 +1,24 @@
 import numpy as np
 
-def sliding_windows(adata, window_size, library_key: str, overlap: int = 0):
+def sliding_windows(adata, 
+                    window_size, 
+                    library_key: str | None = None, 
+                    overlap: int = 0):
     """
         Input:
             - nr_windows: number of windows 
             - overlap: 
         TODO: integrate overlap
     """
+    if library_key is not None:
+        #_assert_categorical_obs(adata, key=library_key) squidpy function
+        libs = adata.obs[library_key].cat.categories
+        #make_index_unique(adata.obs_names) squidpy function
+    else:
+        libs = [None]
+
     adata.obs['sliding_window'] = 'NaN'
+
     width = adata.obs['x'].max() - adata.obs['x'].min()
     length = adata.obs['y'].max() - adata.obs['y'].min()
     

@@ -117,20 +117,30 @@ class LitGNNTransformer(L.LightningModule):
         
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
 
-    def training_step(self, batch):
+    def training_step(self, batch, batch_idx):
         loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
-        log_dict = {'train_loss': loss, 
-                    'train_acc': acc, 
-                    'train_f1_micro': f1_score_micro, 
-                    'train_f1_score_macro': f1_score_macro}
+        log_dict = {
+            'train_loss': loss,
+            'train_acc': acc,
+            'train_f1_micro/avg': f1_score_micro,
+            'train_f1_macro/avg': f1_score_macro,
+        }
         for class_idx in range(self.num_classes):
-            log_dict[f'train_f1_class_{class_idx}'] = f1_score_per_class[class_idx]
+            log_dict[f'train_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
         self.log_dict(log_dict, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
         return loss
 
-    def validation_step(self, batch):
+    def validation_step(self, batch, batch_idx):
         loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
-        self.log_dict({'val_loss': loss, 'val_acc': acc, 'val_f1_micro': f1_score_micro, 'val_f1_score_macro': f1_score_macro}, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
+        log_dict = {
+            'val_loss': loss,
+            'val_acc': acc,
+            'val_f1_micro/avg': f1_score_micro,
+            'val_f1_macro/avg': f1_score_macro,
+        }
+        for class_idx in range(self.num_classes):
+            log_dict[f'val_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
+        self.log_dict(log_dict, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
         return loss
 
     def test_step(self, batch):
