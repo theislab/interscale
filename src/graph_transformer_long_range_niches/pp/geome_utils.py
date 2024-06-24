@@ -43,26 +43,28 @@ def prepare_geome_dataset(cfg):
     )
 
     adata = sc.read_h5ad(cfg.get('dataset/h5ad_data'))
+    adata.obs_names_make_unique()
 
     a2d = ann2data.Ann2DataBasic(
         fields=fields,
         adata2iter=iterables.ToCategoryIterator(category_to_iterate, axis="obs", preserve_categories = [prediction_obs]),
         preprocess=preprocess,
         transform=transform,
+        save_preprocessed_adata = True,
     )
 
-    datas = list(a2d(adata))
+    datas, adata_processed = list(a2d(adata))
 
     # set number of classes and number of features
     cfg.set('dataset/num_features', len(datas[0].x[1]))
     cfg.set('dataset/num_classes', len(datas[0].y[1]))
 
     # save labels for evaluation
-    cfg.set('labels/prediction_obs', np.unique(adata.obs[prediction_obs]))
+    cfg.set('labels/prediction_obs', np.unique(adata_processed.obs[prediction_obs]))
 
     print(datas[:3])
     print(len(datas))
-    return datas
+    return datas, adata_processed
 
 def load_pyg_data(cfg):
     print('Load PyG data...')

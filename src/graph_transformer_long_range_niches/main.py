@@ -26,7 +26,7 @@ def main(cfg_path):
 
     # Geome dataloader
     print('Load PyG data...')
-    pyg_datas = prepare_geome_dataset(cfg)
+    pyg_datas, adata = prepare_geome_dataset(cfg)
     train_size, val_size, test_size = float(cfg.get('dataset/train_size')), float(cfg.get('dataset/val_size')), float(cfg.get('dataset/test_size'))
     train_ds, val_ds = train_test_split(pyg_datas, train_size=train_size, test_size=val_size+test_size, random_state=42)
     if test_size > 0.0:
@@ -54,7 +54,7 @@ def main(cfg_path):
         data_name = f"{cfg.get('dataset/name')}_{cfg.get('dataset/prediction_obs')}_{cfg.get('dataset/library_key')}"
         run_name = f"{data_name}_{cfg.get('model/model_type')}"
         run = wandb.init(project=cfg.get('wandb/project_name'), config=cfg._data, name=run_name, job_type = 'model_training')
-        log_data(datasets, names, cfg, run)
+        log_data(datasets + [adata], names + ['adata'], cfg, run)
         #cfg._data = wandb.config # make sure that what is logged is same as waht is run
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
         checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases

@@ -1,2 +1,1 @@
 from .basic import BasicClass, basic_plot
-from .color_map import CustomColormap
