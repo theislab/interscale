@@ -8,12 +8,10 @@ from graph_transformer_long_range_niches.model.baseline import BaselineFCNN
 # PyTorch Lightning
 import pytorch_lightning as pl
 from lightning.pytorch.loggers import WandbLogger
-from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
-from lightning.pytorch.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
 
 import argparse
 import wandb
-from torch_geometric.loader import DataLoader
 from torch_geometric.data.lightning import LightningDataset
 from sklearn.model_selection import train_test_split
 import math
@@ -74,7 +72,7 @@ def main(cfg_path):
         print("No valid model defined in .yaml file.")
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
-    #early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=5, verbose=False, mode="max")
+    early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=3, verbose=False, mode="max")
 
     steps_per_epoch = math.ceil(len(train_ds) / cfg.get('dataset/batch_size'))
 
@@ -82,7 +80,7 @@ def main(cfg_path):
                          max_epochs=int(cfg.get('model/n_epochs')), 
                          logger=wandb_logger, 
                          enable_progress_bar=False, 
-                         callbacks=[lr_monitor, checkpoint_callback],
+                         callbacks=[lr_monitor, checkpoint_callback, early_stop_callback],
                          log_every_n_steps=steps_per_epoch,
                          # Sanity checks: Debugging model
                          #overfit_batches=1,

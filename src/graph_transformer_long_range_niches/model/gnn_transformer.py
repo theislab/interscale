@@ -37,7 +37,13 @@ class LitGNNTransformer(L.LightningModule):
         self.num_classes = cfg.get('dataset/num_classes')
         self.max_seq_len = cfg.get('dataset/max_seq_len')
         # ToDOo: refer to weighted loss
-        self.loss = torch.nn.CrossEntropyLoss()
+        if cfg.get('optim/loss') == 'CrossEntropy':
+            self.loss = torch.nn.CrossEntropyLoss()
+        elif cfg.get('optim/loss') == 'WeightedCE':
+            self.loss = weighted_cross_entropy()
+        else:
+            raise ValueError(f"Invalid loss function specified: {cfg.get('optim/loss')}. Please choose 'CrossEntropy' or 'WeightedCE'.")
+
         # Define metrics
         self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
         self.f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="micro") 
@@ -159,7 +165,7 @@ class LitGNNTransformer(L.LightningModule):
             y_true += batch.y[mask][index_nodes[i]]
         y_true = torch.stack(y_true)
         #print('predicted and true: ', out_transformer[:10].argmax(dim=1), y_true[:10].argmax(dim=1))
-        if self._cfg.get('optim/loss') == 'weighted-cross-entropy':
+        if self._cfg.get('optim/loss') == 'CrossEntropy':
             weight = weighted_cross_entropy(out_transformer, torch.LongTensor(y_true))
             print('weight: ', weight)
             loss_fn = nn.CrossEntropyLoss(weight=weight)

@@ -50,6 +50,12 @@ pip install torch-scatter torch-sparse torch-cluster -f https://data.pyg.org/whl
 pip install git+ https://github.com/theislab/geome.git@main
 ```
 
+## Workflow
+
+1. Data preperation
+
+We recommend using sliding patterns for the training to detect interaction patterns. 
+
 ## Release notes
 
 See the [changelog][changelog].
