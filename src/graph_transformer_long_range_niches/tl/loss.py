@@ -1,10 +1,13 @@
 import torch
 import torch.nn.functional as F
+from collections import Counter
 
 def weighted_cross_entropy(pred, true):
     """Weighted cross-entropy for unbalanced classes.
     """
     # calculating label weights for weighted loss computation
+    print(pred)
+    print(true)
     V = true.size(0)
     n_classes = pred.shape[1] if pred.ndim > 1 else 2
     label_count = torch.bincount(true)
@@ -19,3 +22,14 @@ def weighted_cross_entropy(pred, true):
     # binary
     else:
         return None
+
+
+def calculate_class_weights(y_true):
+    class_counts = Counter(y_true)
+    total_samples = len(y_true)
+
+    # Calculate class weights
+    class_weights = {cls: total_samples / count for cls, count in class_counts.items()}
+
+    # Convert class weights to a tensor
+    weights = torch.tensor([class_weights[i] for i in range(len(class_counts))], dtype=torch.float)

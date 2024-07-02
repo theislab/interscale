@@ -14,7 +14,7 @@ import pytorch_lightning as L
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
 from graph_transformer_long_range_niches.modules.transformer_encoder import TransformerNodeEncoder
 from graph_transformer_long_range_niches.tl.utils import pad_batch
-from graph_transformer_long_range_niches.tl.loss import weighted_cross_entropy
+from graph_transformer_long_range_niches.tl.loss import weighted_cross_entropy, calculate_class_weights
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
 
 class LitGNNTransformer(L.LightningModule):
@@ -37,12 +37,11 @@ class LitGNNTransformer(L.LightningModule):
         self.num_classes = cfg.get('dataset/num_classes')
         self.max_seq_len = cfg.get('dataset/max_seq_len')
         # ToDOo: refer to weighted loss
-        if cfg.get('optim/loss') == 'CrossEntropy':
-            self.loss = torch.nn.CrossEntropyLoss()
-        elif cfg.get('optim/loss') == 'WeightedCE':
-            self.loss = weighted_cross_entropy()
-        else:
-            raise ValueError(f"Invalid loss function specified: {cfg.get('optim/loss')}. Please choose 'CrossEntropy' or 'WeightedCE'.")
+        # if cfg.get('optim/loss') == 'CrossEntropy' or cfg.get('optim/loss') == 'WeightedCE':
+        #     self.loss = torch.nn.CrossEntropyLoss()
+        # else:
+        #     raise ValueError(f"Invalid loss function specified: {cfg.get('optim/loss')}. Please choose 'CrossEntropy' or 'WeightedCE'.")
+        self.loss = torch.nn.CrossEntropyLoss()
 
         # Define metrics
         self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
@@ -99,13 +98,9 @@ class LitGNNTransformer(L.LightningModule):
         ## Node-level prediction: remove cls
         elif self.prediction_task == 'node':
             h_graph = transformer_out[:-1] # [E, B, C]
-            #print('hgraph output: ', h_graph.shape) 
             h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
-            #print('Permuted h_graph:', h_graph.shape)
             src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
-            #print('Padding mask:', src_padding_mask.shape)
             masked_output = h_graph[~ src_padding_mask] # [N, E]
-            #print('Masked output:', masked_output.shape)
             out = self.graph_pred_linear(masked_output)
             return z, out, index_nodes
             
@@ -165,11 +160,11 @@ class LitGNNTransformer(L.LightningModule):
             y_true += batch.y[mask][index_nodes[i]]
         y_true = torch.stack(y_true)
         #print('predicted and true: ', out_transformer[:10].argmax(dim=1), y_true[:10].argmax(dim=1))
-        if self._cfg.get('optim/loss') == 'CrossEntropy':
-            weight = weighted_cross_entropy(out_transformer, torch.LongTensor(y_true))
+        if self._cfg.get('optim/loss') == 'WeightedCE':
+            weight = weighted_cross_entropy(out_transformer, y_true)
             print('weight: ', weight)
             loss_fn = nn.CrossEntropyLoss(weight=weight)
-            loss = loss_fn(out_transformer, torch.LongTensor(y_true).argmax(dim=1),)
+            loss = loss_fn(out_transformer, y_true.argmax(dim=1),)
         else:
             loss = self.loss(out_transformer, y_true.argmax(dim=1))
         acc = self.accurary(out_transformer.argmax(dim=1), y_true.argmax(dim=1))

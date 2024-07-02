@@ -19,6 +19,7 @@ def prepare_geome_dataset(cfg):
     subset_dict = cfg.get('dataset/subset_dict')
     spatial_neigbors_kwargs = cfg.get('dataset/spatial_neigbors_kwargs')
     spatial_neigbors_kwargs['library_key'] = category_to_iterate
+    one_hot_encode_list = [prediction_obs]
 
     fields = {
         "x": ["X"],
@@ -27,11 +28,16 @@ def prepare_geome_dataset(cfg):
         "obs_names": ["obs_names"],
     }
 
+    if len(cfg.get('dataset/fine_tuning')) > 0:
+        for task in cfg.get('dataset/fine_tuning'):
+            fields.update({f"y_{task}": [f"obs/{task}"]})
+            one_hot_encode_list.append(task)
+
     preprocess = transforms.Compose(
         [
             transforms.Subset(key_value = subset_dict, axis="obs"), 
-            transforms.Categorize(keys=list(subset_dict.keys()) + [prediction_obs], axis="obs"),
-            transforms.SaveOneHotEncodeLabels(keys = [prediction_obs], axis = 'obs', key_added = prediction_obs)
+            transforms.Categorize(keys=list(subset_dict.keys()) + one_hot_encode_list, axis="obs"),
+            transforms.SaveOneHotEncodeLabels(keys = one_hot_encode_list, axis = 'obs', key_added = 'one_hot')
         ]
     )
 
