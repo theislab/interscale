@@ -4,6 +4,7 @@ from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dat
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
 from graph_transformer_long_range_niches.tl.wandb import log_data
 from graph_transformer_long_range_niches.model.baseline import BaselineFCNN
+from graph_transformer_long_range_niches.config import load_config
 
 # PyTorch Lightning
 import pytorch_lightning as pl
@@ -18,9 +19,7 @@ import math
 
 def main(cfg_path):
 
-    cfg = Config(cfg_path)
-    wandb_use = bool(cfg.get('wandb/use'))
-    wandb_logger = None
+    cfg = load_config(cfg_path)
 
     # Geome dataloader
     print('Load PyG data...')
@@ -47,7 +46,7 @@ def main(cfg_path):
         names = ["training", "validation"]
 
     # WandB 
-    if wandb_use:
+    if cfg.wandb.use:
         print('Wandb initialize...')
         data_name = f"{cfg.get('dataset/name')}_{cfg.get('dataset/prediction_obs')}_{cfg.get('dataset/library_key')}"
         run_name = f"{data_name}_{cfg.get('model/model_type')}"
@@ -90,7 +89,7 @@ def main(cfg_path):
     trainer.fit(model, dm) 
     trainer.validate(model, dm)
 
-    if wandb_use:
+    if cfg.wandb.use:
         ## log model artifact
         model_checkpoint_path = checkpoint_callback.best_model_path
 

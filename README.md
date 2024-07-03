@@ -48,6 +48,7 @@ pip install torch-geometric
 pip install -e .
 pip install torch-scatter torch-sparse torch-cluster -f https://data.pyg.org/whl/torch-2.1.0+cu121.html 
 pip install git+ https://github.com/theislab/geome.git@main
+pip install yacs
 ```
 
 ## Guide on Config files
