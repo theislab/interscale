@@ -8,7 +8,7 @@ from graph_transformer_long_range_niches.config import load_config
 
 # PyTorch Lightning
 import pytorch_lightning as pl
-from lightning.pytorch.loggers import WandbLogger
+from pytorch_lightning.loggers import WandbLogger
 from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, EarlyStopping
 
 import argparse
@@ -23,15 +23,15 @@ def main(cfg_path):
 
     # Geome dataloader
     print('Load PyG data...')
-    pyg_datas, adata = prepare_geome_dataset(cfg)
-    train_size, val_size, test_size = float(cfg.get('dataset/train_size')), float(cfg.get('dataset/val_size')), float(cfg.get('dataset/test_size'))
+    pyg_datas, adata, cfg = prepare_geome_dataset(cfg)
+    train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
     train_ds, val_ds = train_test_split(pyg_datas, train_size=train_size, test_size=val_size+test_size, random_state=42)
     if test_size > 0.0:
         val_ds, test_ds = train_test_split(val_ds, train_size=1-test_size, test_size=test_size, random_state=42)
         dm = LightningDataset(train_dataset = train_ds, 
                               val_dataset = val_ds, 
                               test_dataset = test_ds, 
-                              batch_size=int(cfg.get('dataset/batch_size')), 
+                              batch_size=int(cfg.dataset.batch_size), 
                               shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}, test ds: {len(test_ds)}')
         datasets = [train_ds, val_ds, test_ds]
@@ -39,32 +39,24 @@ def main(cfg_path):
     else:
         dm = LightningDataset(train_dataset = train_ds, 
                               val_dataset = val_ds, 
-                              batch_size=int(cfg.get('dataset/batch_size')), 
+                              batch_size=int(cfg.dataset.batch_size), 
                               shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}')
         datasets = [train_ds, val_ds]
         names = ["training", "validation"]
 
     # WandB 
-    if cfg.wandb.use:
-        print('Wandb initialize...')
-        data_name = f"{cfg.get('dataset/name')}_{cfg.get('dataset/prediction_obs')}_{cfg.get('dataset/library_key')}"
-        run_name = f"{data_name}_{cfg.get('model/model_type')}"
-        run = wandb.init(project=cfg.get('wandb/project_name'), config=cfg._data, name=run_name, job_type = 'model_training')
-        log_data(datasets + [adata], names + ['adata'], cfg, run)
-        #cfg._data = wandb.config # make sure that what is logged is same as waht is run
-        wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
-        checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
+    
 
     # model initialization
     try:
-        if cfg.get('model/model_type') == 'gnn-transformer':
+        if cfg.model.model_type == 'gnn-transformer':
             print('Load GNNTransfomer...')
             model = LitGNNTransformer(cfg)
-        elif cfg.get('model/model_type') == 'gnn':
+        elif cfg.model.model_type == 'gnn':
             print('Load GNN...')
             model = LitGCN(cfg)
-        elif cfg.get('model/model_type') == 'fcnn':
+        elif cfg.model.model_type == 'fcnn':
             print('Load FCNN...')
             model = BaselineFCNN(cfg)
     except ValueError:
@@ -73,10 +65,20 @@ def main(cfg_path):
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
 
-    steps_per_epoch = math.ceil(len(train_ds) / cfg.get('dataset/batch_size'))
+    steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
 
-    trainer = pl.Trainer(min_epochs=1, 
-                         max_epochs=int(cfg.get('model/n_epochs')), 
+    if cfg.wandb.use:
+        print('Wandb initialize...')
+        data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key}"
+        run_name = f"{data_name}_{cfg.model.model_type}"
+        run = wandb.init(project=cfg.get('wandb/project_name'), config=cfg, name=run_name, job_type = 'model_training')
+        log_data(datasets + [adata], names + ['adata'], cfg, run)
+        #cfg._data = wandb.config # make sure that what is logged is same as waht is run
+        wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
+        checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
+        print('Training...')
+        trainer = pl.Trainer(min_epochs=1, 
+                         max_epochs=int(cfg.model.n_epochs), 
                          logger=wandb_logger, 
                          enable_progress_bar=False, 
                          callbacks=[lr_monitor, checkpoint_callback, early_stop_callback],
@@ -84,8 +86,18 @@ def main(cfg_path):
                          # Sanity checks: Debugging model
                          #overfit_batches=1,
                          )
+    else: 
+        print('Training...')
+        trainer = pl.Trainer(min_epochs=1, 
+                         max_epochs=int(cfg.model.n_epochs), 
+                         enable_progress_bar=False, 
+                         callbacks=[lr_monitor, early_stop_callback],
+                         log_every_n_steps=steps_per_epoch,
+                         # Sanity checks: Debugging model
+                         #overfit_batches=1,
+                         )
 
-    print('Training...')
+    
     trainer.fit(model, dm) 
     trainer.validate(model, dm)
 

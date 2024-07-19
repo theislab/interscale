@@ -18,11 +18,11 @@ class LitGCN(L.LightningModule):
         super().__init__()      
         #dp_rate = cfg['dp_rate'] if cfg['dp_rate'] is not None else dp_rate
         self._cfg = cfg
-        self.num_classes = cfg.get('dataset/num_classes')
-        in_dim, hidden_dim, embed_dim = cfg.get('dataset/num_features'), cfg.get('gnn/hidden_dim'), cfg.get('gnn/embed_dim')
+        self.num_classes = cfg.dataset.num_classes
+        in_dim, hidden_dim, embed_dim = cfg.dataset.num_features, cfg.gnn.hidden_dim, cfg.gnn.embed_dim
         self.loss_criterion = torch.nn.CrossEntropyLoss()
-        self.lr = float(self._cfg.get('optim/lr'))
-        self.wd = float(self._cfg.get('optim/wd'))
+        self.lr = float(self._cfg.optim.lr)
+        self.wd = float(self._cfg.optim.wd)
         # Define metrics
         self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
         self.f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="micro") 
@@ -30,11 +30,11 @@ class LitGCN(L.LightningModule):
         self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
 
         layers = []
-        for l_idx in range(cfg.get('gnn/num_layers') - 1):
+        for l_idx in range(cfg.gnn.num_layers - 1):
             layers += [
                 GCNConv(in_channels=in_dim, out_channels=hidden_dim),
                 nn.ReLU(inplace=True),
-                nn.Dropout(cfg.get('gnn/dropout'))
+                nn.Dropout(cfg.gnn.dropout)
             ]
             in_dim = hidden_dim
         
@@ -60,7 +60,7 @@ class LitGCN(L.LightningModule):
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.wd)
         lr_scheduler = CosineWarmupScheduler(optimizer,
-                                             warmup=int(self._cfg.get('optim/warm_up')),
+                                             warmup=int(self._cfg.optim.warm_up),
                                              #max_epochs=int(self._cfg.get('model/n_epochs')))
                                              max_epochs=1000000)
         
@@ -76,7 +76,7 @@ class LitGCN(L.LightningModule):
         }
         for class_idx in range(self.num_classes):
             log_dict[f'train_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
-        self.log_dict(log_dict, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
+        self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch):
@@ -89,12 +89,12 @@ class LitGCN(L.LightningModule):
         }
         for class_idx in range(self.num_classes):
             log_dict[f'val_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
-        self.log_dict(log_dict, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
+        self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
 
     def test_step(self, batch):
         loss, acc, f1_score = self._common_step(batch)
-        self.log_dict({'test_loss': loss, 'test_acc': acc, 'test_f1': f1_score}, batch_size=int(self._cfg.get('dataset/batch_size')), on_step=False, on_epoch=True)
+        self.log_dict({'test_loss': loss, 'test_acc': acc, 'test_f1': f1_score}, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
 
     def _common_step(self, batch):

@@ -13,13 +13,13 @@ class TransformerNodeEncoder(nn.Module):
 
         # Save model parameters
         self.model_type = 'TransformerEncoder'
-        self.max_input_len = cfg.get('transformer/max_input_len')
-        self.d_model = cfg.get('transformer/d_model')
-        self.n_heads = cfg.get('transformer/n_heads')
-        self.dropout = cfg.get('transformer/dropout')
-        self.act_func = cfg.get('transformer/activation_func')
-        self.num_encoded_layers = cfg.get('transformer/num_encoder_layers')
-        self.dim_feedforward = cfg.get('transformer/dim_feedforward')
+        self.max_seq_len = cfg.transformer.max_seq_len
+        self.d_model = cfg.transformer.d_model
+        self.n_heads = cfg.transformer.n_heads
+        self.dropout = cfg.transformer.dropout
+        self.act_func = cfg.transformer.activation_func
+        self.num_encoded_layers = cfg.transformer.num_encoder_layers
+        self.dim_feedforward = cfg.transformer.dim_feedforward
 
         ## ToDo print model parameters
 

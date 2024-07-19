@@ -12,6 +12,6 @@ def get_transformer_cfg(cfg):
     cfg.transformer.dropout = 0.3
     cfg.transformer.activation_func = "relu"
     cfg.transformer.num_encoder_layers = 1
-    cfg.transformer.max_input_len = 1000
+    cfg.transformer.max_seq_len = 1000
     
     return cfg

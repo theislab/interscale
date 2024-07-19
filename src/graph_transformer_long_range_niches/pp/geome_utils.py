@@ -8,20 +8,16 @@ import scanpy as sc
 from torch_geometric.data.lightning import LightningDataset
 import numpy as np
 
-
 def prepare_geome_dataset(cfg):
     """
-    Loads, preprocesses and transforms the defined .h5ad data to a list of PyG data.
+    Loads, preprocesses and transforms the defined .h5ad data to a list of PyG data according to cfg file.
     """
     adj_matrix_loc = "adj_matrix"
     prediction_obs = cfg.dataset.prediction_obs
     category_to_iterate = cfg.dataset.library_key
-    if not cfg.get('dataset/subset_dict'):
-        subset_dict = cfg.get('dataset/subset_dict')
-    else: 
-        subset_dict = {}
-    spatial_neigbors_kwargs = cfg.get('dataset/spatial_neigbors_kwargs')
-    cfg.dataset.spatial_neigbors_kwargs.library_key = category_to_iterate
+    subset_dict = cfg.dataset.subset_dict
+    cfg.dataset.spatial_neigbors_kwargs.merge_from_list(['library_key', category_to_iterate])
+    spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
     one_hot_encode_list = [prediction_obs]
 
     fields = {
@@ -65,13 +61,13 @@ def prepare_geome_dataset(cfg):
     datas, adata_processed = list(a2d(adata))
 
     # set number of classes and number of features
-    cfg.dataset.num_features = len(datas[0].x[1])
-    cfg.dataset.num_classes = len(datas[0].y[1])
-
+    cfg.dataset.merge_from_list(['num_features', len(datas[0].x[1])])
+    cfg.dataset.merge_from_list(['num_classes', len(datas[0].y[1])])
 
     print(datas[:3])
     print(len(datas))
-    return datas, adata_processed
+    return datas, adata_processed, cfg
+
 
 def load_pyg_data(cfg):
     print('Load PyG data...')
@@ -98,44 +94,3 @@ def load_pyg_data(cfg):
         datasets = [train_ds, val_ds]
         names = ["training", "validation"]
     return datasets, names
-
-    
-# def prepare_dataset_split(data, slices, train_size=0.8, val_size=0.2):
-#     """Create a PyTorch Geometric dataset with slice-level train/validation split."""
-#     datasets = []
-#     num_slices = len(slices['x']) - 1
-    
-#     # Split slice indices into train and validation sets
-#     slice_indices = list(range(num_slices))
-#     train_slices, val_slices = train_test_split(slice_indices, train_size=train_size, test_size=val_size, random_state=42)
-    
-#     # Iterate over each slice in lung_slices
-#     for i in range(num_slices):
-#         slice_data = {}
-#         start_index_node = slices['x'][i].item()
-#         end_index_node = slices['x'][i + 1].item()
-#         start_index_edge = slices['edge_index'][i].item()
-#         end_index_edge = slices['edge_index'][i + 1].item()
-    
-#         # Extract relevant data from lung_data for this slice
-#         slice_data['x'] = data.x[start_index_node:end_index_node]
-#         slice_data['edge_index'] = data.edge_index[:, start_index_edge:end_index_edge]
-#         slice_data['edge_attr'] = data.edge_attr[start_index_edge:end_index_edge]
-#         slice_data['y'] = data.y[start_index_node:end_index_node]
-    
-#         # Create PyTorch Geometric Data object for this slice
-#         data_slice = Data(**slice_data)
-        
-#         # Assign slice to train or validation set
-#         if i in train_slices:
-#             data_slice.train_mask = torch.tensor(True)  # Mark as train
-#             data_slice.val_mask = torch.tensor(False)  # Mark as not validation
-#         elif i in val_slices:
-#             data_slice.train_mask = torch.tensor(False)  # Mark as not train
-#             data_slice.val_mask = torch.tensor(True)  # Mark as validation
-#         else:
-#             raise ValueError("Invalid slice index")
-        
-#         datasets.append(data_slice)
-        
-#     return datasets

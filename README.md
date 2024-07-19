@@ -55,7 +55,7 @@ pip install yacs
 
 Each experiment requires a `.yaml` file for the settings. Some configs are required for each experiment (e.i. `dataset.h5ad_data`) and others are set to a default value which are overwritten when included in the `experiment.yaml` file. All config parameters and default setting can be found in the `configs` folder.
 
-Example config file: [example.yaml](/home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/example.yaml)
+Example config file: [example.yaml](src/config_files/example.yaml)
 (copy paste the file, remove all defaults )
 
 **Config settings are based on [YACS](https://github.com/rbgirshick/yacs)*
