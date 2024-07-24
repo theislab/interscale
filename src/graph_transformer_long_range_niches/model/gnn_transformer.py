@@ -1,21 +1,18 @@
 # Standard libraries
-import numpy as np
 
-# PyTorch 
-import torch
-from torch import nn
-
-import torchmetrics
-from torchmetrics import Metric
-
+# PyTorch
 # PyTorch Lightning
 import pytorch_lightning as L
+import torch
+import torchmetrics
+from torch import nn
 
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
 from graph_transformer_long_range_niches.modules.transformer_encoder import TransformerNodeEncoder
-from graph_transformer_long_range_niches.tl.utils import pad_batch
-from graph_transformer_long_range_niches.tl.loss import weighted_cross_entropy, calculate_class_weights
+from graph_transformer_long_range_niches.tl.loss import weighted_cross_entropy
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
+from graph_transformer_long_range_niches.tl.utils import pad_batch
+
 
 class LitGNNTransformer(L.LightningModule):
     def __init__(self, cfg, **model_kwargs):
@@ -45,10 +42,10 @@ class LitGNNTransformer(L.LightningModule):
 
         # Define metrics
         self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
-        self.f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="micro") 
-        self.f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="macro") 
+        self.f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="micro")
+        self.f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="macro")
         self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
-        
+
         # GNN initialization
         self.gnn = LitGCN(cfg)
         # Transformer encoder initialization
@@ -83,14 +80,11 @@ class LitGNNTransformer(L.LightningModule):
 
         transformer_out = padded_h_node
         transformer_out, src_padding_mask = self.transformer_encoder(transformer_out, src_padding_mask)  # [S+1, B, E], [B, s]
-        print('TransformerEncoder output: ', transformer_out.shape)
 
-        # ## Graph-level prediction: get cls 
+        # ## Graph-level prediction: get cls
         if self.prediction_task == 'graph':
             cls = transformer_out[-1,:, :] # [B, E]
-            print("cls: ", cls.shape)
             out = self.graph_pred_linear(cls)
-            print("graph prediction: ", out.shape)
             return z, out, index_nodes
             # if self.max_seq_len is None:
             #     out = self.graph_pred_linear(cls)
@@ -99,17 +93,16 @@ class LitGNNTransformer(L.LightningModule):
             # for i in range(self.max_seq_len):
             #     pred_list.append(self.graph_pred_linear_list[i](cls))
             #     return z, pred_list, index_nodes
-            
+
         ## Node-level prediction: remove cls
         elif self.prediction_task == 'node':
-            print('Node prediction')
             h_graph = transformer_out[:-1] # [E, B, C]
             h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
             src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
             masked_output = h_graph[~ src_padding_mask] # [N, E]
             out = self.graph_pred_linear(masked_output)
             return z, out, index_nodes
-            
+
         else:
             raise Exception('Choose a valid prediction tasks (graph or node).')
 
@@ -119,7 +112,7 @@ class LitGNNTransformer(L.LightningModule):
         lr_scheduler = CosineWarmupScheduler(optimizer,
                                              warmup=int(self._cfg.optim.warm_up),
                                              max_epochs=100000)
-        
+
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
 
     def training_step(self, batch, batch_idx):
@@ -156,11 +149,10 @@ class LitGNNTransformer(L.LightningModule):
     def _common_step(self, batch):
         """Shared step between train, val and test.
         """
-        out_gnn, out_transformer, index_nodes = self.forward(batch) # batch: [B, C] with C being the number of tasks to predict, e.i. 
-        print('out_transformer', out_transformer)
+        out_gnn, out_transformer, index_nodes = self.forward(batch) # batch: [B, C] with C being the number of tasks to predict, e.i.
         # Calculate loss function
         y_true = []
-        
+
         for i in range(batch.batch[-1] + 1):
             print(i)
             mask = batch.batch.eq(i)
@@ -186,7 +178,7 @@ class LitGNNTransformer(L.LightningModule):
         f1_score_per_class = self.f1_score_per_class(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
 
         return loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class
-    
+
     def extract_attention(self, x, src_padding_mask, average_attn_heads = True):
         """
         Returns a list of attention maps (Tensor) for each Transformer layer.
@@ -200,7 +192,7 @@ class LitGNNTransformer(L.LightningModule):
         """
         attn_weights_maps = []
         attn_maps = []
-            
+
         num_layers = self.transformer_encoder.num_layers
         num_heads = self.transformer_encoder.layers[0].self_attn.num_heads
         print("num heads: ", num_heads)
@@ -217,17 +209,17 @@ class LitGNNTransformer(L.LightningModule):
                 attn_weights_maps.append(attn_output_weights)
                 # forward of layer i
                 x = self.transformer_encoder.layers[i](x)
-                
+
             attention_maps = torch.stack(attn_maps, dim=0)
             attention_maps = torch.mean(attention_maps, dim=0)
-            
+
         return attn_maps, attn_weights_maps, attention_maps
-    
+
     def evaluation(self, model, batched_data):
         h_node, z = model.gnn(batched_data.x, batched_data.edge_index)
-        h_node = model.gnn2transformer(h_node) 
+        h_node = model.gnn2transformer(h_node)
         padded_h_node, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
-                h_node, batched_data.batch, model.transformer_encoder.max_input_len, get_mask=True
+                h_node, batched_data.batch, model.transformer_encoder.max_seq_len, get_mask=True
             )
         transformer_out, src_padding_mask = model.transformer_encoder(padded_h_node, src_padding_mask)
         return padded_h_node, transformer_out, src_padding_mask, index_nodes

@@ -45,9 +45,6 @@ def main(cfg_path):
         datasets = [train_ds, val_ds]
         names = ["training", "validation"]
 
-    # WandB 
-    
-
     # model initialization
     try:
         if cfg.model.model_type == 'gnn-transformer':
@@ -71,7 +68,7 @@ def main(cfg_path):
         print('Wandb initialize...')
         data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key}"
         run_name = f"{data_name}_{cfg.model.model_type}"
-        run = wandb.init(project=cfg.get('wandb/project_name'), config=cfg, name=run_name, job_type = 'model_training')
+        run = wandb.init(project=cfg.wandb.project_name, config=cfg, name=run_name, job_type = 'model_training')
         log_data(datasets + [adata], names + ['adata'], cfg, run)
         #cfg._data = wandb.config # make sure that what is logged is same as waht is run
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
