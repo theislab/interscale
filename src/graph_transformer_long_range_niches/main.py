@@ -28,8 +28,8 @@ def main(cfg_path):
     train_ds, val_ds = train_test_split(pyg_datas, train_size=train_size, test_size=val_size+test_size, random_state=42)
     if test_size > 0.0:
         val_ds, test_ds = train_test_split(val_ds, train_size=1-test_size, test_size=test_size, random_state=42)
-        dm = LightningDataset(train_dataset = train_ds, 
-                              val_dataset = val_ds, 
+        dm = LightningDataset(train_dataset = train_ds,
+                              val_dataset = val_ds,
                               test_dataset = test_ds, 
                               batch_size=int(cfg.dataset.batch_size), 
                               shuffle=True)
