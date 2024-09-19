@@ -2,7 +2,7 @@ from yacs.config import CfgNode as CN
 
 def get_dataset_cfg(cfg):
     """
-        prediction_task: str = [node, graph]
+        prediction_task: str = [graph, node_classification, node_regression]
         prediction_obs: str = value to be predicted during training, must be in adata.obs
         subset_dict: {adata}
         num_features: number of gene expressions (added in prepare_geome_function)

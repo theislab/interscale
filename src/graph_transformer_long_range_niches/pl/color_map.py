@@ -3,6 +3,18 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import numpy as np
 
+pancreas_cell_type_coarse_colors = [
+    '#edd892', #acinar
+    '#219ebc', #alpha
+    '#adc178', #beta
+    '#f79824', #ductal
+    '#718355', #endocrine
+    '#f15156', #endothelial
+    '#bbd0ff', #Fibroblasts
+    '#979dac', #Immune
+    '#582f0e'  #mast
+]
+
 class CustomColormap:
     def __init__(self, categories, none_color='#D3D3D3', cmap_name='custom_colormap'):
         """

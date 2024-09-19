@@ -32,19 +32,29 @@ class LitGNNTransformer(L.LightningModule):
         self.norm_input = nn.LayerNorm(self.output_dim)
         self.cls_embedding = nn.Parameter(torch.randn([1, 1, self.output_dim], requires_grad = True))
         self.num_classes = cfg.dataset.num_classes
+        self.num_features = cfg.dataset.num_features
         self.max_seq_len = cfg.transformer.max_seq_len
         # ToDOo: refer to weighted loss
         # if cfg.get('optim/loss') == 'CrossEntropy' or cfg.get('optim/loss') == 'WeightedCE':
         #     self.loss = torch.nn.CrossEntropyLoss()
         # else:
         #     raise ValueError(f"Invalid loss function specified: {cfg.get('optim/loss')}. Please choose 'CrossEntropy' or 'WeightedCE'.")
-        self.loss = torch.nn.CrossEntropyLoss()
+        if 'classification' in self.prediction_task:
+            self.loss = torch.nn.CrossEntropyLoss()
+        elif 'regression' in self.prediction_task:
+            self.loss = torch.nn.MSELoss()
+        else:
+            raise Exception("Prediction task must define 'classification' or 'regression'.")
 
         # Define metrics
-        self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
-        self.f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="micro")
-        self.f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="macro")
-        self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
+        if 'classification' in self.prediction_task:
+            self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
+            self.f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="micro")
+            self.f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="macro")
+            self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
+        elif 'regression' in self.prediction_task:
+            self.mse = torchmetrics.MeanSquaredError()
+            self.r2 = torchmetrics.R2Score()
 
         # GNN initialization
         self.gnn = LitGCN(cfg)
@@ -53,7 +63,11 @@ class LitGNNTransformer(L.LightningModule):
 
         ## Prediction units
         self.graph_pred_linear_list = torch.nn.ModuleList()
-        self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_classes)
+        if 'classification' in self.prediction_task:
+            self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_classes)
+        elif 'regression' in self.prediction_task:
+            print('num features:', self.num_features)
+            self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_features)
         # if self.max_seq_len is None:
         #     self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_classes)
         # else:
@@ -82,7 +96,7 @@ class LitGNNTransformer(L.LightningModule):
         transformer_out, src_padding_mask = self.transformer_encoder(transformer_out, src_padding_mask)  # [S+1, B, E], [B, s]
 
         # ## Graph-level prediction: get cls
-        if self.prediction_task == 'graph':
+        if 'graph' in self.prediction_task:
             cls = transformer_out[-1,:, :] # [B, E]
             out = self.graph_pred_linear(cls)
             return z, out, index_nodes
@@ -95,7 +109,7 @@ class LitGNNTransformer(L.LightningModule):
             #     return z, pred_list, index_nodes
 
         ## Node-level prediction: remove cls
-        elif self.prediction_task == 'node':
+        elif 'node' in self.prediction_task: #TODO: I don't think I need to differentiate between regression and classification here.
             h_graph = transformer_out[:-1] # [E, B, C]
             h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
             src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
@@ -116,35 +130,72 @@ class LitGNNTransformer(L.LightningModule):
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
 
     def training_step(self, batch, batch_idx):
-        loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
-        log_dict = {
-            'train_loss': loss,
-            'train_acc': acc,
-            'train_f1_micro/avg': f1_score_micro,
-            'train_f1_macro/avg': f1_score_macro,
-        }
-        for class_idx in range(self.num_classes):
-            log_dict[f'train_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
-        self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
+        #loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
+        loss, metric_list = self._common_step(batch)
+        if 'classification' in self.prediction_task:
+            acc, f1_score_micro, f1_score_macro, f1_score_per_class = metric_list
+            log_dict = {
+                'train_loss': loss,
+                'train_acc': acc,
+                'train_f1_micro/avg': f1_score_micro,
+                'train_f1_macro/avg': f1_score_macro,
+            }
+            for class_idx in range(self.num_classes):
+                log_dict[f'train_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
+            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
+        elif 'regression' in self.prediction_task:
+            mse, r2 = metric_list
+            log_dict = {
+                'train_mse': mse,
+                'train_r2': r2,
+            }
+            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
-        loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
-        log_dict = {
-            'val_loss': loss,
-            'val_acc': acc,
-            'val_f1_micro/avg': f1_score_micro,
-            'val_f1_macro/avg': f1_score_macro,
-        }
-        for class_idx in range(self.num_classes):
-            log_dict[f'val_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
-        self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
+        loss, metric_list = self._common_step(batch)
+        if 'classification' in self.prediction_task:
+            acc, f1_score_micro, f1_score_macro, f1_score_per_class = metric_list
+            log_dict = {
+                'val_loss': loss,
+                'val_acc': acc,
+                'val_f1_micro/avg': f1_score_micro,
+                'val_f1_macro/avg': f1_score_macro,
+            }
+            for class_idx in range(self.num_classes):
+                log_dict[f'val_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
+            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
+        elif 'regression' in self.prediction_task:
+            mse, r2 = metric_list
+            log_dict = {
+                'val_mse': mse,
+                'val_r2': r2,
+            }
+            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
 
     def test_step(self, batch):
-        loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
-        self.log_dict({'test_loss': loss, 'test_acc': acc, 'test_f1_micro': f1_score_micro, 'test_f1_score_macro': f1_score_macro}, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
+        loss, metric_list = self._common_step(batch)
+        if 'classification' in self.prediction_task:
+            acc, f1_score_micro, f1_score_macro, f1_score_per_class = metric_list
+            log_dict = {
+                'test_loss': loss,
+                'test_acc': acc,
+                'test_f1_micro/avg': f1_score_micro,
+                'test_f1_macro/avg': f1_score_macro,
+            }
+            for class_idx in range(self.num_classes):
+                log_dict[f'test_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
+            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
+        elif 'regression' in self.prediction_task:
+            mse, r2 = metric_list
+            log_dict = {
+                'test_mse': mse,
+                'test_r2': r2,
+            }
+            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
+
 
     def _common_step(self, batch):
         """Shared step between train, val and test.
@@ -154,30 +205,41 @@ class LitGNNTransformer(L.LightningModule):
         y_true = []
 
         for i in range(batch.batch[-1] + 1):
-            print(i)
             mask = batch.batch.eq(i)
-            if self.prediction_task == 'node':
-                y_true += torch.tensor(batch.y[mask][index_nodes[i]])
-            elif self.prediction_task == 'graph':
-                y_true.append(torch.tensor(batch.y[mask][-1])) # assume same label on graph level. ToDo: check if graph level == same label
+            if 'classification' in self.prediction_task:
+                if 'node' in self.prediction_task:
+                    y_true += torch.tensor(batch.y[mask][index_nodes[i]])
+                elif 'graph' in self.prediction_task:
+                    y_true.append(torch.tensor(batch.y[mask][-1])) # assume same label on graph level. ToDo: check if graph level == same label
+            elif 'regression' in self.prediction_task:
+                y_true += torch.tensor(batch.x[mask][index_nodes[i]])
             else:
                 raise Exception('Choose a valid prediction tasks (graph or node).')
         y_true = torch.stack(y_true)
 
         #print('predicted and true: ', out_transformer[:10].argmax(dim=1), y_true[:10].argmax(dim=1))
-        if self._cfg.optim.loss == 'WeightedCE':
-            weight = weighted_cross_entropy(out_transformer, y_true)
-            print('weight: ', weight)
-            loss_fn = nn.CrossEntropyLoss(weight=weight)
-            loss = loss_fn(out_transformer, y_true.argmax(dim=1),)
-        else:
-            loss = self.loss(out_transformer, y_true.argmax(dim=1))
-        acc = self.accurary(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
-        f1_score_micro = self.f1_score_micro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
-        f1_score_macro = self.f1_score_macro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
-        f1_score_per_class = self.f1_score_per_class(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+        if 'classification' in self.prediction_task:
+            if self._cfg.optim.loss == 'WeightedCE':
+                weight = weighted_cross_entropy(out_transformer, y_true)
+                print('weight: ', weight)
+                loss_fn = nn.CrossEntropyLoss(weight=weight)
+                loss = loss_fn(out_transformer, y_true.argmax(dim=1),)
+            else:
+                loss = self.loss(out_transformer, y_true.argmax(dim=1))
+            acc = self.accurary(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+            f1_score_micro = self.f1_score_micro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+            f1_score_macro = self.f1_score_macro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+            f1_score_per_class = self.f1_score_per_class(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
 
-        return loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class
+            return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
+        
+        if 'regression' in self.prediction_task:
+            print('regression loss')
+            loss = self.loss(out_transformer, y_true)
+            mse = self.mse(out_transformer, y_true)
+            r2 = self.r2(out_transformer, y_true)
+            return loss, [mse, r2]
+
 
     def extract_attention(self, x, src_padding_mask, average_attn_heads = True):
         """

@@ -10,7 +10,7 @@
 #SBATCH --qos=cpu_normal
 #SBATCH --nice=10000
 
-source activate exphormer_mamba
+source activate GT_long_range_env
 
 # srun necessary for running lightning on SLURM
 ## HE23 LUNG
@@ -20,7 +20,7 @@ source activate exphormer_mamba
 
 ## PANCREAS
 # python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/pancreas_gnn_ct.yaml
-python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/pancreas_gnntrans_ct.yaml
+python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/pancreas_gnntrans_graph_condition.yaml
 
 
 ## BASELINE

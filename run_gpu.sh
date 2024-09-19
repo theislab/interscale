@@ -10,9 +10,9 @@
 #SBATCH --qos=gpu_long
 #SBATCH --nice=10000
 
-source activate GT_long_range #exphormer_geome
+source activate GT_long_range_env #exphormer_geome
 
 # srun necessary for running lightning on SLURM
-# srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_ct.yaml
-srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/pancreas_gnntrans_graph_condition.yaml
+#srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_ct.yaml
+#srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/pancreas_gnntrans_genes.yaml
 #python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_ct_gnn.yaml

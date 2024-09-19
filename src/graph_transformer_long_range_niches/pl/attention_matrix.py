@@ -57,77 +57,104 @@ def plot_attention_sender_receiver(
         sender: str | list[str],
         receiver: str,
         cell_type_key: str = 'cell_type',
-        attn_matrix_key: str ='attention',
+        attn_matrix_key: str ='attention_matrix',
         save_img: str = None,
-        add_streamline: bool = False
+        add_streamline: bool = False,
+        discrete_values: bool = False,
+        show_index: bool = False,
     ) -> None:
     """
     Plot the spatial scatter plot of sender and receiver cells, highlighting the sender cells based on the sum 
-    of their attention values towards the receiver cells.
+    of their attention values towards the receiver cells, and vice versa.
 
     Parameters
     ----------
         adata: AnnData
             Annotated data matrix.
-        sender_cell_type: str
+        sender: str or list of str
             Single or multiple cell type(s) considered as the sender in the attention matrix.
-        receiver_cell_type: str
+        receiver: str
             The cell type considered as the receiver in the attention matrix.
-        cell_type_col: str, optional (default: 'cell_type')
+        cell_type_key: str, optional (default: 'cell_type')
             The column in adata.obs that contains the cell type information.
-        obsm_key: str, optional (default: 'attention')
+        attn_matrix_key: str, optional (default: 'attention')
             The key in adata.obsm that contains the attention matrix as NumpyArray.
+        save_img: str, optional
+            Path to save the plot image.
+        add_streamline: bool, optional
+            If True, adds streamlines to the plot to indicate directionality.
+        discrete_values: bool, optional
+            If false, plots normalized attention values, if true uses discretized values.
+        show_index: bool, optional
+            If True, adds an index to the x-axis to indicate position.
     """
     if isinstance(sender, str):
         sender = [sender]
-    if isinstance(receiver, str):
-        receiver_type = receiver
 
     num_senders = len(sender)
-    fig, axes = plt.subplots(1, num_senders, figsize=(5 * num_senders, 5), squeeze=False)
+    fig, axes = plt.subplots(num_senders, 2, figsize=(10, 5 * num_senders))
 
     for i, sender_type in enumerate(sender):
-        ax = axes[0, i]
+        for j, (current_sender, current_receiver) in enumerate([(sender_type, receiver), (receiver, sender_type)]):
+            ax = axes[i, j]
 
-        # Extract the attention matrix from .obsm
-        attention_matrix = adata.obsm[attn_matrix_key].copy()
-        obs_names = adata.obs[cell_type_key]
-        attention_matrix = pd.DataFrame(attention_matrix, index=obs_names, columns=obs_names)
+            # Extract the attention matrix from .obsm
+            attention_matrix = adata.obsm[attn_matrix_key].copy()
+            obs_names = adata.obs[cell_type_key]
+            attention_matrix = pd.DataFrame(attention_matrix, index=obs_names, columns=obs_names)
 
-        # Compute the sum of attention values for each sender cell towards all receiver cells
-        attention_sums = attention_matrix.loc[sender_type, receiver_type].sum(axis=1)
+            # Compute the sum of attention values for each sender cell towards all receiver cells
+            attention_sums = attention_matrix.loc[current_sender, current_receiver].sum(axis=1)
 
-        subadata = adata[adata.obs[cell_type_key].isin([sender_type, receiver_type])]
+            subadata = adata[adata.obs[cell_type_key].isin([current_sender, current_receiver])]
 
-        subadata.obs['attention_values'] = 0
-        subadata.obs.loc[subadata.obs[cell_type_key] == sender_type, 'attention_values'] = attention_sums.values
+            subadata.obs['attention_values'] = 0
+            subadata.obs.loc[subadata.obs[cell_type_key] == current_sender, 'attention_values'] = attention_sums.values
 
-        attn_min = min(subadata.obs['attention_values'][subadata.obs['attention_values'] != 0])  # minimum that is not 0
-        attn_max = max(subadata.obs['attention_values'])
+            attn_min = min(subadata.obs['attention_values'][subadata.obs['attention_values'] != 0])  # minimum that is not 0
+            attn_max = max(subadata.obs['attention_values'])
 
-        normalized_attention_values = (subadata.obs['attention_values'] - attn_min) / (attn_max-attn_min)
+            normalized_attention_values = (subadata.obs['attention_values'] - attn_min) / (attn_max-attn_min)
 
-        # Create a color array initialized to grey for all cells
-        cell_colors = [None] * subadata.n_obs
-        # Update the colors for sender cells based on their attention sums
-        for idx, (value, norm_value) in enumerate(zip(subadata.obs['attention_values'], normalized_attention_values)):
-            if value == 0:
-                cell_colors[idx] = (211/255, 211/255, 211/255, 1.0)
-            else:
-                cell_colors[idx] = plt.cm.summer(norm_value)
+            # Create a color array initialized to grey for all cells
+            cell_colors = [None] * subadata.n_obs
+            # Update the colors for sender cells based on their attention sums
+            for idx, (value, norm_value) in enumerate(zip(subadata.obs['attention_values'], normalized_attention_values)):
+                if value == 0:
+                    cell_colors[idx] = (211/255, 211/255, 211/255, 1.0)
+                else:
+                    cell_colors[idx] = plt.cm.summer(norm_value)
 
-        subadata.obs['colors'] = cell_colors
-        subadata.obs['colors'] = cell_colors
+            subadata.obs['colors'] = cell_colors
+            subadata.obs['colors'] = cell_colors
 
-        sq.pl.spatial_scatter(subadata, shape=None, color='colors', ax=ax, palette=[cell_colors], img = False, size_key = 2, vmin = attn_min, vmax = attn_max)
+            sq.pl.spatial_scatter(subadata, shape=None, color='colors', ax=ax, palette=[cell_colors], img=False, size_key=2, vmin=attn_min, vmax=attn_max)
 
-        if add_streamline:
-            X, Y, U, V = sender_receiver_stream(adata, sender_type, receiver_type, cell_type_key, density = None)
-            ax.streamplot(X, Y, U, V, density=0.5, linewidth=1, arrowsize=1.5)
+            # Calculate total x and y distance
+            x_coords = subadata.obsm['spatial'][:, 0]
+            y_coords = subadata.obsm['spatial'][:, 1]
+            x_range = max(x_coords) - min(x_coords)
+            y_range = max(y_coords) - min(y_coords)
 
-        ax.set_title(f"Sender: {sender_type} & Receiver: {receiver_type}")
+            # Set axis labels with distances
+            ax.set_xlabel(f'X-axis (Range: {x_range:.0f})')
+            ax.set_ylabel(f'Y-axis (Range: {y_range:.0f})')
 
-    fig.suptitle('Attention value distribution between sender and grey receiver cells', fontsize=16)
+            if show_index:
+                x_indices_to_show = np.linspace(min(x_coords), max(x_coords), num=4, dtype=int)
+                ax.set_xticks(x_indices_to_show)
+                ax.set_xticklabels(x_indices_to_show, rotation=0)
+                y_indices_to_show = np.linspace(min(y_coords), max(y_coords), num=4, dtype=int)
+                ax.set_yticks(y_indices_to_show)
+                ax.set_yticklabels(y_indices_to_show, rotation=0)
+
+            if add_streamline:
+                X, Y, U, V = sender_receiver_stream(adata, current_sender, current_receiver, cell_type_key, density=None)
+                ax.streamplot(X, Y, U, V, density=0.5, linewidth=1, arrowsize=1.5)
+
+            ax.set_title(f"{'Sender: ' if j == 0 else 'Receiver: '}{current_sender} & {'Receiver: ' if j == 0 else 'Sender: '}{current_receiver}")
+
+    fig.suptitle('Attention value distribution between sender and receiver cells', fontsize=16)
     
     # Save the plot if a path or filename is provided
     if save_img:

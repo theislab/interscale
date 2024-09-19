@@ -1,6 +1,5 @@
-from graph_transformer_long_range_niches.tl.load_config import Config  # noqa, register custom modules
 from graph_transformer_long_range_niches.model.gnn_transformer import LitGNNTransformer
-from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset
+from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset, split_adata
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
 from graph_transformer_long_range_niches.tl.wandb import log_data
 from graph_transformer_long_range_niches.model.baseline import BaselineFCNN
@@ -14,20 +13,29 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, Ea
 import argparse
 import wandb
 from torch_geometric.data.lightning import LightningDataset
-from sklearn.model_selection import train_test_split
 import math
+import scanpy as sc
+import os
 
 def main(cfg_path):
 
     cfg = load_config(cfg_path)
 
-    # Geome dataloader
-    print('Load PyG data...')
-    pyg_datas, adata, cfg = prepare_geome_dataset(cfg)
+    ####### PREPROCESSING #######
+    # Load adata
+    adata = sc.read_h5ad(cfg.dataset.h5ad_data)
+    adata.obs_names_make_unique()
+
+    # Split data into train, val (and test)
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
-    train_ds, val_ds = train_test_split(pyg_datas, train_size=train_size, test_size=val_size+test_size, random_state=42)
+    adata = split_adata(adata, 'fov', val_size, test_size, seed = cfg.optim.seed)
+
+    # Create PyG data
+    print('Load PyG data...')
+    pyg_data_list, adata_list = prepare_geome_dataset(adata, cfg)
+    train_ds, val_ds = pyg_data_list[0], pyg_data_list[1]
     if test_size > 0.0:
-        val_ds, test_ds = train_test_split(val_ds, train_size=1-test_size, test_size=test_size, random_state=42)
+        test_ds = pyg_data_list[2]
         dm = LightningDataset(train_dataset = train_ds,
                               val_dataset = val_ds,
                               test_dataset = test_ds, 
@@ -45,7 +53,8 @@ def main(cfg_path):
         datasets = [train_ds, val_ds]
         names = ["training", "validation"]
 
-    # model initialization
+    ####### TRAINING #######
+    # Model Initialization
     try:
         if cfg.model.model_type == 'gnn-transformer':
             print('Load GNNTransfomer...')
@@ -60,16 +69,20 @@ def main(cfg_path):
         print("No valid model defined in .yaml file.")
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
-    early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
+    if 'classification' in cfg.dataset.prediction_task:
+        early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
+    if 'regression' in cfg.dataset.prediction_task:
+        early_stop_callback = EarlyStopping(monitor="val_mse", min_delta=0.00, patience=10, verbose=False, mode="min")
 
     steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
 
-    if cfg.wandb.use:
+    data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key}_{cfg.optim.seed}"
+    run_name = f"{data_name}_{cfg.model.model_type}"
+
+    if cfg.model.save == "wandb" and cfg.wandb.use:
         print('Wandb initialize...')
-        data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key}"
-        run_name = f"{data_name}_{cfg.model.model_type}"
         run = wandb.init(project=cfg.wandb.project_name, config=cfg, name=run_name, job_type = 'model_training')
-        log_data(datasets + [adata], names + ['adata'], cfg, run)
+        log_data(datasets + adata_list, names + ['adata'], cfg, run)
         #cfg._data = wandb.config # make sure that what is logged is same as waht is run
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
         checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
@@ -83,28 +96,38 @@ def main(cfg_path):
                          # Sanity checks: Debugging model
                          #overfit_batches=1,
                          )
-    else: 
+    else:
         print('Training...')
         trainer = pl.Trainer(min_epochs=1, 
-                         max_epochs=int(cfg.model.n_epochs), 
-                         enable_progress_bar=False, 
+                         max_epochs=int(cfg.model.n_epochs),
+                         enable_progress_bar=False,
                          callbacks=[lr_monitor, early_stop_callback],
                          log_every_n_steps=steps_per_epoch,
                          # Sanity checks: Debugging model
                          #overfit_batches=1,
                          )
 
-    
-    trainer.fit(model, dm) 
+    trainer.fit(model, dm)
     trainer.validate(model, dm)
 
-    if cfg.wandb.use:
+    ##### SAVING #####
+    if cfg.model.save == "local":
+        output_path = cfg.output_path  # Assuming this path is defined in the config
+        print(f"Saving model locally to {output_path}...")
+        trainer.save_checkpoint(os.path.join(output_path, f"{run_name}.ckpt"))
+
+        # Save the adata object locally if required
+        adata_save_path = os.path.join(output_path, f"{data_name}.h5ad")
+        adata.write(adata_save_path)
+        print(f"Adata saved to {adata_save_path}")
+
+    if cfg.model.save == "wandb" and cfg.wandb.use:
         ## log model artifact
         model_checkpoint_path = checkpoint_callback.best_model_path
 
         if model_checkpoint_path:
             # Create an artifact
-            artifact = wandb.Artifact(name=f"{run_name}_model", type="model")
+            artifact = wandb.Artifact(name=f"{run_name}_model_{cfg.optim.seed}", type="model")
             artifact.add_file(model_checkpoint_path, name=f"{run_name}.ckpt")
 
             # Log the artifact

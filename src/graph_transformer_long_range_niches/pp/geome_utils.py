@@ -8,7 +8,60 @@ import scanpy as sc
 from torch_geometric.data.lightning import LightningDataset
 import numpy as np
 
-def prepare_geome_dataset(cfg):
+def split_adata(adata, split_obs: str, val_size: float, test_size: float, seed: int, return_summary: bool = True):
+    """
+    Split the AnnData object into train, val, and optionally test sets.
+    
+    Parameters:
+    - adata: The AnnData object to split.
+    - split_obs: The column in .obs to base the split on (optional).
+    - test_size: The proportion of the dataset to include in the test split.
+    - val_size: The proportion of the dataset to include in the validation split.
+    - seed: Random seed for reproducibility.
+
+    The function adds a new column 'split' to adata.obs with values 'train', 'val', 'test'.
+    """
+    np.random.seed(seed)
+    
+    # Initialize the 'split' column with None
+    adata.obs['split'] = None
+    
+    if split_obs is not None:
+        unique_groups = adata.obs[split_obs].unique()
+        
+        # Split unique groups into train and temp (val + test)
+        train_groups, temp_groups = train_test_split(unique_groups, test_size=test_size + val_size, random_state=seed)
+        
+        # Further split temp into val and test
+        if test_size > 0:
+            relative_val_size = val_size / (test_size + val_size)
+            val_groups, test_groups = train_test_split(temp_groups, test_size=1 - relative_val_size, random_state=seed)
+        else:
+            val_groups = temp_groups
+            test_groups = []
+        
+        # Assign 'train', 'val', 'test' based on groups
+        adata.obs.loc[adata.obs[split_obs].isin(train_groups), 'split'] = 'train'
+        adata.obs.loc[adata.obs[split_obs].isin(val_groups), 'split'] = 'val'
+        if test_groups:
+            adata.obs.loc[adata.obs[split_obs].isin(test_groups), 'split'] = 'test'
+            
+    # Generate summary statistics
+    if return_summary:
+        summary = {
+            'counts': adata.obs['split'].value_counts().to_dict(),
+            'groups': {
+                'train': list(train_groups),
+                'val': list(val_groups),
+                'test': list(test_groups) if test_groups else []
+            }
+        }
+        print(summary)
+        return adata
+
+    return adata
+
+def prepare_geome_dataset(adata, cfg):
     """
     Loads, preprocesses and transforms the defined .h5ad data to a list of PyG data according to cfg file.
     """
@@ -19,6 +72,9 @@ def prepare_geome_dataset(cfg):
     cfg.dataset.spatial_neigbors_kwargs.merge_from_list(['library_key', category_to_iterate])
     spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
     one_hot_encode_list = [prediction_obs]
+
+    # adata = sc.read_h5ad(cfg.dataset.h5ad_data)
+    # adata.obs_names_make_unique()
 
     fields = {
         "x": ["X"],
@@ -34,21 +90,17 @@ def prepare_geome_dataset(cfg):
 
     preprocess = transforms.Compose(
         [
-            transforms.Subset(key_value = subset_dict, axis="obs"), 
+            transforms.Subset(key_value = subset_dict, axis="obs"),
             transforms.Categorize(keys=list(subset_dict.keys()) + one_hot_encode_list, axis="obs"),
             transforms.SaveOneHotEncodeLabels(keys = one_hot_encode_list, axis = 'obs', key_added = 'one_hot')
         ]
     )
 
     transform = transforms.Compose(
-        
         [
             transforms.AddEdgeIndex(edge_index_key="edge_index", func_args=spatial_neigbors_kwargs, spatial_key="spatial", key_added=adj_matrix_loc),
         ]
     )
-
-    adata = sc.read_h5ad(cfg.dataset.h5ad_data)
-    adata.obs_names_make_unique()
 
     a2d = ann2data.Ann2DataBasic(
         fields=fields,
@@ -58,39 +110,17 @@ def prepare_geome_dataset(cfg):
         save_preprocessed_adata = True,
     )
 
-    datas, adata_processed = list(a2d(adata))
+    datas_train, adata_train = list(a2d(adata[adata.obs['split'] == 'train']))
+    datas_val, adata_val = list(a2d(adata[adata.obs['split'] == 'val']))
 
     # set number of classes and number of features
-    cfg.dataset.merge_from_list(['num_features', len(datas[0].x[1])])
-    cfg.dataset.merge_from_list(['num_classes', len(datas[0].y[1])])
+    cfg.dataset.merge_from_list(['num_features', len(datas_train[0].x[1])])
+    cfg.dataset.merge_from_list(['num_classes', len(datas_train[0].y[1])])
+    
+    if 'test' in np.unique(adata.obs['split']):
+        print('test')
+        datas_test, adata_test = list(a2d(adata[adata.obs['split'] == 'test']))
+        return [datas_train, datas_val, datas_test], [adata_train, adata_val, adata_test]
 
-    print(datas[:3])
-    print(len(datas))
-    return datas, adata_processed, cfg
+    return [datas_train, datas_val], [adata_train, adata_val]
 
-
-def load_pyg_data(cfg):
-    print('Load PyG data...')
-    pyg_datas = prepare_geome_dataset(cfg)
-    train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(float(cfg.dataset.test_size))
-    train_ds, val_ds = train_test_split(pyg_datas, train_size=train_size, test_size=val_size+test_size, random_state=42)
-    if test_size > 0.0:
-        val_ds, test_ds = train_test_split(val_ds, train_size=1-test_size, test_size=test_size, random_state=42)
-        dm = LightningDataset(train_dataset = train_ds, 
-                              val_dataset = val_ds, 
-                              test_dataset = test_ds, 
-                              batch_size=int(cfg.dataset.batch_size), 
-                              shuffle=True)
-        print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}, test ds: {len(test_ds)}')
-        datasets = [train_ds, val_ds, test_ds]
-        names = ["training", "validation", "test"]
-        
-    else:
-        dm = LightningDataset(train_dataset = train_ds, 
-                              val_dataset = val_ds, 
-                              batch_size=int(cfg.dataset.batch_size), 
-                              shuffle=True)
-        print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}')
-        datasets = [train_ds, val_ds]
-        names = ["training", "validation"]
-    return datasets, names
