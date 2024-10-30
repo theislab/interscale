@@ -81,12 +81,13 @@ def prepare_geome_dataset(adata, cfg):
         "y": [f"obs/{prediction_obs}"],
         "edge_index": ["uns/edge_index"],
         "obs_names": ["obs_names"],
+        "category_to_iterate": [f"obs/{category_to_iterate}"]
     }
 
-    if len(cfg.dataset.fine_tuning) > 0:
-        for task in cfg.dataset.fine_tuning:
-            fields.update({f"y_{task}": [f"obs/{task}"]})
-            one_hot_encode_list.append(task)
+    # if len(cfg.dataset.fine_tuning) > 0:
+    #     for task in cfg.dataset.fine_tuning:
+    #         fields.update({f"y_{task}": [f"obs/{task}"]})
+    #         one_hot_encode_list.append(task)
 
     preprocess = transforms.Compose(
         [

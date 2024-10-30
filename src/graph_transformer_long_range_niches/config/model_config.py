@@ -10,5 +10,6 @@ def get_model_cfg(cfg):
   cfg.model.model_type = "gnn-transformer" # [gnn, transformer, gnn-transformer]
   cfg.model.n_epochs = 100
   cfg.model.save = None
+  cfg.model.output_path = './results/'
   
   return cfg

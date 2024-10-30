@@ -33,4 +33,6 @@ def sliding_windows(adata, window_size, library_key: str = 'library_key', overla
                 mask = (adata.obs['x'] >= x_min) & (adata.obs['x'] < x_max) & (adata.obs['y'] >= y_min) & (adata.obs['y'] < y_max) & (adata.obs[library_key] == lib)
                 adata.obs.loc[mask, 'sliding_window'] = f'{lib}_{row}_{col}'
 
+    adata.obs['sliding_window'] = adata.obs['sliding_window'].astype('category')
+
     return adata

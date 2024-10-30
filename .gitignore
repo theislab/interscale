@@ -12,3 +12,4 @@ wandb/
 logs/
 lightning_logs/
 artifacts/
+results/

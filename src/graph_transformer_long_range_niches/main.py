@@ -16,6 +16,8 @@ from torch_geometric.data.lightning import LightningDataset
 import math
 import scanpy as sc
 import os
+import pickle
+from graph_transformer_long_range_niches.pp import sliding_windows
 
 def main(cfg_path):
 
@@ -25,6 +27,8 @@ def main(cfg_path):
     # Load adata
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
     adata.obs_names_make_unique()
+
+    #adata = sliding_windows(adata, 800, library_key = 'library_key',  overlap=0)
 
     # Split data into train, val (and test)
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
@@ -72,20 +76,23 @@ def main(cfg_path):
     if 'classification' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
     if 'regression' in cfg.dataset.prediction_task:
-        early_stop_callback = EarlyStopping(monitor="val_mse", min_delta=0.00, patience=10, verbose=False, mode="min")
+        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.00, patience=10, verbose=False, mode="min")
 
     steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
 
     data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key}_{cfg.optim.seed}"
     run_name = f"{data_name}_{cfg.model.model_type}"
 
-    if cfg.model.save == "wandb" and cfg.wandb.use:
+    if cfg.wandb.use:
         print('Wandb initialize...')
         run = wandb.init(project=cfg.wandb.project_name, config=cfg, name=run_name, job_type = 'model_training')
         log_data(datasets + adata_list, names + ['adata'], cfg, run)
         #cfg._data = wandb.config # make sure that what is logged is same as waht is run
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
-        checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
+        if 'classification' in cfg.dataset.prediction_task:
+            checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
+        if 'regression' in cfg.dataset.prediction_task:
+            checkpoint_callback = ModelCheckpoint(monitor="val_r2", mode="min", filename=run_name) 
         print('Training...')
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(cfg.model.n_epochs), 
@@ -112,14 +119,19 @@ def main(cfg_path):
 
     ##### SAVING #####
     if cfg.model.save == "local":
-        output_path = cfg.output_path  # Assuming this path is defined in the config
+        output_path = cfg.model.output_path  # Assuming this path is defined in the config
         print(f"Saving model locally to {output_path}...")
         trainer.save_checkpoint(os.path.join(output_path, f"{run_name}.ckpt"))
+
+        adata.obs.to_csv(f'{data_name}_obs.csv', index=True)
 
         # Save the adata object locally if required
         adata_save_path = os.path.join(output_path, f"{data_name}.h5ad")
         adata.write(adata_save_path)
         print(f"Adata saved to {adata_save_path}")
+
+        with open(os.path.join(output_path, f"{data_name}.pkl"), 'wb') as file:
+            pickle.dump(datasets, file)
 
     if cfg.model.save == "wandb" and cfg.wandb.use:
         ## log model artifact

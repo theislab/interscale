@@ -11,7 +11,7 @@ def get_transformer_cfg(cfg):
     cfg.transformer.dim_feedforward = 512
     cfg.transformer.dropout = 0.3
     cfg.transformer.activation_func = "relu"
-    cfg.transformer.num_encoder_layers = 1
+    cfg.transformer.num_layers = 2
     cfg.transformer.max_seq_len = 1000
     
     return cfg

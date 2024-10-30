@@ -9,6 +9,7 @@ from torch import nn
 
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
 from graph_transformer_long_range_niches.modules.transformer_encoder import TransformerNodeEncoder
+from graph_transformer_long_range_niches.modules.transformer_encoder_hook import TransformerNodeEncoderHook
 from graph_transformer_long_range_niches.tl.loss import weighted_cross_entropy
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
 from graph_transformer_long_range_niches.tl.utils import pad_batch
@@ -27,8 +28,9 @@ class LitGNNTransformer(L.LightningModule):
         self.prediction_task = cfg.dataset.prediction_task
 
         self.output_dim = cfg.transformer.d_model
+        if cfg.gnn.embed_dim != self.output_dim:
+            self.gnn2transformer = nn.Linear(cfg.gnn.embed_dim, self.output_dim)
 
-        self.gnn2transformer = nn.Linear(cfg.gnn.embed_dim, self.output_dim)
         self.norm_input = nn.LayerNorm(self.output_dim)
         self.cls_embedding = nn.Parameter(torch.randn([1, 1, self.output_dim], requires_grad = True))
         self.num_classes = cfg.dataset.num_classes
@@ -42,7 +44,9 @@ class LitGNNTransformer(L.LightningModule):
         if 'classification' in self.prediction_task:
             self.loss = torch.nn.CrossEntropyLoss()
         elif 'regression' in self.prediction_task:
-            self.loss = torch.nn.MSELoss()
+            #self.loss = torch.nn.MSELoss()
+            self.loss = torch.nn.GaussianNLLLoss()
+            #self.loss = torch.nn.SmoothL1Loss()
         else:
             raise Exception("Prediction task must define 'classification' or 'regression'.")
 
@@ -54,12 +58,13 @@ class LitGNNTransformer(L.LightningModule):
             self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
         elif 'regression' in self.prediction_task:
             self.mse = torchmetrics.MeanSquaredError()
-            self.r2 = torchmetrics.R2Score()
+            self.r2 = torchmetrics.R2Score(num_outputs=self.num_features, multioutput = 'variance_weighted')
+            self.pearson_corr = torchmetrics.regression.PearsonCorrCoef(num_outputs=self.num_features)
 
         # GNN initialization
         self.gnn = LitGCN(cfg)
         # Transformer encoder initialization
-        self.transformer_encoder = TransformerNodeEncoder(cfg)
+        self.transformer_encoder = TransformerNodeEncoderHook(cfg)
 
         ## Prediction units
         self.graph_pred_linear_list = torch.nn.ModuleList()
@@ -68,6 +73,7 @@ class LitGNNTransformer(L.LightningModule):
         elif 'regression' in self.prediction_task:
             print('num features:', self.num_features)
             self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_features)
+
         # if self.max_seq_len is None:
         #     self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_classes)
         # else:
@@ -81,16 +87,14 @@ class LitGNNTransformer(L.LightningModule):
                 batched_data.x = [N, F]
         """
         h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
-        #print('GNN out: ',h_node.shape, 'z', z.shape)
-        #print('GNN predicted node label accuracy: ', (z.argmax(dim=1) == batched_data.y).sum() / len(batched_data.y))
-        h_node = self.gnn2transformer(h_node)  # [s, d_model]
-        #print('After gnn2transformer: ', h_node.shape)
+        
+        if self._cfg.gnn.embed_dim != self.output_dim:
+            h_node = self.gnn2transformer(h_node)  # [s, d_model]
+        h_node = self.norm_input(h_node)
 
         padded_h_node, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
             h_node, batched_data.batch, self.transformer_encoder.max_seq_len, get_mask=True
         )  # Pad in the front batched_data.batch before
-
-        #print("After Pad: ", padded_h_node.shape)
 
         transformer_out = padded_h_node
         transformer_out, src_padding_mask = self.transformer_encoder(transformer_out, src_padding_mask)  # [S+1, B, E], [B, s]
@@ -144,10 +148,11 @@ class LitGNNTransformer(L.LightningModule):
                 log_dict[f'train_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
             self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         elif 'regression' in self.prediction_task:
-            mse, r2 = metric_list
+            mse, r2, pearson_corr = metric_list
             log_dict = {
                 'train_mse': mse,
                 'train_r2': r2,
+                'train_pearson_corr': pearson_corr,
             }
             self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
@@ -166,10 +171,11 @@ class LitGNNTransformer(L.LightningModule):
                 log_dict[f'val_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
             self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         elif 'regression' in self.prediction_task:
-            mse, r2 = metric_list
+            mse, r2, pearson_corr = metric_list
             log_dict = {
                 'val_mse': mse,
                 'val_r2': r2,
+                'val_pearson_corr': pearson_corr,
             }
             self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
@@ -188,10 +194,11 @@ class LitGNNTransformer(L.LightningModule):
                 log_dict[f'test_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
             self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         elif 'regression' in self.prediction_task:
-            mse, r2 = metric_list
+            mse, r2, pearson_corr = metric_list
             log_dict = {
                 'test_mse': mse,
                 'test_r2': r2,
+                'test_pearson_corr': pearson_corr,
             }
             self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
@@ -221,7 +228,6 @@ class LitGNNTransformer(L.LightningModule):
         if 'classification' in self.prediction_task:
             if self._cfg.optim.loss == 'WeightedCE':
                 weight = weighted_cross_entropy(out_transformer, y_true)
-                print('weight: ', weight)
                 loss_fn = nn.CrossEntropyLoss(weight=weight)
                 loss = loss_fn(out_transformer, y_true.argmax(dim=1),)
             else:
@@ -232,13 +238,18 @@ class LitGNNTransformer(L.LightningModule):
             f1_score_per_class = self.f1_score_per_class(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
 
             return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
-        
+
         if 'regression' in self.prediction_task:
-            print('regression loss')
-            loss = self.loss(out_transformer, y_true)
+            # GaussianNLLoss -> var (NCEM: used variance per gene)
+            # Estimate variance based on the true values (e.g., using batch variance)
+            y_var = torch.var(y_true, dim=1, keepdim=True)  # You can adjust the estimation method
+            # Ensure variance is non-zero and positive
+            y_var = y_var.clamp(min=1e-6)
+            loss = self.loss(out_transformer, y_true, y_var)
             mse = self.mse(out_transformer, y_true)
             r2 = self.r2(out_transformer, y_true)
-            return loss, [mse, r2]
+            pearson_corr = torch.mean(self.pearson_corr(out_transformer, y_true))
+            return loss, [mse, r2, pearson_corr]
 
 
     def extract_attention(self, x, src_padding_mask, average_attn_heads = True):
@@ -276,12 +287,77 @@ class LitGNNTransformer(L.LightningModule):
             attention_maps = torch.mean(attention_maps, dim=0)
 
         return attn_maps, attn_weights_maps, attention_maps
+    
+    def extract_attention_new(self, x, src_padding_mask, average_attn_heads=True):
+        """
+        Returns a list of attention maps (Tensor) for each Transformer layer.
 
-    def evaluation(self, model, batched_data):
-        h_node, z = model.gnn(batched_data.x, batched_data.edge_index)
-        h_node = model.gnn2transformer(h_node)
-        padded_h_node, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
-                h_node, batched_data.batch, model.transformer_encoder.max_seq_len, get_mask=True
+        Return: 
+            attn_maps: List[Tensor], attention outputs from each layer
+            attn_weights_maps: List[Tensor], attention weights from each layer
+            attention_maps: Tensor, mean of attention outputs across layers
+        """
+        attn_weights_maps = []
+        attn_maps = []
+
+        num_layers = self.transformer_encoder.num_layers
+        num_heads = self.transformer_encoder.layers[0].self_attn.num_heads
+        print("num heads: ", num_heads)
+        norm_first = self.transformer_encoder.layers[0].norm_first
+
+        # Remove 'with torch.no_grad()' to enable gradient computation
+        for i in range(num_layers):
+            # Compute attention of layer i
+            h = x.clone()
+            if norm_first:
+                h = self.transformer_encoder.layers[i].norm1(h)
+            
+            # Set 'need_weights=True' and 'average_attn_weights=False' to get per-head weights
+            attn_output, attn_output_weights = self.transformer_encoder.layers[i].self_attn(
+                h, h, h,
+                need_weights=True,
+                key_padding_mask=src_padding_mask,
+                average_attn_weights=average_attn_heads
             )
-        transformer_out, src_padding_mask = model.transformer_encoder(padded_h_node, src_padding_mask)
-        return padded_h_node, transformer_out, src_padding_mask, index_nodes
+            
+            # Ensure attention weights require gradients
+            attn_output_weights = attn_output_weights.requires_grad_(True)
+            # Retain gradients for attention weights
+            attn_output_weights.retain_grad()
+            
+            attn_maps.append(attn_output)
+            attn_weights_maps.append(attn_output_weights)
+            
+            # Forward of layer i
+            x = self.transformer_encoder.layers[i](x)
+
+        # Stack and average attention outputs
+        attention_maps = torch.stack(attn_maps, dim=0)
+        attention_maps = torch.mean(attention_maps, dim=0)
+
+        # Return attention outputs, attention weights, and mean attention map
+        return attn_maps, attn_weights_maps, attention_maps
+
+    def evaluation(self, batched_data):
+        h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
+        if self._cfg.gnn.embed_dim != self.output_dim:
+            h_node = self.gnn2transformer(h_node)
+        padded_h_node, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
+                h_node, batched_data.batch, self.transformer_encoder.max_seq_len, get_mask=True
+            )
+        transformer_out, src_padding_mask = self.transformer_encoder(padded_h_node, src_padding_mask)
+
+        src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
+
+        if 'graph' in self.prediction_task:
+            cls = transformer_out[-1,:, :] # [B, E]
+            dec_out = self.graph_pred_linear(cls)
+
+        ## Node-level prediction: remove cls
+        elif 'node' in self.prediction_task: #TODO: I don't think I need to differentiate between regression and classification here.
+            h_graph = transformer_out[:-1] # [E, B, C]
+            h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
+            masked_output = h_graph[~ src_padding_mask] # [N, E]
+            dec_out = self.graph_pred_linear(masked_output)
+
+        return padded_h_node, transformer_out, src_padding_mask, index_nodes, dec_out
