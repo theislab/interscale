@@ -12,7 +12,7 @@ def log_data(datasets, names, cfg, run):
 
     assert run is wandb.run
 
-    artifact_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key}"
+    artifact_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key[-1]}"
 
     # create Artifact
     raw_data = wandb.Artifact(

@@ -1,8 +1,7 @@
-from graph_transformer_long_range_niches.model.gnn_transformer import LitGNNTransformer
+from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN
 from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset, split_adata
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
 from graph_transformer_long_range_niches.tl.wandb import log_data
-from graph_transformer_long_range_niches.model.baseline import BaselineFCNN
 from graph_transformer_long_range_niches.config import load_config
 
 # PyTorch Lightning
@@ -17,7 +16,9 @@ import math
 import scanpy as sc
 import os
 import pickle
-from graph_transformer_long_range_niches.pp import sliding_windows
+
+from graph_transformer_long_range_niches.pp import prepare_geome_dataset
+from torch_geometric.loader import DataLoader
 
 def main(cfg_path):
 
@@ -32,12 +33,17 @@ def main(cfg_path):
 
     # Split data into train, val (and test)
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
-    adata = split_adata(adata, 'fov', val_size, test_size, seed = cfg.optim.seed)
+    adata = split_adata(adata, cfg.dataset.obs_split, val_size, test_size, seed = cfg.optim.seed)
 
     # Create PyG data
     print('Load PyG data...')
     pyg_data_list, adata_list = prepare_geome_dataset(adata, cfg)
     train_ds, val_ds = pyg_data_list[0], pyg_data_list[1]
+    # set number of classes and number of features
+    cfg.dataset.merge_from_list(['num_features', len(train_ds[0].x[1])])
+    if 'classification' in cfg.dataset.prediction_task:
+      cfg.dataset.merge_from_list(['num_classes', len(train_ds[0].y[1])])
+    # Initialize Dataset for training
     if test_size > 0.0:
         test_ds = pyg_data_list[2]
         dm = LightningDataset(train_dataset = train_ds,
@@ -69,24 +75,27 @@ def main(cfg_path):
         elif cfg.model.model_type == 'fcnn':
             print('Load FCNN...')
             model = BaselineFCNN(cfg)
+        elif cfg.model.model_type == 'pca-transformer':
+            print('Load PCA Transformer...')
+            model = LitPCATransformer(cfg)
     except ValueError:
         print("No valid model defined in .yaml file.")
 
-    lr_monitor = LearningRateMonitor(logging_interval='epoch')
-    if 'classification' in cfg.dataset.prediction_task:
-        early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
-    if 'regression' in cfg.dataset.prediction_task:
-        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.00, patience=10, verbose=False, mode="min")
-
     steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
 
-    data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key}_{cfg.optim.seed}"
+    lr_monitor = LearningRateMonitor(logging_interval='epoch')
+    if 'classification' in cfg.dataset.prediction_task:
+        early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10*steps_per_epoch, verbose=False, mode="max")
+    if 'regression' in cfg.dataset.prediction_task:
+        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.00, patience=10*steps_per_epoch, verbose=False, mode="min")
+
+    data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key[-1]}_{len(cfg.dataset.library_key)}_{cfg.optim.seed}"
     run_name = f"{data_name}_{cfg.model.model_type}"
 
     if cfg.wandb.use:
         print('Wandb initialize...')
         run = wandb.init(project=cfg.wandb.project_name, config=cfg, name=run_name, job_type = 'model_training')
-        log_data(datasets + adata_list, names + ['adata'], cfg, run)
+        #log_data(datasets + adata_list, names + ['adata'], cfg, run)
         #cfg._data = wandb.config # make sure that what is logged is same as waht is run
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
         if 'classification' in cfg.dataset.prediction_task:
@@ -116,6 +125,8 @@ def main(cfg_path):
 
     trainer.fit(model, dm)
     trainer.validate(model, dm)
+    if test_size > 0.0:
+        trainer.test(model, dm)
 
     ##### SAVING #####
     if cfg.model.save == "local":
@@ -123,12 +134,12 @@ def main(cfg_path):
         print(f"Saving model locally to {output_path}...")
         trainer.save_checkpoint(os.path.join(output_path, f"{run_name}.ckpt"))
 
-        adata.obs.to_csv(f'{data_name}_obs.csv', index=True)
+        adata.obs.to_csv(os.path.join(output_path,f'{data_name}_obs.csv'), index=True)
 
         # Save the adata object locally if required
-        adata_save_path = os.path.join(output_path, f"{data_name}.h5ad")
-        adata.write(adata_save_path)
-        print(f"Adata saved to {adata_save_path}")
+        # adata_save_path = os.path.join(output_path, f"{data_name}.h5ad")
+        # adata.write(adata_save_path)
+        # print(f"Adata saved to {adata_save_path}")
 
         with open(os.path.join(output_path, f"{data_name}.pkl"), 'wb') as file:
             pickle.dump(datasets, file)

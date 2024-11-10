@@ -46,16 +46,25 @@ def ligand_receptor_interaction(
     receptor_expression = np.array(adata.X[:, adata.var_names == receptor].todense()).flatten()
 
     # Apply separate thresholds for ligand and receptor
-    ligand_mask = ligand_expression > ligand_threshold
+    ligand_mask = ligand_expression > ligand_threshold #TODO: Add that not ligand + receptor expr. > threshold
     receptor_mask = receptor_expression > receptor_threshold
+
+    # Identify cells expressing both ligand and receptor above thresholds
+    both_mask = ligand_mask & receptor_mask
+
+    # Update masks for ligand-only and receptor-only
+    ligand_only_mask = ligand_mask & ~both_mask
+    receptor_only_mask = receptor_mask & ~both_mask
     
     # Add filtered expression data to `adata.obs`, setting values below threshold to NaN
-    adata.obs['ligand_expression'] = np.where(ligand_mask, ligand_expression, np.nan)
-    adata.obs['receptor_expression'] = np.where(receptor_mask, receptor_expression, np.nan)
+    adata.obs['ligand_expression'] = np.where(ligand_only_mask, ligand_expression, np.nan)
+    adata.obs['receptor_expression'] = np.where(receptor_only_mask, receptor_expression, np.nan)
 
     # Define a mask for cells below both thresholds
     below_threshold_mask = ~(ligand_mask | receptor_mask)
     adata.obs['below_threshold'] = np.where(below_threshold_mask, 1, np.nan)  # Use 1 for color mapping, NaN otherwise
+    adata.obs['both_threshold'] = np.where(both_mask, 1, np.nan)  
+    print(sum(both_mask))
 
     # Set up the plot
     fig, ax = plt.subplots()
@@ -68,7 +77,18 @@ def ligand_receptor_interaction(
         ax=ax,
         shape=None,
         size=10,
-        alpha = 0.2,
+        alpha = 0.01,
+        colorbar = False
+    )
+
+    # Plot cells below both thresholds in gray
+    sq.pl.spatial_scatter(
+        adata,
+        color='both_threshold',
+        cmap='Dark2',
+        ax=ax,
+        shape=None,
+        size=10,
         colorbar = False
     )
 
@@ -84,7 +104,7 @@ def ligand_receptor_interaction(
     )
 
     # Add ligand colorbar
-    norm_ligand = colors.Normalize(vmin=ligand_expression[ligand_mask].min(), vmax=ligand_expression[ligand_mask].max())
+    norm_ligand = colors.Normalize(vmin=ligand_expression[ligand_only_mask].min(), vmax=ligand_expression[ligand_only_mask].max())
     cbar_ligand = fig.colorbar(cm.ScalarMappable(norm=norm_ligand, cmap='Reds'), ax=ax, orientation='vertical')
     cbar_ligand.set_label('Ligand Expression')
 
@@ -101,7 +121,7 @@ def ligand_receptor_interaction(
     )
 
     # Add receptor colorbar
-    norm_receptor = colors.Normalize(vmin=receptor_expression[receptor_mask].min(), vmax=receptor_expression[receptor_mask].max())
+    norm_receptor = colors.Normalize(vmin=receptor_expression[receptor_only_mask].min(), vmax=receptor_expression[receptor_only_mask].max())
     cbar_receptor = fig.colorbar(cm.ScalarMappable(norm=norm_receptor, cmap='Blues'), ax=ax, orientation='vertical')
     cbar_receptor.set_label('Receptor Expression')
 

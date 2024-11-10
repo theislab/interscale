@@ -6,6 +6,9 @@ import pandas as pd
 
 import torch
 
+from graph_transformer_long_range_niches.pp import prepare_geome_dataset
+from torch_geometric.loader import DataLoader
+
 class SelfAttentionRelevance:
     """ Chefer, H., Gur, S. & Wolf, L. Generic Attention-model Explainability for Interpreting Bi-Modal and Encoder-Decoder Transformers. 
     Preprint at https://doi.org/10.48550/arXiv.2103.15679 (2021).
@@ -89,7 +92,8 @@ class SelfAttentionRelevance:
         num_tokens = self.model.transformer_encoder.layers[0].get_attn_output().shape[0]
         print(num_tokens)
 
-        I = torch.eye(num_tokens, num_tokens).cuda()
+        #I = torch.eye(num_tokens, num_tokens).cuda()
+        I = torch.eye(num_tokens, num_tokens)
 
         for idx, encoder in enumerate(self.model.transformer_encoder.layers):
             attn_out_weights = encoder.get_attn_output_weights()
@@ -101,11 +105,102 @@ class SelfAttentionRelevance:
             attn_map = self.avg_heads(attn_out_weights, attn_grad)
             print(f"Average attention map shape: {attn_map.shape}")
             print("I: ", I)
-            I += self.apply_self_attention_rules(I.cuda(), attn_map.cuda())
+            #I += self.apply_self_attention_rules(I.cuda(), attn_map.cuda())
+            I += self.apply_self_attention_rules(I, attn_map)
         
         return I
 
+def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, attention_obs=None, attention_class=None, library_key=None):
+    """
+    Parameters
+    ----------
+        adata: AnnData
+        obs_metadata: pandas.Dataframe
+            .obs metadata from object of interest
+        obs_col: str
+            Name of annotation column in .obs where the observation used as classes to 
+        class_name: str 
+            Name of class in .obs[obs_col] that we are interested in plotting the attention for
+        attention_class: str
+            If None, all classes in attention_obs are considered
+        library_key: Optional[str]
+    """
+    self_attention_relevance = SelfAttentionRelevance(model_transformer.transformer_encoder)
+    
+    # subset relevant data
+    sub_adata = adata[adata.obs[obs_col] == class_name]
+    assert 'split' in adata.obs
+    
+    # load PyG objects for evaluation
+    pyg_datas, _ = prepare_geome_dataset(sub_adata, cfg) # datas = [datas_train, datas_test]
+    datas = [pyg for datas in pyg_datas for pyg in datas]
+    data_loader = DataLoader(datas)
+    
+    sub_adata.obs['cls'] = -1
+    attention_matrix_dict = {}
+    if library_key:  
+        library_key_list = np.unique(sub_adata.obs[library_key])
+    
+    for batch, library_id in zip(data_loader, library_key_list):
+        print(batch, library_id)
+        transformer_in, transformer_out, src_padding_mask, index_nodes, dec_out = model_transformer.evaluation(batch)
+        if not attention_obs:
+            attention_index = np.arange(0, len(index_nodes))
+        I = self_attention_relevance.generate_relevance(transformer_in, src_padding_mask, category_index=attention_index)
+        cls = I[:1, 1:].cpu().detach().numpy() 
+        sub_adata.obs['cls'][sub_adata.obs[library_key]==library_id][index_nodes[0]] = cls[0]
+        # Create a pandas DataFrame for the attention matrix with obs_names as row and column indices
+        attention_matrix_df = pd.DataFrame(
+            I[1:, 1:].cpu().detach().numpy(),
+            index=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]],
+            columns=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]]
+        )
+        attention_matrix_dict[library_id] = attention_matrix_df
+        
+    return sub_adata, attention_matrix_dict
 
+def compute_normalized_attention(attention_matrix, axis = False):
+    """
+    Returns the normalized attention for each class to class in the attention matrix
+    Parameters
+    ----------
+        attention_matrix: PandasDataframe
+            Matrix of size NxN with column and row indices belonging to either of K classes
+    Returns
+    -------
+        attn_norm: 
+            KxK, where 
+    """
+    # remove self attention (diagonal = 1)
+    np.fill_diagonal(attention_matrix.values, 0)
+    
+    # Normalize each row so that the sum of entries in each row is 1
+    row_sums = attention_matrix.sum(axis=0)
+    attention_matrix = attention_matrix.div(row_sums, axis=1)
+    
+    # Create an empty KxK DataFrame to store the summed and normalized attention values
+    class_names = np.unique(attention_matrix.columns)
+    K = len(class_names)
+    attn_norm = pd.DataFrame(np.zeros((K, K)), index=class_names, columns=class_names)
+
+    # Iterate over each unique cell type combination
+    for i, class_i in enumerate(class_names):
+        for j, class_j in enumerate(class_names):
+            # Find the indices in the original CxC DataFrame that correspond to the given cell types
+            indices_i = (attention_matrix.index == class_i)
+            indices_j = (attention_matrix.columns == class_j)
+
+            # Sum the attention values for the given cell type combination
+            if axis == None:
+                summed_value = attention_matrix.loc[indices_i, indices_j].sum().sum()
+            if axis == 'column': # average over columns
+                continue
+            if axis == 'both':
+                norm_value = attention_matrix.loc[indices_i, indices_j].sum() / len(np.argwhere(indices_i==True))
+                summed_value = norm_value.sum() / len(np.argwhere(indices_j==True))
+            attn_norm.at[class_i, class_j] = summed_value
+
+    return attn_norm
 
 def sender_receiver_stream(adata, 
                            sender_cell_type, 

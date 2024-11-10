@@ -31,8 +31,8 @@ class LitGCN(L.LightningModule):
             self.loss = torch.nn.CrossEntropyLoss()
         elif 'regression' in self.prediction_task:
             #self.loss = torch.nn.MSELoss()
-            #self.loss = torch.nn.GaussianNLLLoss()
-            self.loss = torch.nn.SmoothL1Loss()
+            self.loss = torch.nn.GaussianNLLLoss()
+            #self.loss = torch.nn.SmoothL1Loss()
         else:
             raise Exception("Prediction task must define 'classification' or 'regression'.")
 
@@ -44,8 +44,8 @@ class LitGCN(L.LightningModule):
             self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
         elif 'regression' in self.prediction_task:
             self.mse = torchmetrics.MeanSquaredError()
-            self.r2 = torchmetrics.R2Score(num_outputs=self.num_features, multioutput = 'variance_weighted')
-            self.pearson_corr = torchmetrics.regression.PearsonCorrCoef(num_outputs=self.num_features)
+            self.r2 = torchmetrics.R2Score(num_outputs=self.num_features, multioutput = 'uniform_average')
+            self.pearson_corr = torchmetrics.PearsonCorrCoef(num_outputs=self.num_features)
 
         layers = []
         for l_idx in range(cfg.gnn.num_layers - 1):
@@ -165,7 +165,7 @@ class LitGCN(L.LightningModule):
         gnn_x, gnn_z = self.forward(batch.x, batch.edge_index) # [B, C] with C being the number of tasks to predict, e.i.        
         
         if 'classification' in self.prediction_task:
-            loss = self.loss_criterion(gnn_z, batch.y)
+            loss = self.loss(gnn_z, batch.y)
             acc = self.accurary(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
             f1_score_micro = self.f1_score_micro(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
             f1_score_macro = self.f1_score_macro(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
@@ -179,12 +179,10 @@ class LitGCN(L.LightningModule):
             loss = self.loss(gnn_z, batch.x, y_var)
             mse = self.mse(gnn_z, batch.x)
             r2 = self.r2(gnn_z, batch.x)
-            pearson_corr = self.pearson_corr(gnn_z, batch.x)
+            pearson_corr = torch.mean(self.pearson_corr(gnn_z, batch.x))
             return loss, [mse, r2, pearson_corr]
 
-
-
-        loss = self.loss_criterion(gnn_z, batch.y)
+        loss = self.loss(gnn_z, batch.y)
         #print('predicted and true: ', gnn_z.argmax(dim=1)[:10], batch.y.argmax(dim=1)[:10])
         acc = self.accurary(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
         f1_score_micro = self.f1_score_micro(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))

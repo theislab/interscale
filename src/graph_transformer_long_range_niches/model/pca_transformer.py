@@ -7,14 +7,13 @@ import torch
 import torchmetrics
 from torch import nn
 
-from graph_transformer_long_range_niches.modules.gcn import LitGCN
 from graph_transformer_long_range_niches.modules.transformer_encoder import TransformerNodeEncoder
 from graph_transformer_long_range_niches.modules.transformer_encoder_hook import TransformerNodeEncoderHook
-from graph_transformer_long_range_niches.tl.loss import weighted_cross_entropy
-from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
-from graph_transformer_long_range_niches.tl.utils import pad_batch
+from graph_transformer_long_range_niches.tl import pad_batch, CosineWarmupScheduler, weighted_cross_entropy
+from sklearn.decomposition import PCA
 
-class LitGNNTransformer(L.LightningModule):
+
+class LitPCATransformer(L.LightningModule):
     def __init__(self, cfg, **model_kwargs):
         super().__init__()
         # Saving hyperparameters
@@ -23,13 +22,14 @@ class LitGNNTransformer(L.LightningModule):
         self.lr = float(self._cfg.optim.lr)
         self.wd = float(self._cfg.optim.wd)
 
-        self.model_type = 'GNN_Transformer'
+        self.model_type = 'PCA_Transformer'
         self.prediction_task = cfg.dataset.prediction_task
 
         self.output_dim = cfg.transformer.d_model
-        if cfg.gnn.embed_dim != self.output_dim:
-            self.gnn2transformer = nn.Linear(cfg.gnn.embed_dim, self.output_dim)
+         # Initialize PCA
+        self.pca = PCA(n_components=self.output_dim)
 
+        # Input normalization and transformer encoder
         self.norm_input = nn.LayerNorm(self.output_dim)
         self.cls_embedding = nn.Parameter(torch.randn([1, 1, self.output_dim], requires_grad = True))
         self.num_classes = cfg.dataset.num_classes
@@ -57,11 +57,9 @@ class LitGNNTransformer(L.LightningModule):
             self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
         elif 'regression' in self.prediction_task:
             self.mse = torchmetrics.MeanSquaredError()
-            self.r2 = torchmetrics.R2Score(num_outputs=self.num_features, multioutput = 'uniform_average')
-            self.pearson_corr = torchmetrics.PearsonCorrCoef(num_outputs=self.num_features)
+            self.r2 = torchmetrics.R2Score(num_outputs=self.num_features, multioutput = 'variance_weighted')
+            self.pearson_corr = torchmetrics.regression.PearsonCorrCoef(num_outputs=self.num_features)
 
-        # GNN initialization
-        self.gnn = LitGCN(cfg)
         # Transformer encoder initialization
         self.transformer_encoder = TransformerNodeEncoderHook(cfg)
 
@@ -85,11 +83,9 @@ class LitGNNTransformer(L.LightningModule):
             batched_data: Pytorch geometric object 
                 batched_data.x = [N, F]
         """
-        h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
-        
-        if self._cfg.gnn.embed_dim != self.output_dim:
-            h_node = self.gnn2transformer(h_node)  # [s, d_model]
-        h_node = self.norm_input(h_node)
+        # Apply PCA to reduce the dimensionality of node features
+        h_node = self.pca.fit_transform(batched_data.x.cpu().numpy())  # Convert to numpy for PCA
+        h_node = torch.tensor(h_node, dtype=torch.float32, device=batched_data.x.device)  # Convert back to tensor
 
         padded_h_node, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
             h_node, batched_data.batch, self.transformer_encoder.max_seq_len, get_mask=True
@@ -102,7 +98,7 @@ class LitGNNTransformer(L.LightningModule):
         if 'graph' in self.prediction_task:
             cls = transformer_out[-1,:, :] # [B, E]
             out = self.graph_pred_linear(cls)
-            return z, out, index_nodes
+            return None, out, index_nodes
             # if self.max_seq_len is None:
             #     out = self.graph_pred_linear(cls)
             #     return z, out, index_nodes
@@ -118,14 +114,14 @@ class LitGNNTransformer(L.LightningModule):
             src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
             masked_output = h_graph[~ src_padding_mask] # [N, E]
             out = self.graph_pred_linear(masked_output)
-            return z, out, index_nodes
+            return None, out, index_nodes
 
         else:
             raise Exception('Choose a valid prediction tasks (graph or node).')
 
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.wd)
+        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.wd)
         lr_scheduler = CosineWarmupScheduler(optimizer,
                                              warmup=int(self._cfg.optim.warm_up),
                                              max_epochs=100000)
