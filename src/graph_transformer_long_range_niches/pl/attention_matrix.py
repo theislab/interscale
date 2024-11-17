@@ -9,6 +9,8 @@ import torch
 from graph_transformer_long_range_niches.pp import prepare_geome_dataset
 from torch_geometric.loader import DataLoader
 
+from sklearn.preprocessing import MinMaxScaler
+
 class SelfAttentionRelevance:
     """ Chefer, H., Gur, S. & Wolf, L. Generic Attention-model Explainability for Interpreting Bi-Modal and Encoder-Decoder Transformers. 
     Preprint at https://doi.org/10.48550/arXiv.2103.15679 (2021).
@@ -110,7 +112,7 @@ class SelfAttentionRelevance:
         
         return I
 
-def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, attention_obs=None, attention_class=None, library_key=None):
+def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, attention_obs=None, attention_class=None, library_key=None, split_key = 'split'):
     """
     Parameters
     ----------
@@ -129,10 +131,10 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, atte
     
     # subset relevant data
     sub_adata = adata[adata.obs[obs_col] == class_name]
-    assert 'split' in adata.obs
+    assert split_key in adata.obs
     
     # load PyG objects for evaluation
-    pyg_datas, _ = prepare_geome_dataset(sub_adata, cfg) # datas = [datas_train, datas_test]
+    pyg_datas, _ = prepare_geome_dataset(sub_adata, cfg, split_key=split_key) # datas = [datas_train, datas_test]
     datas = [pyg for datas in pyg_datas for pyg in datas]
     data_loader = DataLoader(datas)
     
@@ -159,7 +161,18 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, atte
         
     return sub_adata, attention_matrix_dict
 
-def compute_normalized_attention(attention_matrix, axis = False):
+def normalized_attention(attention_matrix, clamp = 0.05):
+    np.fill_diagonal(attention_matrix.values, 0)
+    
+    # Clamp and scale attention matrix
+    scores = torch.tensor(attention_matrix.values)
+    if clamp:
+        q05, q95 = torch.quantile(scores, clamp), torch.quantile(scores, 1-clamp)
+        scores = np.clip(scores, a_min=q05, a_max=q95)
+    scores = MinMaxScaler(feature_range=(0, 1)).fit_transform(scores)
+    return scores
+
+def normalized_class_attention(attention_matrix, clamp: int = 0.05):
     """
     Returns the normalized attention for each class to class in the attention matrix
     Parameters
@@ -171,12 +184,8 @@ def compute_normalized_attention(attention_matrix, axis = False):
         attn_norm: 
             KxK, where 
     """
-    # remove self attention (diagonal = 1)
-    np.fill_diagonal(attention_matrix.values, 0)
-    
-    # Normalize each row so that the sum of entries in each row is 1
-    row_sums = attention_matrix.sum(axis=0)
-    attention_matrix = attention_matrix.div(row_sums, axis=1)
+    scores = normalized_attention(attention_matrix, clamp)
+    attention_matrix = pd.DataFrame(scores, index = attention_matrix.index, columns = attention_matrix.columns)
     
     # Create an empty KxK DataFrame to store the summed and normalized attention values
     class_names = np.unique(attention_matrix.columns)
@@ -189,15 +198,8 @@ def compute_normalized_attention(attention_matrix, axis = False):
             # Find the indices in the original CxC DataFrame that correspond to the given cell types
             indices_i = (attention_matrix.index == class_i)
             indices_j = (attention_matrix.columns == class_j)
-
-            # Sum the attention values for the given cell type combination
-            if axis == None:
-                summed_value = attention_matrix.loc[indices_i, indices_j].sum().sum()
-            if axis == 'column': # average over columns
-                continue
-            if axis == 'both':
-                norm_value = attention_matrix.loc[indices_i, indices_j].sum() / len(np.argwhere(indices_i==True))
-                summed_value = norm_value.sum() / len(np.argwhere(indices_j==True))
+            norm_value = attention_matrix.loc[indices_i, indices_j].sum() / len(np.argwhere(indices_i==True))
+            summed_value = norm_value.sum() / len(np.argwhere(indices_j==True))
             attn_norm.at[class_i, class_j] = summed_value
 
     return attn_norm

@@ -20,9 +20,35 @@ import pickle
 from graph_transformer_long_range_niches.pp import prepare_geome_dataset
 from torch_geometric.loader import DataLoader
 
-def main(cfg_path):
+def main_sweep(cfg_path, sweep_goal, sweep_run=None):
 
     cfg = load_config(cfg_path)
+
+    # Update configuration with sweep parameters
+    if sweep_run is not None:
+        if sweep_goal == 'hyperparmeter':
+            cfg.model.lr = sweep_run.config.model.lr
+            cfg.model.n_epochs = sweep_run.config.model.n_epochs
+            cfg.dataset.batch_size = sweep_run.config.dataset.batch_size
+            cfg.dataset.warm_up = sweep_run.config.optim.warm_up
+            cfg.dataset.wd = sweep_run.config.optim.wd
+            if cfg.model.model_type == 'gnn-transformer' or cfg.model.model_type == 'gnn':
+                print('gnn configs')
+                cfg.gnn.num_layers = sweep_run.config.gnn.num_layers
+                cfg.gnn.hidden_dim = sweep_run.config.gnn.hidden_dim
+                cfg.gnn.embed_dim = sweep_run.config.gnn.embed_dim
+                cfg.gnn.dropout = sweep_run.config.gnn.dropout
+            if cfg.model.model_type == 'pca-transformer' or cfg.model.model_type == 'gnn-transformer':
+                print('transformer configs')
+                cfg.transformer.d_model = sweep_run.config.transformer.d_model
+                cfg.transformer.dim_feedforward = sweep_run.config.transformer.dim_feedforward
+                cfg.transformer.num_layers = sweep_run.config.transformer.num_layers
+                cfg.transformer.n_heads = sweep_run.config.transformer.n_heads
+                cfg.transformer.dropout = sweep_run.config.transformer.dropout
+                cfg.transformer.max_seq_len = sweep_run.config.transformer.max_seq_len
+        elif sweep_goal == 'robustness':
+            cfg.dataset.spatial_neigbors_kwargs.radius = sweep_run.config.dataset.spatial_neigbors_kwargs.radius
+            cfg.transformer.max_seq_len = sweep_run.config.transformer.max_seq_len
 
     ####### PREPROCESSING #######
     # Load adata
@@ -37,7 +63,7 @@ def main(cfg_path):
 
     # Create PyG data
     print('Load PyG data...')
-    pyg_data_list, adata_list = prepare_geome_dataset(adata, cfg)
+    pyg_data_list, _ = prepare_geome_dataset(adata, cfg)
     train_ds, val_ds = pyg_data_list[0], pyg_data_list[1]
     # set number of classes and number of features
     cfg.dataset.merge_from_list(['num_features', len(train_ds[0].x[1])])
@@ -85,16 +111,17 @@ def main(cfg_path):
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     if 'classification' in cfg.dataset.prediction_task:
-        early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10*steps_per_epoch, verbose=False, mode="max")
+        early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.00, patience=10, verbose=False, mode="max")
     if 'regression' in cfg.dataset.prediction_task:
-        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.00, patience=10*steps_per_epoch, verbose=False, mode="min")
+        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.00, patience=10, verbose=False, mode="min")
 
     data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key[-1]}_{len(cfg.dataset.library_key)}_{cfg.optim.seed}"
     run_name = f"{data_name}_{cfg.model.model_type}"
 
     if cfg.wandb.use:
         print('Wandb initialize...')
-        run = wandb.init(project=cfg.wandb.project_name, config=cfg, name=run_name, job_type = 'model_training')
+        run_name = f"{cfg.dataset.name}_{cfg.model.model_type}_{sweep_run.id if sweep_run else ''}"
+        run = wandb.init(project=cfg.wandb.project_name, config=cfg, name=run_name, job_type = 'model_training', reinit=True)
         #log_data(datasets + adata_list, names + ['adata'], cfg, run)
         #cfg._data = wandb.config # make sure that what is logged is same as waht is run
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
@@ -159,10 +186,79 @@ def main(cfg_path):
         run.finish()
         wandb.finish()
 
+def run_sweep(sweep_config):
+    sweep_id = wandb.sweep(sweep_config, project='InterScale_hyperparameter_sweep')
+    
+    def train_sweep_function():
+        parser = argparse.ArgumentParser(description='GTLongRange')
+        parser.add_argument('--cfg', dest='cfg', type=str, required=True, help='The configuration file path.')
+        parser.add_argument('--model_type', dest='model_type', type=str, required=True)
+        parser.add_argument('--sweep_goal', dest='sweep_goal', type=str, required=True, help='Choose sweep goal: (1) hyperparameter or (2) robustness.')
+        args = parser.parse_args()
+        
+        # Pass the sweep run object to main
+        main_sweep(args.cfg, args.sweep_goal, sweep_run=wandb.run)
+    
+    # Run the sweep agent
+    wandb.agent(sweep_id, function=train_sweep_function)
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GTLongRange')
 
     parser.add_argument('--cfg', dest='cfg', type=str, required=True, help='The configuration file path.')
+    parser.add_argument('--model_type', dest='model_type', type=str, required=True)
+    parser.add_argument('--sweep_goal', dest='sweep_goal', type=str, required=True, help='Choose sweep goal: (1) hyperparameter or (2) robustness.')
     args = parser.parse_args()
 
-    main(args.cfg)
+    sweep_config = {
+        'method': 'random',  # Can be 'grid', 'random', or 'bayes'
+        'metric': {
+            'name': 'val_acc', 
+            'goal': 'maximize'},  # Use 'val_r2' for regression tasks
+    }
+
+    if args.sweep_goal == 'hyperparmeter':
+        print("Hyperparameter sweep")
+        parameter_dict = {
+            'model.lr': {'values': [0.001, 0.005, 0.01]},
+            'dataset.batch_size': {'values': [16, 24, 32]},
+            'optim.warm_up': {'values': [20, 30, 40]},
+            'optim.wd': {'values': [0.1, 0.01, 0]},
+            # Add more hyperparameters to sweep as needed
+        }
+
+        if args.model_type == 'gnn' or args.model_type == 'gnn-transformer':
+            parameter_dict.update({
+                # GNN configs
+                'gnn.num_layers': {'values': [1,2,4]},
+                'gnn.hidden_dim': {'values': [64, 128, 256]},
+                'gnn.embed_dim': {'values': [128, 256, 516]},
+                'gnn.dropout': {'values': [0.15, 0.1, 0]},
+            })
+
+        if args.model_type == 'gnn-transformer' or args.model_type == 'pca-transformer':
+            parameter_dict.update({ 
+                # Transformer configs
+                'transformer.d_model': {'values': [128, 256, 516]},
+                'transformer.dim_feedforward': {'values': [256, 516]},
+                'transformer.num_layers': {'values': [1,2,4]},
+                'transformer.n_heads': {'values': [2,4,6]},
+                'transformer.dropout': {'values': [0.3, 0.1, 0]},
+                'transformer.max_seq_len': {'values': [1000, 1500, 2000]},
+            })
+
+    elif args.sweep_goal == 'robustness':
+        print("Robustness sweep")
+        
+        parameter_dict = {
+            'dataset.spatial_neigbors_kwargs.radius': {'values': [10, 30, 50, 70]}
+        }
+        if args.model_type == 'gnn-transformer' or args.model_type == 'pca-transformer':
+            parameter_dict.update({ 
+                'transformer.max_seq_len': {'values': [1000, 1500, 2000]},
+            })
+
+    sweep_config['parameters'] = parameter_dict
+    print(sweep_config)
+
+    run_sweep(sweep_config)

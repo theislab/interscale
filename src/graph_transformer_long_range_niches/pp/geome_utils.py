@@ -7,8 +7,9 @@ import json
 import scanpy as sc
 from torch_geometric.data.lightning import LightningDataset
 import numpy as np
+from sklearn.model_selection import KFold
 
-def split_adata(adata, split_obs: str, val_size: float, test_size: float, seed: int, return_summary: bool = True):
+def split_adata(adata, split_obs: str = None, stratify_groups: str = None, val_size: float = 0.1, test_size: float = 0, seed: int = 40, k_splits: int = 0, return_summary: bool = True, split_key: str = 'split'):
     """
     Split the AnnData object into train, val, and optionally test sets.
     
@@ -19,49 +20,84 @@ def split_adata(adata, split_obs: str, val_size: float, test_size: float, seed: 
     - val_size: The proportion of the dataset to include in the validation split.
     - seed: Random seed for reproducibility.
 
-    The function adds a new column 'split' to adata.obs with values 'train', 'val', 'test'.
+    Return:
+    -------
+        adata: AnnData
+            adata with new .obs column(s) '{split_key}' or '{split_key}_{k}' with values 'train', 'val', 'test'.
     """
     np.random.seed(seed)
-    
-    # Initialize the 'split' column with None
-    adata.obs['split'] = None
-    
+
     if split_obs is not None:
-        unique_groups = adata.obs[split_obs].unique()
-        
-        # Split unique groups into train and temp (val + test)
-        train_groups, temp_groups = train_test_split(unique_groups, test_size=test_size + val_size, random_state=seed)
-        
-        # Further split temp into val and test
-        if test_size > 0:
-            relative_val_size = val_size / (test_size + val_size)
-            val_groups, test_groups = train_test_split(temp_groups, test_size=1 - relative_val_size, random_state=seed)
-        else:
-            val_groups = temp_groups
-            test_groups = []
-        
-        # Assign 'train', 'val', 'test' based on groups
-        adata.obs.loc[adata.obs[split_obs].isin(train_groups), 'split'] = 'train'
-        adata.obs.loc[adata.obs[split_obs].isin(val_groups), 'split'] = 'val'
-        if test_groups:
-            adata.obs.loc[adata.obs[split_obs].isin(test_groups), 'split'] = 'test'
+        split_groups = adata.obs[split_obs].unique()
+
+        if stratify_groups is not None:
+            group_to_condition = {group: adata.obs.loc[adata.obs[split_obs] == group, 'condition'].unique()[0] for group in split_groups}
+            stratify_groups = list(group_to_condition.values())
+            print(stratify_groups)
+
+        if k_splits > 0:
+            split_groups = adata.obs[split_obs].unique()
+            kf = KFold(n_splits=k_splits, shuffle=True, random_state=seed)
             
-    # Generate summary statistics
-    if return_summary:
-        summary = {
-            'counts': adata.obs['split'].value_counts().to_dict(),
-            'groups': {
-                'train': list(train_groups),
-                'val': list(val_groups),
-                'test': list(test_groups) if test_groups else []
-            }
-        }
-        print(summary)
-        return adata
+            for fold, (train_index, val_index) in enumerate(kf.split(split_groups)):
+                split_col = f'{split_key}_{fold + 1}'
+                adata.obs[split_col] = None
+                
+                # Get the group names for train and val
+                train_groups = split_groups[train_index]
+                val_groups = split_groups[val_index]
+                
+                # Assign 'train' and 'val' based on the groups
+                adata.obs.loc[adata.obs[split_obs].isin(train_groups), split_col] = 'train'
+                adata.obs.loc[adata.obs[split_obs].isin(val_groups), split_col] = 'val'
+            
+                if return_summary:
+                    summary = {f'{split_col}_{fold + 1}': {
+                                'train_groups': list(train_groups),
+                                'val_groups': list(val_groups)
+                            }
+                    }
+                    print(summary)
+            
+            return adata
+        
+        if k_splits == 0:
+            # Initialize the 'split' column with None
+            adata.obs[split_key] = None
+            
+            # Split unique groups into train and temp (val + test)
+            train_groups, temp_groups = train_test_split(split_groups, test_size=test_size + val_size, random_state=seed, stratify=stratify_groups)
+        
+            # Further split temp into val and test
+            if test_size > 0:
+                relative_val_size = val_size / (test_size + val_size)
+                val_groups, test_groups = train_test_split(temp_groups, test_size=1 - relative_val_size, random_state=seed, stratify=stratify_groups)
+            else:
+                val_groups = temp_groups
+                test_groups = []
+            
+            # Assign 'train', 'val', 'test' based on groups
+            adata.obs.loc[adata.obs[split_obs].isin(train_groups), split_key] = 'train'
+            adata.obs.loc[adata.obs[split_obs].isin(val_groups), split_key] = 'val'
+            if test_groups:
+                adata.obs.loc[adata.obs[split_obs].isin(test_groups), split_key] = 'test'
+            
+            # Generate summary statistics
+            if return_summary:
+                summary = {
+                    'counts': adata.obs[split_key].value_counts().to_dict(),
+                    'groups': {
+                        'train': list(train_groups),
+                        'val': list(val_groups),
+                        'test': list(test_groups) if test_groups else []
+                    }
+                }
+                print(summary)
+            return adata
 
     return adata
 
-def prepare_geome_dataset(adata, cfg):
+def prepare_geome_dataset(adata, cfg, split_key: str = 'split'):
     """
     Loads, preprocesses and transforms the defined .h5ad data to a list of PyG data according to cfg file.
     """
@@ -129,17 +165,17 @@ def prepare_geome_dataset(adata, cfg):
             save_preprocessed_adata = True,
         )
 
-        pyg_train, adata_train = list(a2d(adata[adata.obs['split'] == 'train']))
-        pyg_val, adata_val = list(a2d(adata[adata.obs['split'] == 'val']))
+        pyg_train, adata_train = list(a2d(adata[adata.obs[split_key] == 'train']))
+        pyg_val, adata_val = list(a2d(adata[adata.obs[split_key] == 'val']))
         datas_train.extend(pyg_train)
         datas_val.extend(pyg_val)
-        if 'test' in np.unique(adata.obs['split']):
-            pyg_test, adata_test = list(a2d(adata[adata.obs['split'] == 'test']))
+        if 'test' in np.unique(adata.obs[split_key]):
+            pyg_test, adata_test = list(a2d(adata[adata.obs[split_key] == 'test']))
             datas_test.extend(pyg_test)
     
-    if 'test' in np.unique(adata.obs['split']):
+    if 'test' in np.unique(adata.obs[split_key]):
         print('test')
-        datas_test, adata_test = list(a2d(adata[adata.obs['split'] == 'test']))
+        datas_test, adata_test = list(a2d(adata[adata.obs[split_key] == 'test']))
         return [datas_train, datas_val, datas_test], [adata_train, adata_val, adata_test]
 
     return [datas_train, datas_val], [adata_train, adata_val]

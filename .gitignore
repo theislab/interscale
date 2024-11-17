@@ -13,3 +13,5 @@ logs/
 lightning_logs/
 artifacts/
 results/
+src/confi_files/
+InterScale_hyperparameter_sweep/

@@ -36,20 +36,24 @@ def main(cfg_path):
 
     # Split data into train, val (and test)
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
-    adata = split_adata(adata, cfg.dataset.obs_split, val_size, test_size, seed = cfg.optim.seed)
+    adata = split_adata(adata, cfg.dataset.obs_split, val_size, test_size, seed = cfg.optim.seed, k_splits=n_splits)
 
-    # Create PyG data
-    print('Load PyG data...')
-    pyg_data_list, adata_list = prepare_geome_dataset(adata, cfg)
+    for fold in range(n_splits):
 
-    # Cross-Validation Loop
-    fold_results = []
+        # Create PyG data
+        print('Load PyG data...')
+        pyg_data_list, _ = prepare_geome_dataset(adata, cfg, split_key=f'split_{fold+1}')
 
-    for fold, (train_index, val_index) in enumerate(kf.split(pyg_data_list[0])):
+        # Cross-Validation Loop
+        fold_results = []
+
         print(f"Starting fold {fold + 1}/{n_splits}...")
         # Split data for this fold
-        train_ds = pyg_data_list[0][train_index]
-        val_ds = pyg_data_list[0][val_index]
+        train_ds, val_ds = pyg_data_list[0], pyg_data_list[1]
+        # set number of classes and number of features
+        cfg.dataset.merge_from_list(['num_features', len(train_ds[0].x[1])])
+        if 'classification' in cfg.dataset.prediction_task:
+            cfg.dataset.merge_from_list(['num_classes', len(train_ds[0].y[1])])
 
         if test_size > 0.0:
             test_ds = pyg_data_list[2]
@@ -108,8 +112,10 @@ def main(cfg_path):
         val_results = trainer.validate(model, dm)
         fold_results.append(val_results)
 
-    # Aggregate results across all folds
-    print("Cross-validation results:", fold_results)
+        del pyg_data_list, model, trainer, dm, datasets, train_ds, val_ds
+
+        # Aggregate results across all folds
+        print("Cross-validation results:", fold_results)
 
     output_path = cfg.model.output_path  # Assuming this path is defined in the config
     print(f"Saving model locally to {output_path}...")

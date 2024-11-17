@@ -25,13 +25,13 @@ def get_dataset_cfg(cfg):
     cfg.dataset.spatial_neigbors_kwargs.coord_type = "generic"
     cfg.dataset.spatial_neigbors_kwargs.library_key = ""
 
-    cfg.dataset.batch_size = 20
-    cfg.dataset.train_size = 0.8
+    cfg.dataset.batch_size = 32
+    cfg.dataset.train_size = 0.7
     cfg.dataset.val_size = 0.2
-    cfg.dataset.test_size = 0.0
+    cfg.dataset.test_size = 0.1
     cfg.dataset.num_features = -1
     cfg.dataset.num_classes = -1
 
-    cfg.dataset.k_folds = 10
+    cfg.dataset.k_folds = 0
 
     return cfg

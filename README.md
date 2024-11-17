@@ -53,7 +53,7 @@ pip install yacs
 
 ## Guide on Config files
 
-Each experiment requires a `.yaml` file for the settings. Some configs are required for each experiment (e.i. `dataset.h5ad_data`) and others are set to a default value which are overwritten when included in the `experiment.yaml` file. All config parameters and default setting can be found in the `configs` folder.
+Each experiment requires a `.yaml` file for the settings. Some configs are required for each experiment (e.i. `dataset.h5ad_data`) and others are set to a default value which are overwritten when included in the `experiment.yaml` file. All config parameters and default setting can be found in the `configs` folder. The current default parameters are the InterScale parameters from the publication. 
 
 Example config file: [example.yaml](src/config_files/example.yaml)
 (copy paste the file, remove all defaults )
@@ -65,6 +65,18 @@ Example config file: [example.yaml](src/config_files/example.yaml)
 1. Data preperation
 
 We recommend using sliding patterns for the training to detect interaction patterns. 
+
+2. Prepare Configuration file
+
+All possible configuration settings can be found in the `config` folder. 
+
+The necessary configuration to define in the `.yaml` file are: 
+
+| Config                 | Description                                                               |
+|------------------------|---------------------------------------------------------------------------|
+| `dataset.h5ad_data`    | Path to `.h5ad` data.                                                       |
+
+TODO: Complete!
 
 ## Release notes
 

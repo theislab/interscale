@@ -11,9 +11,9 @@ def get_optim_cfg(cfg):
   """
   cfg.optim = CN()
 
-  cfg.optim.lr = 0.001 
-  cfg.optim.wd = 1e-3 
-  cfg.optim.warm_up = 10
+  cfg.optim.lr = 0.005 
+  cfg.optim.wd = 0.0
+  cfg.optim.warm_up = 40
   cfg.optim.loss = "CrossEntropy" 
-  cfg.optim.seed = 42
+  cfg.optim.seed = 40
   return cfg
