@@ -16,6 +16,9 @@ import math
 import scanpy as sc
 import os
 import pickle
+import numpy as np
+
+from sklearn.utils.class_weight import compute_class_weight
 
 from graph_transformer_long_range_niches.pp import prepare_geome_dataset
 from torch_geometric.loader import DataLoader
@@ -33,7 +36,16 @@ def main(cfg_path):
 
     # Split data into train, val (and test)
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
-    adata = split_adata(adata, cfg.dataset.obs_split, val_size, test_size, seed = cfg.optim.seed)
+    if 'graph' in cfg.dataset.prediction_task:
+        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, stratify_groups = cfg.dataset.prediction_obs)
+    else:
+        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed)
+
+    if cfg.optim.loss == 'WeightedCE':
+        class_weigths = compute_class_weight("balanced", classes = np.unique(adata.obs[cfg.dataset.prediction_obs]), y=adata.obs[cfg.dataset.prediction_obs])
+        print("WeightedCE with class weights: ", class_weigths)
+    else: 
+        class_weigths = None
 
     # Create PyG data
     print('Load PyG data...')
@@ -71,7 +83,7 @@ def main(cfg_path):
             model = LitGNNTransformer(cfg)
         elif cfg.model.model_type == 'gnn':
             print('Load GNN...')
-            model = LitGCN(cfg)
+            model = LitGCN(cfg, class_weigths)
         elif cfg.model.model_type == 'fcnn':
             print('Load FCNN...')
             model = BaselineFCNN(cfg)

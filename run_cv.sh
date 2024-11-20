@@ -16,4 +16,5 @@ source activate GT_long_range_env
 
 # GNN (K fold = 5)
 #python src/graph_transformer_long_range_niches/main_cv.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/CosmX_Pancreas/pancreas_gnn_ct_sw_2_cv.yaml
-python src/graph_transformer_long_range_niches/main_cv.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/CosmX_Pancreas/pancreas_gnntrans_ct_sw_2_cv.yaml
+#python src/graph_transformer_long_range_niches/main_cv.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/CosmX_Pancreas/pancreas_gnntrans_ct_sw_2_cv.yaml
+python src/graph_transformer_long_range_niches/main_cv.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/CosmX_Pancreas/pancreas_pcatrans_ct_sw_2_cv.yaml

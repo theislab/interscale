@@ -5,6 +5,8 @@ from torch.nn import Linear
 from torch_geometric.nn import GCNConv, MessagePassing
 import torch.nn.functional as F
 
+import typing as List
+
 import torchmetrics
 
 # PyTorch Lightning
@@ -13,7 +15,8 @@ from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupSchedul
     
 class LitGCN(L.LightningModule):
     def __init__(self,
-                 cfg
+                 cfg,
+                 class_weights: List = None,
         ):
         super().__init__()      
         #dp_rate = cfg['dp_rate'] if cfg['dp_rate'] is not None else dp_rate
@@ -28,7 +31,12 @@ class LitGCN(L.LightningModule):
         self.num_features = cfg.dataset.num_features
 
         if 'classification' in self.prediction_task:
-            self.loss = torch.nn.CrossEntropyLoss()
+            if cfg.optim.loss == 'CrossEntropy':
+                self.loss = torch.nn.CrossEntropyLoss()
+            elif cfg.optim.loss == 'WeightedCE':
+                self.loss = torch.nn.CrossEntropyLoss(torch.from_numpy(class_weights))
+            else:
+                raise Exception("Classification must be run with CrossEntropy or WeightedCE loss.")
         elif 'regression' in self.prediction_task:
             #self.loss = torch.nn.MSELoss()
             self.loss = torch.nn.GaussianNLLLoss()

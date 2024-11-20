@@ -59,7 +59,7 @@ def main_sweep(cfg_path, sweep_goal, sweep_run=None):
 
     # Split data into train, val (and test)
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
-    adata = split_adata(adata, cfg.dataset.obs_split, val_size, test_size, seed = cfg.optim.seed)
+    split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed)
 
     # Create PyG data
     print('Load PyG data...')

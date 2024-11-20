@@ -9,7 +9,7 @@ from torch_geometric.data.lightning import LightningDataset
 import numpy as np
 from sklearn.model_selection import KFold
 
-def split_adata(adata, split_obs: str = None, stratify_groups: str = None, val_size: float = 0.1, test_size: float = 0, seed: int = 40, k_splits: int = 0, return_summary: bool = True, split_key: str = 'split'):
+def split_adata(adata, split_obs: str = None, val_size: float = 0.1, test_size: float = 0, seed: int = 40, k_splits: int = 0, return_summary: bool = True, split_key: str = 'split', stratify_groups: str = None):
     """
     Split the AnnData object into train, val, and optionally test sets.
     
@@ -31,11 +31,12 @@ def split_adata(adata, split_obs: str = None, stratify_groups: str = None, val_s
         split_groups = adata.obs[split_obs].unique()
 
         if stratify_groups is not None:
-            group_to_condition = {group: adata.obs.loc[adata.obs[split_obs] == group, 'condition'].unique()[0] for group in split_groups}
+            group_to_condition = {group: adata.obs.loc[adata.obs[split_obs] == stratify_groups, 'condition'].unique()[0] for group in split_groups}
             stratify_groups = list(group_to_condition.values())
             print(stratify_groups)
 
         if k_splits > 0:
+            print("K Fold")
             split_groups = adata.obs[split_obs].unique()
             kf = KFold(n_splits=k_splits, shuffle=True, random_state=seed)
             
@@ -70,8 +71,9 @@ def split_adata(adata, split_obs: str = None, stratify_groups: str = None, val_s
         
             # Further split temp into val and test
             if test_size > 0:
+                print("Test size > 0")
                 relative_val_size = val_size / (test_size + val_size)
-                val_groups, test_groups = train_test_split(temp_groups, test_size=1 - relative_val_size, random_state=seed, stratify=stratify_groups)
+                val_groups, test_groups = train_test_split(temp_groups, test_size=1 - relative_val_size, random_state=seed)
             else:
                 val_groups = temp_groups
                 test_groups = []

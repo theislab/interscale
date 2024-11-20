@@ -1,8 +1,7 @@
-from graph_transformer_long_range_niches.model.gnn_transformer import LitGNNTransformer
+from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN
 from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset, split_adata
 from graph_transformer_long_range_niches.modules.gcn import LitGCN
 from graph_transformer_long_range_niches.tl.wandb import log_data
-from graph_transformer_long_range_niches.model.baseline import BaselineFCNN
 from graph_transformer_long_range_niches.config import load_config
 
 # PyTorch Lightning
@@ -36,7 +35,7 @@ def main(cfg_path):
 
     # Split data into train, val (and test)
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
-    adata = split_adata(adata, cfg.dataset.obs_split, val_size, test_size, seed = cfg.optim.seed, k_splits=n_splits)
+    adata = split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, k_splits=n_splits)
 
     for fold in range(n_splits):
 
@@ -86,6 +85,9 @@ def main(cfg_path):
             elif cfg.model.model_type == 'fcnn':
                 print('Load FCNN...')
                 model = BaselineFCNN(cfg)
+            elif cfg.model.model_type == 'pca-transformer':
+                print('Load PCA Transformer...')
+                model = LitPCATransformer(cfg)
         except ValueError:
             print("No valid model defined in .yaml file.")
 

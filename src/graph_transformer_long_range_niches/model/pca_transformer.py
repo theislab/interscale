@@ -9,7 +9,7 @@ from torch import nn
 
 from graph_transformer_long_range_niches.modules.transformer_encoder import TransformerNodeEncoder
 from graph_transformer_long_range_niches.modules.transformer_encoder_hook import TransformerNodeEncoderHook
-from graph_transformer_long_range_niches.tl import pad_batch, CosineWarmupScheduler, weighted_cross_entropy
+from graph_transformer_long_range_niches.tl import pad_batch, CosineWarmupScheduler
 from sklearn.decomposition import PCA
 
 
@@ -222,8 +222,7 @@ class LitPCATransformer(L.LightningModule):
         #print('predicted and true: ', out_transformer[:10].argmax(dim=1), y_true[:10].argmax(dim=1))
         if 'classification' in self.prediction_task:
             if self._cfg.optim.loss == 'WeightedCE':
-                weight = weighted_cross_entropy(out_transformer, y_true)
-                loss_fn = nn.CrossEntropyLoss(weight=weight)
+                loss_fn = nn.CrossEntropyLoss(weight=self.class_weights)
                 loss = loss_fn(out_transformer, y_true.argmax(dim=1),)
             else:
                 loss = self.loss(out_transformer, y_true.argmax(dim=1))
