@@ -38,6 +38,9 @@ def main(cfg_path):
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
     if 'graph' in cfg.dataset.prediction_task:
         split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, stratify_groups = cfg.dataset.prediction_obs)
+    elif cfg.dataset.stratify_group is not None:
+        print('Stratifying by group: ', cfg.dataset.stratify_group)
+        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, stratify_groups = cfg.dataset.stratify_group)
     else:
         split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed)
 
@@ -89,7 +92,7 @@ def main(cfg_path):
             model = BaselineFCNN(cfg)
         elif cfg.model.model_type == 'pca-transformer':
             print('Load PCA Transformer...')
-            model = LitPCATransformer(cfg)
+            model = LitPCATransformer(cfg, class_weigths)
     except ValueError:
         print("No valid model defined in .yaml file.")
 

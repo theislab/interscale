@@ -38,9 +38,14 @@ class LitGCN(L.LightningModule):
             else:
                 raise Exception("Classification must be run with CrossEntropy or WeightedCE loss.")
         elif 'regression' in self.prediction_task:
-            #self.loss = torch.nn.MSELoss()
-            self.loss = torch.nn.GaussianNLLLoss()
-            #self.loss = torch.nn.SmoothL1Loss()
+            if cfg.optim.loss == 'MSELoss':
+                self.loss = torch.nn.MSELoss()
+            elif cfg.optim.loss == 'GaussianNLL':
+                self.loss = torch.nn.GaussianNLLLoss()
+            elif cfg.optim.loss == 'SmoothL1':
+                self.loss = torch.nn.SmoothL1Loss()
+            else:
+                raise Exception("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")
         else:
             raise Exception("Prediction task must define 'classification' or 'regression'.")
 

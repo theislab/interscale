@@ -156,18 +156,13 @@ def sliding_window(
 
     if overlap == 0:
         # create categorical variable for ordered windows
-        # Get unique values and ensure NaN is handled properly
-        unique_values = sliding_window_df[sliding_window_key].unique()
-        sorted_categories = sorted(
-            [x for x in unique_values if pd.notna(x)],
-            key=lambda x: int(x.split("_")[-1])
-        )
-        
-        # Create categorical with NaN handling
         sliding_window_df[sliding_window_key] = pd.Categorical(
             sliding_window_df[sliding_window_key],
             ordered=True,
-            categories=sorted_categories,
+            categories=sorted(
+                sliding_window_df[sliding_window_key].unique(),
+                key=lambda x: int(x.split("_")[-1]),
+            ),
         )
 
     sliding_window_df[x_col] = coords[x_col]

@@ -37,17 +37,23 @@ class LitGNNTransformer(L.LightningModule):
         self.num_classes = cfg.dataset.num_classes
         self.num_features = cfg.dataset.num_features
         self.max_seq_len = cfg.transformer.max_seq_len
-        # ToDOo: refer to weighted loss
-        # if cfg.get('optim/loss') == 'CrossEntropy' or cfg.get('optim/loss') == 'WeightedCE':
-        #     self.loss = torch.nn.CrossEntropyLoss()
-        # else:
-        #     raise ValueError(f"Invalid loss function specified: {cfg.get('optim/loss')}. Please choose 'CrossEntropy' or 'WeightedCE'.")
+
         if 'classification' in self.prediction_task:
-            self.loss = torch.nn.CrossEntropyLoss()
+            if cfg.optim.loss == 'CrossEntropy':
+                self.loss = torch.nn.CrossEntropyLoss()
+            elif cfg.optim.loss == 'WeightedCE':
+                self.loss = torch.nn.CrossEntropyLoss(torch.from_numpy(class_weights))
+            else:
+                raise Exception("Classification must be run with CrossEntropy or WeightedCE loss.")
         elif 'regression' in self.prediction_task:
-            #self.loss = torch.nn.MSELoss()
-            self.loss = torch.nn.GaussianNLLLoss()
-            #self.loss = torch.nn.SmoothL1Loss()
+            if cfg.optim.loss == 'MSELoss':
+                self.loss = torch.nn.MSELoss()
+            elif cfg.optim.loss == 'GaussianNLL':
+                self.loss = torch.nn.GaussianNLLLoss()
+            elif cfg.optim.loss == 'SmoothL1':
+                self.loss = torch.nn.SmoothL1Loss()
+            else:
+                raise Exception("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")
         else:
             raise Exception("Prediction task must define 'classification' or 'regression'.")
 
@@ -227,11 +233,7 @@ class LitGNNTransformer(L.LightningModule):
 
         #print('predicted and true: ', out_transformer[:10].argmax(dim=1), y_true[:10].argmax(dim=1))
         if 'classification' in self.prediction_task:
-            if self._cfg.optim.loss == 'WeightedCE':
-                loss_fn = nn.CrossEntropyLoss(weight=self.class_weights)
-                loss = loss_fn(out_transformer, y_true.argmax(dim=1),)
-            else:
-                loss = self.loss(out_transformer, y_true.argmax(dim=1))
+            loss = self.loss(out_transformer, y_true.argmax(dim=1))
             acc = self.accurary(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
             f1_score_micro = self.f1_score_micro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
             f1_score_macro = self.f1_score_macro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))

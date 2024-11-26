@@ -33,5 +33,6 @@ def get_dataset_cfg(cfg):
     cfg.dataset.num_classes = -1
 
     cfg.dataset.k_folds = 0
+    cfg.dataset.stratify_group = None
 
     return cfg

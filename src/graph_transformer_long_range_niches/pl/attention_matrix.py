@@ -140,8 +140,12 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, atte
     
     sub_adata.obs['cls'] = -1
     attention_matrix_dict = {}
+    transformer_in_dict = {}
+    transformer_out_dict = {}
     if library_key:  
         library_key_list = np.unique(sub_adata.obs[library_key])
+    else: 
+        library_key_list = [None]
     
     for batch, library_id in zip(data_loader, library_key_list):
         print(batch, library_id)
@@ -150,16 +154,26 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, atte
             attention_index = np.arange(0, len(index_nodes))
         I = self_attention_relevance.generate_relevance(transformer_in, src_padding_mask, category_index=attention_index)
         cls = I[:1, 1:].cpu().detach().numpy() 
-        sub_adata.obs['cls'][sub_adata.obs[library_key]==library_id][index_nodes[0]] = cls[0]
         # Create a pandas DataFrame for the attention matrix with obs_names as row and column indices
-        attention_matrix_df = pd.DataFrame(
-            I[1:, 1:].cpu().detach().numpy(),
-            index=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]],
-            columns=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]]
-        )
-        attention_matrix_dict[library_id] = attention_matrix_df
+        if library_key:
+            sub_adata.obs['cls'][sub_adata.obs[library_key]==library_id][index_nodes[0]] = cls[0]
+            attention_matrix_df = pd.DataFrame(
+                I[1:, 1:].cpu().detach().numpy(),
+                index=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]],
+                columns=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]]
+            )
+        else:
+            sub_adata.obs['cls'][sub_adata.obs_names[index_nodes[0]]] = cls[0]
+            attention_matrix_df = pd.DataFrame(
+                I[1:, 1:].cpu().detach().numpy(),
+                index=sub_adata.obs_names[index_nodes[0]],
+                columns=sub_adata.obs_names[index_nodes[0]]
+            )
+        attention_matrix_dict[str(library_id)] = attention_matrix_df
+        transformer_in_dict[str(library_id)] = transformer_in
+        transformer_out_dict[str(library_id)] = transformer_out
         
-    return sub_adata, attention_matrix_dict
+    return sub_adata, attention_matrix_dict, transformer_in_dict, transformer_out_dict, dec_out
 
 def normalized_attention(attention_matrix, clamp = 0.05):
     np.fill_diagonal(attention_matrix.values, 0)

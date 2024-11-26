@@ -31,9 +31,14 @@ def split_adata(adata, split_obs: str = None, val_size: float = 0.1, test_size: 
         split_groups = adata.obs[split_obs].unique()
 
         if stratify_groups is not None:
-            group_to_condition = {group: adata.obs.loc[adata.obs[split_obs] == stratify_groups, 'condition'].unique()[0] for group in split_groups}
-            stratify_groups = list(group_to_condition.values())
-            print(stratify_groups)
+            group_to_condition = {
+                group: adata[adata.obs[split_obs] == group].obs[stratify_groups].iloc[0]
+                for group in split_groups
+            }
+            stratify_labels = [group_to_condition[group] for group in split_groups]
+            print(f"Stratifying by conditions: {np.unique(stratify_labels)}")
+        else:
+            stratify_labels = None
 
         if k_splits > 0:
             print("K Fold")
@@ -67,13 +72,31 @@ def split_adata(adata, split_obs: str = None, val_size: float = 0.1, test_size: 
             adata.obs[split_key] = None
             
             # Split unique groups into train and temp (val + test)
-            train_groups, temp_groups = train_test_split(split_groups, test_size=test_size + val_size, random_state=seed, stratify=stratify_groups)
+            train_groups, temp_groups = train_test_split(split_groups, test_size=test_size + val_size, random_state=seed, stratify=stratify_labels)
         
             # Further split temp into val and test
             if test_size > 0:
                 print("Test size > 0")
+                if len(temp_groups) < 2:
+                    raise ValueError("Not enough groups to create non-empty validation and test sets")
+                
+                # Get stratification labels for temp groups
+                if stratify_labels is not None:
+                    temp_stratify = [group_to_condition[group] for group in temp_groups]
+                else:
+                    temp_stratify = None
+                    
                 relative_val_size = val_size / (test_size + val_size)
-                val_groups, test_groups = train_test_split(temp_groups, test_size=1 - relative_val_size, random_state=seed)
+                val_groups, test_groups = train_test_split(
+                    temp_groups, 
+                    test_size=1 - relative_val_size, 
+                    random_state=seed,
+                    stratify=temp_stratify
+                )
+                
+                # Verify test set is not empty
+                if len(test_groups) == 0:
+                    raise ValueError("Test size > 0 but resulted in empty test set")
             else:
                 val_groups = temp_groups
                 test_groups = []
