@@ -17,15 +17,9 @@ from typing import List
 
 class LitPCATransformer(L.LightningModule):
     def __init__(self, cfg, class_weights: List = None, **model_kwargs):
-        super().__init__()
-        # Saving hyperparameters
-        self.save_hyperparameters()
-        self._cfg = cfg
-        self.lr = float(self._cfg.optim.lr)
-        self.wd = float(self._cfg.optim.wd)
-
+        super().__init__(cfg, class_weights, **model_kwargs)
+        
         self.model_type = 'PCA_Transformer'
-        self.prediction_task = cfg.dataset.prediction_task
 
         self.output_dim = cfg.transformer.d_model
          # Initialize PCA
@@ -34,38 +28,6 @@ class LitPCATransformer(L.LightningModule):
         # Input normalization and transformer encoder
         self.norm_input = nn.LayerNorm(self.output_dim)
         self.cls_embedding = nn.Parameter(torch.randn([1, 1, self.output_dim], requires_grad = True))
-        self.num_classes = cfg.dataset.num_classes
-        self.num_features = cfg.dataset.num_features
-        self.max_seq_len = cfg.transformer.max_seq_len
-        # ToDOo: refer to weighted loss
-        # if cfg.get('optim/loss') == 'CrossEntropy' or cfg.get('optim/loss') == 'WeightedCE':
-        #     self.loss = torch.nn.CrossEntropyLoss()
-        # else:
-        #     raise ValueError(f"Invalid loss function specified: {cfg.get('optim/loss')}. Please choose 'CrossEntropy' or 'WeightedCE'.")
-        if 'classification' in self.prediction_task:
-            if cfg.optim.loss == 'CrossEntropy':
-                self.loss = torch.nn.CrossEntropyLoss()
-            elif cfg.optim.loss == 'WeightedCE':
-                self.loss = torch.nn.CrossEntropyLoss(torch.from_numpy(class_weights))
-            else:
-                raise Exception("Classification must be run with CrossEntropy or WeightedCE loss.")
-        elif 'regression' in self.prediction_task:
-            #self.loss = torch.nn.MSELoss()
-            self.loss = torch.nn.GaussianNLLLoss()
-            #self.loss = torch.nn.SmoothL1Loss()
-        else:
-            raise Exception("Prediction task must define 'classification' or 'regression'.")
-
-        # Define metrics
-        if 'classification' in self.prediction_task:
-            self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
-            self.f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="micro")
-            self.f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="macro")
-            self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
-        elif 'regression' in self.prediction_task:
-            self.mse = torchmetrics.MeanSquaredError()
-            self.r2 = torchmetrics.R2Score(num_outputs=self.num_features, multioutput = 'variance_weighted')
-            self.pearson_corr = torchmetrics.regression.PearsonCorrCoef(num_outputs=self.num_features)
 
         # Transformer encoder initialization
         self.transformer_encoder = TransformerNodeEncoderHook(cfg)
@@ -77,12 +39,6 @@ class LitPCATransformer(L.LightningModule):
         elif 'regression' in self.prediction_task:
             print('num features:', self.num_features)
             self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_features)
-
-        # if self.max_seq_len is None:
-        #     self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_classes)
-        # else:
-        #     for i in range(self.max_seq_len):
-        #         self.graph_pred_linear_list.append(torch.nn.Linear(self.output_dim, self.num_classes))
 
     def forward(self, batched_data):
         """
@@ -106,13 +62,6 @@ class LitPCATransformer(L.LightningModule):
             cls = transformer_out[-1,:, :] # [B, E]
             out = self.graph_pred_linear(cls)
             return None, out, index_nodes
-            # if self.max_seq_len is None:
-            #     out = self.graph_pred_linear(cls)
-            #     return z, out, index_nodes
-            # pred_list = []
-            # for i in range(self.max_seq_len):
-            #     pred_list.append(self.graph_pred_linear_list[i](cls))
-            #     return z, pred_list, index_nodes
 
         ## Node-level prediction: remove cls
         elif 'node' in self.prediction_task: #TODO: I don't think I need to differentiate between regression and classification here.
@@ -128,82 +77,16 @@ class LitPCATransformer(L.LightningModule):
 
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.wd)
-        lr_scheduler = CosineWarmupScheduler(optimizer,
-                                             warmup=int(self._cfg.optim.warm_up),
-                                             max_epochs=100000)
-
-        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
+        return self.common_configure_optimizers()
 
     def training_step(self, batch, batch_idx):
-        #loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class = self._common_step(batch)
-        loss, metric_list = self._common_step(batch)
-        if 'classification' in self.prediction_task:
-            acc, f1_score_micro, f1_score_macro, f1_score_per_class = metric_list
-            log_dict = {
-                'train_loss': loss,
-                'train_acc': acc,
-                'train_f1_micro/avg': f1_score_micro,
-                'train_f1_macro/avg': f1_score_macro,
-            }
-            for class_idx in range(self.num_classes):
-                log_dict[f'train_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
-            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
-        elif 'regression' in self.prediction_task:
-            mse, r2, pearson_corr = metric_list
-            log_dict = {
-                'train_mse': mse,
-                'train_r2': r2,
-                'train_pearson_corr': pearson_corr,
-            }
-            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
-        return loss
+        return self.common_training_step(batch, batch_idx)
 
     def validation_step(self, batch, batch_idx):
-        loss, metric_list = self._common_step(batch)
-        if 'classification' in self.prediction_task:
-            acc, f1_score_micro, f1_score_macro, f1_score_per_class = metric_list
-            log_dict = {
-                'val_loss': loss,
-                'val_acc': acc,
-                'val_f1_micro/avg': f1_score_micro,
-                'val_f1_macro/avg': f1_score_macro,
-            }
-            for class_idx in range(self.num_classes):
-                log_dict[f'val_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
-            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
-        elif 'regression' in self.prediction_task:
-            mse, r2, pearson_corr = metric_list
-            log_dict = {
-                'val_mse': mse,
-                'val_r2': r2,
-                'val_pearson_corr': pearson_corr,
-            }
-            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
-        return loss
+        return self.common_validation_step(batch, batch_idx)
 
     def test_step(self, batch):
-        loss, metric_list = self._common_step(batch)
-        if 'classification' in self.prediction_task:
-            acc, f1_score_micro, f1_score_macro, f1_score_per_class = metric_list
-            log_dict = {
-                'test_loss': loss,
-                'test_acc': acc,
-                'test_f1_micro/avg': f1_score_micro,
-                'test_f1_macro/avg': f1_score_macro,
-            }
-            for class_idx in range(self.num_classes):
-                log_dict[f'test_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
-            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
-        elif 'regression' in self.prediction_task:
-            mse, r2, pearson_corr = metric_list
-            log_dict = {
-                'test_mse': mse,
-                'test_r2': r2,
-                'test_pearson_corr': pearson_corr,
-            }
-            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
-        return loss
+        return self.common_test_step(batch)
 
 
     def _common_step(self, batch):

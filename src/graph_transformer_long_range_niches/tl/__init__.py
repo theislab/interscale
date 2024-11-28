@@ -9,4 +9,5 @@ __all__ = [
     "pad_batch",
     "str_to_int_or_none",
     "log_data",
+    "GraphAnnDataModule"
 ]

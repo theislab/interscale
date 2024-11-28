@@ -1,7 +1,7 @@
 from importlib.metadata import version
 
-from . import pl, pp, tl
+from . import pl, pp, tl, model, modules
 
-__all__ = ["pl", "pp", "tl"]
+__all__ = ["pl", "pp", "tl", "model", "modules"]
 
 __version__ = version("graph-transformer-long-range-niches")

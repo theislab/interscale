@@ -5,5 +5,5 @@ from .baseline import BaselineFCNN
 __all__ = [
     "LitGNNTransformer",
     "LitPCATransformer",
-    "BaselineFCNN"
+    "BaselineFCNN",
 ]
