@@ -396,7 +396,6 @@ def multi_head_attention_forward_with_gradients(
 class MultiHeadAttentionWithEdits(torch.nn.MultiheadAttention):
     def __init__(self, *args, **kwargs):
         super(MultiHeadAttentionWithEdits, self).__init__(*args, **kwargs)
-        print('dropout multihead: ', self.dropout)
     
     def forward(
             self,
@@ -612,13 +611,3 @@ class MultiHeadAttentionWithEdits(torch.nn.MultiheadAttention):
         else:
             return attn_output, attn_output_weights
 
-# class TransformerEncoderLayerWithSpecialMultiHead(TransformerEncoderLayer):
-#     def __init__(self, device=None, dtype=None, *args, **kwargs):
-#         super(TransformerEncoderLayerWithSpecialMultiHead, self).__init__(*args, **kwargs)
-#         print('TransformerEncoderLayerWithSpecialMultiHead: nhead: ', self.nhead)
-#         factory_kwargs = {'device': device, 'dtype': dtype}
-#         super().__init__()
-#         self.self_attn = MultiHeadAttentionWithEdits(d_model= self.d_model, nhead=self.nhead, dropout=self.dropout,
-#                                             bias=self.bias, batch_first=self.batch_first,
-#                                             **factory_kwargs)
-#         print('dropout: ', self.dropout)

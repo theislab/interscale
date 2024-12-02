@@ -110,10 +110,10 @@ class LitGNNTransformer(BaseModule):
         y_true = torch.stack(y_true)
 
         if 'classification' in self.prediction_task:
-            return self.common_classification_step(out_transformer, y_true)
+            return self._common_step_classification_metrics(out_transformer, y_true)
 
         if 'regression' in self.prediction_task:
-            return self.common_regression_step(out_transformer, y_true)
+            return self._common_step_regression_metrics(out_transformer, y_true)
 
     def extract_attention(self, x, src_padding_mask, average_attn_heads = True):
         """
