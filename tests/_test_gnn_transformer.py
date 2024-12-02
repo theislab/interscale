@@ -17,7 +17,7 @@ def sample_config():
     custom_cfg = {
         'dataset': {
             'num_classes': 2,
-            'num_features': 10,
+            'num_features': 9,
             'prediction_task': 'graph_classification',
             'batch_size': 2
         },
@@ -60,7 +60,7 @@ def test_gnn_transformer_graph_classification(sample_config):
     # Create sample batch
     graphs = []
     for i in range(cfg.dataset.batch_size):
-        graphs.append(create_sample_graph(cfg, num_nodes=np.random.randint(5, 10), is_graph_level=True))
+        graphs.append(create_sample_graph(cfg, num_nodes=6, is_graph_level=True))
     
     batch = Batch.from_data_list(graphs)
     
@@ -72,6 +72,44 @@ def test_gnn_transformer_graph_classification(sample_config):
     assert out.shape[1] == cfg.dataset.num_classes  # Number of classes
     assert z is not None
     assert index_nodes is not None
+    
+# def test_gnn_transformer_attention_gradients(sample_config):
+#     """
+#     Test that attention weights have gradients (vendoring TransformerEncoderLayerWithSpecialMultiHead)
+#     """
+#     # Set up model for graph-level prediction
+#     cfg = sample_config
+#     cfg.dataset.prediction_task = 'graph_classification'
+    
+#     model = InterScale.model.LitGNNTransformer(cfg)
+
+#     # Create sample batch
+#     graphs = []
+#     for i in range(cfg.dataset.batch_size):
+#         graphs.append(create_sample_graph(cfg, num_nodes=np.random.randint(5, 10), is_graph_level=True))
+    
+#     batch = Batch.from_data_list(graphs)
+
+#     # Forward pass with register_hook=True to get attention weights
+#     output, _ = model.transformer_encoder(padded_h_node, src_padding_mask, register_hook=True)
+    
+#     # Get gradients
+#     loss = output.sum()
+#     loss.backward()
+    
+#     # Check that attention weights have gradients
+#     for layer in model.transformer_encoder.layers:
+#         assert layer.self_attn.last_attn_weights is not None
+#         assert layer.self_attn.last_attn_weights.grad is not None
+        
+#         # Check shapes
+#         batch_size = cfg.dataset.batch_size
+#         num_heads = cfg.transformer.n_heads
+#         seq_len = layer.self_attn.last_attn_weights.size(-1)
+        
+#         assert layer.self_attn.last_attn_weights.shape == (batch_size * num_heads, seq_len, seq_len)
+#         assert layer.self_attn.last_attn_weights.grad.shape == (batch_size * num_heads, seq_len, seq_len)
+    
 
 # def test_gnn_transformer_node_classification(sample_config):
 #     # Set up model for node-level prediction

@@ -1,11 +1,27 @@
 import torch
 from torch import nn
+from torch.nn.modules import TransformerEncoderLayer
 
-class CustomTransformerEncoderLayer(nn.TransformerEncoderLayer):
+from typing import Union, Callable
+from torch import Tensor
+from torch.nn import functional as F
+from graph_transformer_long_range_niches.tl import MultiHeadAttentionWithEdits
+
+class CustomTransformerEncoderLayer(TransformerEncoderLayer):
     """Overwrite TransformerEncoderLayer from PyTorch to implement attention map and gradient hook in the self-attention block."""
 
-    def __init__(self, *args, **kwargs):
-        super(CustomTransformerEncoderLayer, self).__init__(*args, **kwargs)
+    def __init__(self, d_model: int, nhead: int, dim_feedforward: int = 2048, dropout: float = 0.1,
+                 activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
+                 layer_norm_eps: float = 1e-5, batch_first: bool = False, norm_first: bool = False,
+                 bias: bool = True, device=None, dtype=None, *args, **kwargs):
+        
+        super(CustomTransformerEncoderLayer, self).__init__(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout,
+                 activation=activation, layer_norm_eps=layer_norm_eps, batch_first=batch_first, norm_first=norm_first,
+                 bias=bias, device=device, dtype=dtype, *args, **kwargs)
+        factory_kwargs = {'device': None, 'dtype': None}
+        self.self_attn = MultiHeadAttentionWithEdits(d_model, nhead, dropout=dropout,
+                                            bias=bias, batch_first=batch_first,
+                                            **factory_kwargs)
         self.attn_output = None  # To store attention output
         self.attn_output_weights = None
         self.attn_gradients = None  # To store attention weights gradients

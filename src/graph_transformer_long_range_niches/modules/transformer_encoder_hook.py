@@ -48,6 +48,7 @@ class TransformerNodeEncoderHook(nn.Module):
 
         # append cls embedding
         expand_cls_embedding = self.cls_embedding.expand(1, padded_h_node.size(1), -1)
+        print('padded_h_node: ', padded_h_node.shape, 'expand_cls_embedding: ', expand_cls_embedding.shape)
         padded_h_node = torch.cat([padded_h_node, expand_cls_embedding], dim=0)
         # normalize input
         padded_h_node = self.norm_input(padded_h_node)

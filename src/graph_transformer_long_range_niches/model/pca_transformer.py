@@ -108,29 +108,35 @@ class LitPCATransformer(L.LightningModule):
             else:
                 raise Exception('Choose a valid prediction tasks (graph or node).')
         y_true = torch.stack(y_true)
-
-        #print('predicted and true: ', out_transformer[:10].argmax(dim=1), y_true[:10].argmax(dim=1))
+        
         if 'classification' in self.prediction_task:
-            print(out_transformer, y_true)
-            loss = self.loss(out_transformer, y_true.argmax(dim=1).to(torch.long))
-            acc = self.accurary(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
-            f1_score_micro = self.f1_score_micro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
-            f1_score_macro = self.f1_score_macro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
-            f1_score_per_class = self.f1_score_per_class(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
-
-            return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
+            return self.common_classification_step(out_transformer, y_true)
 
         if 'regression' in self.prediction_task:
-            # GaussianNLLoss -> var (NCEM: used variance per gene)
-            # Estimate variance based on the true values (e.g., using batch variance)
-            y_var = torch.var(y_true, dim=1, keepdim=True)  # You can adjust the estimation method
-            # Ensure variance is non-zero and positive
-            y_var = y_var.clamp(min=1e-6)
-            loss = self.loss(out_transformer, y_true, y_var)
-            mse = self.mse(out_transformer, y_true)
-            r2 = self.r2(out_transformer, y_true)
-            pearson_corr = torch.mean(self.pearson_corr(out_transformer, y_true))
-            return loss, [mse, r2, pearson_corr]
+            return self.common_regression_step(out_transformer, y_true)
+
+        # #print('predicted and true: ', out_transformer[:10].argmax(dim=1), y_true[:10].argmax(dim=1))
+        # if 'classification' in self.prediction_task:
+        #     print(out_transformer, y_true)
+        #     loss = self.loss(out_transformer, y_true.argmax(dim=1).to(torch.long))
+        #     acc = self.accurary(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+        #     f1_score_micro = self.f1_score_micro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+        #     f1_score_macro = self.f1_score_macro(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+        #     f1_score_per_class = self.f1_score_per_class(out_transformer.argmax(dim=1), y_true.argmax(dim=1))
+
+        #     return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
+
+        # if 'regression' in self.prediction_task:
+        #     # GaussianNLLoss -> var (NCEM: used variance per gene)
+        #     # Estimate variance based on the true values (e.g., using batch variance)
+        #     y_var = torch.var(y_true, dim=1, keepdim=True)  # You can adjust the estimation method
+        #     # Ensure variance is non-zero and positive
+        #     y_var = y_var.clamp(min=1e-6)
+        #     loss = self.loss(out_transformer, y_true, y_var)
+        #     mse = self.mse(out_transformer, y_true)
+        #     r2 = self.r2(out_transformer, y_true)
+        #     pearson_corr = torch.mean(self.pearson_corr(out_transformer, y_true))
+        #     return loss, [mse, r2, pearson_corr]
 
 
     def extract_attention(self, x, src_padding_mask, average_attn_heads = True):

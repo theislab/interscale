@@ -1,6 +1,6 @@
 from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN
 from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset, split_adata
-from graph_transformer_long_range_niches.modules.gcn import LitGCN
+from src.graph_transformer_long_range_niches.model.gcn import LitGCN
 from graph_transformer_long_range_niches.tl.wandb import log_data
 from graph_transformer_long_range_niches.config import load_config
 
@@ -150,11 +150,6 @@ def main(cfg_path):
         trainer.save_checkpoint(os.path.join(output_path, f"{run_name}.ckpt"))
 
         adata.obs.to_csv(os.path.join(output_path,f'{data_name}_obs.csv'), index=True)
-
-        # Save the adata object locally if required
-        # adata_save_path = os.path.join(output_path, f"{data_name}.h5ad")
-        # adata.write(adata_save_path)
-        # print(f"Adata saved to {adata_save_path}")
 
         with open(os.path.join(output_path, f"{data_name}.pkl"), 'wb') as file:
             pickle.dump(datasets, file)

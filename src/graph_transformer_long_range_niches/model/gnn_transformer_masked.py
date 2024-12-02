@@ -5,13 +5,14 @@
 import pytorch_lightning as L
 import torch
 from torch import nn
+from graph_transformer_long_range_niches.tl import mask_nodes
 
 from typing import List
 
 from graph_transformer_long_range_niches.modules import TransformerNodeEncoderHook, BaseModule, LitGCN
 from graph_transformer_long_range_niches.tl.utils import pad_batch
 
-class LitGNNTransformer(BaseModule):
+class LitGNNTransformerMasked(BaseModule):
     def __init__(self, cfg, class_weights: List = None, **model_kwargs):
         # initialize all hyperparameters from BaseModule
         super().__init__(cfg, class_weights, **model_kwargs)
@@ -45,7 +46,8 @@ class LitGNNTransformer(BaseModule):
             batched_data: Pytorch geometric object 
                 batched_data.x = [N, F]
         """
-        h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
+        batched_data_masked, mask = mask_nodes(batched_data, self._cfg.transformer.masked_nodes)
+        h_node, z = self.gnn(batched_data_masked.x, batched_data_masked.edge_index)
         
         if self._cfg.gnn.embed_dim != self.output_dim:
             h_node = self.gnn2transformer(h_node)  # [s, d_model]
@@ -92,7 +94,8 @@ class LitGNNTransformer(BaseModule):
     def _common_step(self, batch):
         """Shared step between train, val and test.
         """
-        out_gnn, out_transformer, index_nodes = self.forward(batch) # batch: [B, C] with C being the number of tasks to predict, e.i.
+        input_data_masked, mask = self.mask_nodes(batch, self._cfg.transformer.masked_nodes)
+        out_gnn, out_transformer, index_nodes = self.forward(input_data_masked) # batch: [B, C] with C being the number of tasks to predict, e.i.
         # Calculate loss function
         y_true = []
 

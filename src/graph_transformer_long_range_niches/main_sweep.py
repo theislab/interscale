@@ -1,6 +1,6 @@
 from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN
 from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset, split_adata
-from graph_transformer_long_range_niches.modules.gcn import LitGCN
+from src.graph_transformer_long_range_niches.model.gcn import LitGCN
 from graph_transformer_long_range_niches.tl.wandb import log_data
 from graph_transformer_long_range_niches.config import load_config
 

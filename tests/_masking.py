@@ -1,130 +1,66 @@
-import pytest
 import torch
-from torch_geometric.data import Data, Batch
+import pytest
 import numpy as np
+from torch_geometric.data import Data, Batch
+from graph_transformer_long_range_niches.tl import mask_nodes
 
-from graph_transformer_long_range_niches.model.gnn_transformer import LitGNNTransformer
-from omegaconf import OmegaConf
+from yacs.config import CfgNode as CN
+import pdb
 
-class TestTransformerMasking:
-    @pytest.fixture
-    def sample_config(self):
-        cfg = {
-            'dataset': {
-                'num_features': 10,
-                'num_classes': 5,
-                'batch_size': 2,
-                'prediction_task': 'node_classification'
-            },
-            'gnn': {
-                'embed_dim': 32,
-                'num_layers': 2
-            },
-            'transformer': {
-                'd_model': 32,
-                'max_seq_len': 5,
-                'num_layers': 2,
-                'nhead': 4
-            },
-            'optim': {
-                'lr': 0.001,
-                'wd': 0.01,
-                'loss': 'CrossEntropy',
-                'warm_up': 10
-            }
+from graph_transformer_long_range_niches.config import get_cfg_defaults
+
+@pytest.fixture
+def sample_config():
+    cfg = get_cfg_defaults()
+    custom_cfg = {
+        'dataset': {
+            'num_classes': 2,
+            'num_features': 10,
+            'prediction_task': 'graph_classification',
+            'batch_size': 2
         }
-        return OmegaConf.create(cfg)
+    }
+    cfg.merge_from_other_cfg(CN(custom_cfg))
+    return cfg
 
-    @pytest.fixture
-    def sample_batch(self):
-        # Create two small graphs
-        x1 = torch.randn(3, 10)  # 3 nodes, 10 features
-        x2 = torch.randn(2, 10)  # 2 nodes, 10 features
-        edge_index1 = torch.tensor([[0, 1, 1, 2], [1, 0, 2, 1]], dtype=torch.long)
-        edge_index2 = torch.tensor([[0, 1], [1, 0]], dtype=torch.long)
-        y1 = torch.eye(5)[torch.randint(0, 5, (3,))]  # One-hot encoded labels
-        y2 = torch.eye(5)[torch.randint(0, 5, (2,))]
+def create_sample_graph(cfg, num_nodes=5, is_graph_level=True):
+    # Create random node features
+    num_features = cfg.dataset.num_features
+    x = torch.randn(num_nodes, num_features)
+    
+    # Create sample edges (simple chain graph)
+    edge_index = torch.tensor([[i, i+1] for i in range(num_nodes-1)], dtype=torch.long).t()
+    
+    if is_graph_level:
+        # For graph-level tasks, use same label for all nodes
+        y = torch.tensor([1] * num_nodes)  # Binary classification example
+    else:
+        # For node-level tasks, different labels per node
+        y = torch.randint(0, 2, (num_nodes,))  # Binary classification example
+    
+    return Data(x=x, edge_index=edge_index, y=y)
 
-        data_list = [
-            Data(x=x1, edge_index=edge_index1, y=y1),
-            Data(x=x2, edge_index=edge_index2, y=y2)
-        ]
-        return Batch.from_data_list(data_list)
-
-    def test_mask_nodes(self, sample_config, sample_batch):
-        model = LitGNNTransformer(sample_config)
-        
-        # Test masking
-        x_masked, masked_indices, original_values = model.mask_nodes(sample_batch.x, sample_batch.batch)
-        
-        # Basic checks
-        assert x_masked.shape == sample_batch.x.shape
-        assert len(masked_indices) == 2  # One node per graph (mask_ratio=1)
-        assert len(original_values) == 2  # Original values for masked nodes
-        
-        # Check that masked values are different from original
-        for idx in masked_indices:
-            assert not torch.allclose(x_masked[idx], sample_batch.x[idx])
-            
-        # Check that mask token was used
-        for idx in masked_indices:
-            assert torch.allclose(x_masked[idx], model.mask_token.squeeze())
-
-    def test_forward_masking(self, sample_config, sample_batch):
-        model = LitGNNTransformer(sample_config)
-        
-        # Run forward pass
-        z, out, masked_indices, original_values = model.forward(sample_batch)
-        
-        # Check output dimensions
-        assert out.shape[0] == len(masked_indices)  # One prediction per masked node
-        assert out.shape[1] == sample_config.dataset.num_classes
-        
-        # Check that we're getting predictions for masked nodes
-        assert len(masked_indices) == 2  # One per graph
-        assert len(original_values) == 2
-
-    def test_different_mask_ratios(self, sample_config, sample_batch):
-        # Test with different mask ratios
-        mask_ratios = [1, 2]
-        
-        for ratio in mask_ratios:
-            sample_config.mask_ratio = ratio
-            model = LitGNNTransformer(sample_config)
-            
-            x_masked, masked_indices, original_values = model.mask_nodes(sample_batch.x, sample_batch.batch)
-            
-            # Count masks per graph
-            graph_0_masks = (sample_batch.batch[masked_indices] == 0).sum()
-            graph_1_masks = (sample_batch.batch[masked_indices] == 1).sum()
-            
-            print(masked_indices)
-            
-            # Check mask counts
-            assert graph_0_masks <= min(ratio, 3)  # Graph 0 has 3 nodes
-            assert graph_1_masks <= min(ratio, 2)  # Graph 1 has 2 nodes
-
-    def test_training_step(self, sample_config, sample_batch):
-        model = LitGNNTransformer(sample_config)
-        
-        # Run training step
-        loss = model.training_step(sample_batch, 0)
-        
-        # Check that loss is computed and has gradient
-        assert loss is not None
-        assert isinstance(loss.item(), float)
-        assert not torch.isnan(loss)
-        assert loss.requires_grad
-
-    def test_masking_consistency(self, sample_config, sample_batch):
-        model = LitGNNTransformer(sample_config)
-        
-        # Run multiple forward passes
-        results = [model.forward(sample_batch) for _ in range(5)]
-        
-        # Check that different nodes are being masked in different forward passes
-        masked_indices_list = [r[2] for r in results]
-        unique_masks = set(tuple(m.tolist()) for m in masked_indices_list)
-        
-        # It's highly unlikely to get the same masks 5 times in a row
-        assert len(unique_masks) > 1, "Masking should be random across forward passes"
+def test_mask_nodes(sample_config):
+    # Create sample data
+    cfg = sample_config
+    
+    # Create sample batch
+    batch = []
+    for _ in range(cfg.dataset.batch_size):
+        batch.append(create_sample_graph(cfg, num_nodes=np.random.randint(5, 10), is_graph_level=True))
+    batch = Batch.from_data_list(batch)
+    
+    nr_nodes_to_mask = np.random.randint(1, 5)
+    masked_batch, mask = mask_nodes(batch, nr_nodes_to_mask)
+    
+    pdb.set_trace()
+    
+    # Verify the output
+    assert torch.sum(mask) == nr_nodes_to_mask  # Check if correct number of nodes are masked
+    assert masked_batch.x.shape[0] == nr_nodes_to_mask  # Check if masked features have correct shape
+    assert masked_batch.x.shape[1] == batch.x.shape[1]  # Check if feature dimension is preserved
+    
+if __name__ == "__main__":
+    # This will run when you execute the file directly
+    cfg = sample_config()
+    test_mask_nodes(cfg)
