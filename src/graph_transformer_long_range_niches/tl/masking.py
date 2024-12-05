@@ -1,23 +1,24 @@
 import torch
 from torch_geometric.data import Batch
 
-MASK_VALUE = 1  
+MASK_VALUE = 0  
 
-def mask_nodes(batched_data: Batch, nr_nodes: int):
-    """Mask a specific number of nodes in the batch.
+def apply_mask(batched_data: Batch):
+    """Mask nodes from PyG object in .mask attribute.
 
     Args:
         batched_data (Batch): _description_
-        nr_nodes (int): _description_
 
     Returns:
         batched_data (Batch): 
             Batch only containing nodes that were not masked
-        mask (torch.Tensor): 
-            Mask indicating which nodes were masked (MASK_VALUE)
     """
-    mask = torch.zeros(batched_data.num_nodes)
-    node_idx = torch.randperm(batched_data.num_nodes)[:nr_nodes]
-    mask[node_idx] = MASK_VALUE 
-    batched_data.x = batched_data.x[mask==MASK_VALUE]
-    return batched_data, mask
+    if batched_data.mask is None:
+        print("No mask found in batched_data")
+        return batched_data
+    mask = batched_data.mask
+    mask_idx = torch.where(mask == 1)[0]
+    masked_values = batched_data.x.clone()
+    masked_values[mask] = MASK_VALUE
+    batched_data.x = masked_values
+    return batched_data, mask_idx

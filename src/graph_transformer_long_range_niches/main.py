@@ -1,7 +1,7 @@
-from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN
+from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN, LitGNNTransformerMasked
 from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset, split_adata
 from graph_transformer_long_range_niches.modules import LitGCN
-from graph_transformer_long_range_niches.tl.wandb import log_data
+from graph_transformer_long_range_niches.tl import MaskedNodeLightningDataset
 from graph_transformer_long_range_niches.config import load_config
 
 # PyTorch Lightning
@@ -61,18 +61,20 @@ def main(cfg_path):
     # Initialize Dataset for training
     if test_size > 0.0:
         test_ds = pyg_data_list[2]
-        dm = LightningDataset(train_dataset = train_ds,
+        dm = MaskedNodeLightningDataset(train_dataset = train_ds,
                               val_dataset = val_ds,
                               test_dataset = test_ds, 
                               batch_size=int(cfg.dataset.batch_size), 
+                              pct_mask_nodes=cfg.dataset.pct_mask_nodes,
                               shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}, test ds: {len(test_ds)}')
         datasets = [train_ds, val_ds, test_ds]
         names = ["training", "validation", "test"]
     else:
-        dm = LightningDataset(train_dataset = train_ds, 
+        dm = MaskedNodeLightningDataset(train_dataset = train_ds, 
                               val_dataset = val_ds, 
                               batch_size=int(cfg.dataset.batch_size), 
+                              pct_mask_nodes=cfg.dataset.pct_mask_nodes,
                               shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}')
         datasets = [train_ds, val_ds]
@@ -83,7 +85,7 @@ def main(cfg_path):
     try:
         if cfg.model.model_type == 'gnn-transformer':
             print('Load GNNTransfomer...')
-            model = LitGNNTransformer(cfg)
+            model = LitGNNTransformerMasked(cfg)
         elif cfg.model.model_type == 'gnn':
             print('Load GNN...')
             model = LitGCN(cfg, class_weigths)

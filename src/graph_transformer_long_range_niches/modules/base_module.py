@@ -90,6 +90,9 @@ class BaseModule(L.LightningModule):
             }
             self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
+    
+    def _common_step(self, batch):
+        raise NotImplementedError("Subclasses must implement the _common_step method.")
 
     def common_validation_step(self, batch, batch_idx):
         loss, metric_list = self._common_step(batch)
@@ -137,7 +140,7 @@ class BaseModule(L.LightningModule):
             self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
     
-    def _common_step_classification_metrics(self, y_pred, y_true):
+    def _common_step_classification_metrics(self, y_pred, y_true, mask_idx):
         """Calculate classification metrics
         
         Input:
@@ -145,25 +148,40 @@ class BaseModule(L.LightningModule):
                 Predicted values
             y_true: List[torch.Tensor] #ToDo: size???
                 True values
+            mask_idx: List[torch.Tensor]
+                Indices of masked nodes to calculate metrics on
         """
-        loss = self.loss(y_pred, y_true.argmax(dim=1))
-        acc = self.accurary(y_pred.argmax(dim=1), y_true.argmax(dim=1))
-        f1_score_micro = self.f1_score_micro(y_pred.argmax(dim=1), y_true.argmax(dim=1))
-        f1_score_macro = self.f1_score_macro(y_pred.argmax(dim=1), y_true.argmax(dim=1))
-        f1_score_per_class = self.f1_score_per_class(y_pred.argmax(dim=1), y_true.argmax(dim=1))
+        if mask_idx is None: # graph-level prediction
+            mask_idx = torch.arange(len(y_pred))
+        mask_idx = mask_idx.numpy()
+        print(f"mask_idx: {mask_idx}")
+        print(f"y_pred: {y_pred.shape}")
+        #loss = self.loss(y_pred[mask_idx, :], y_true[mask_idx])
+        loss = 1
+        acc = self.accurary(y_pred.argmax(dim=1)[mask_idx], y_true.argmax(dim=1)[mask_idx])
+        f1_score_micro = self.f1_score_micro(y_pred.argmax(dim=1)[mask_idx], y_true.argmax(dim=1)[mask_idx])
+        f1_score_macro = self.f1_score_macro(y_pred.argmax(dim=1)[mask_idx], y_true.argmax(dim=1)[mask_idx])
+        f1_score_per_class = self.f1_score_per_class(y_pred.argmax(dim=1)[mask_idx], y_true.argmax(dim=1)[mask_idx])
 
         return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
     
-    def _common_step_regression_metrics(self, y_pred, y_true):
+    def _common_step_regression_metrics(self, y_pred, y_true, mask_idx):
         """Calculate regression metrics
+        Input:
+            y_pred: List[torch.Tensor] #ToDo: size???
+                Predicted values
+            y_true: List[torch.Tensor] #ToDo: size???
+                True values
+            mask_idx: List[torch.Tensor]
+                Indices of masked nodes to calculate metrics on
         """
         # Estimate variance based on the true values (e.g., using batch variance)
         y_var = torch.var(y_true, dim=1, keepdim=True)  # You can adjust the estimation method
         # Ensure variance is non-zero and positive
         y_var = y_var.clamp(min=1e-6)
-        loss = self.loss(y_pred, y_true, y_var)
-        mse = self.mse(y_pred, y_true)
-        r2 = self.r2(y_pred, y_true)
-        pearson_corr = torch.mean(self.pearson_corr(y_pred, y_true))
+        loss = self.loss(y_pred[mask_idx], y_true[mask_idx], y_var)
+        mse = self.mse(y_pred[mask_idx], y_true[mask_idx])
+        r2 = self.r2(y_pred[mask_idx], y_true[mask_idx])
+        pearson_corr = torch.mean(self.pearson_corr(y_pred[mask_idx], y_true[mask_idx]))
         return loss, [mse, r2, pearson_corr]
 

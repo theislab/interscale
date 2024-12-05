@@ -5,12 +5,12 @@
 import pytorch_lightning as L
 import torch
 from torch import nn
-from graph_transformer_long_range_niches.tl import mask_nodes
+from graph_transformer_long_range_niches.tl import apply_mask
 
 from typing import List
 
 from graph_transformer_long_range_niches.modules import TransformerNodeEncoderHook, BaseModule, LitGCN
-from graph_transformer_long_range_niches.tl.utils import pad_batch
+from graph_transformer_long_range_niches.tl import pad_batch, apply_mask
 
 class LitGNNTransformerMasked(BaseModule):
     def __init__(self, cfg, class_weights: List = None, **model_kwargs):
@@ -46,8 +46,7 @@ class LitGNNTransformerMasked(BaseModule):
             batched_data: Pytorch geometric object 
                 batched_data.x = [N, F]
         """
-        batched_data_masked, mask = mask_nodes(batched_data, self._cfg.transformer.masked_nodes)
-        h_node, z = self.gnn(batched_data_masked.x, batched_data_masked.edge_index)
+        h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
         
         if self._cfg.gnn.embed_dim != self.output_dim:
             h_node = self.gnn2transformer(h_node)  # [s, d_model]
@@ -94,9 +93,11 @@ class LitGNNTransformerMasked(BaseModule):
     def _common_step(self, batch):
         """Shared step between train, val and test.
         """
-        input_data_masked, mask = self.mask_nodes(batch, self._cfg.transformer.masked_nodes)
+        # Mask nodes 
+        input_data_masked, mask_idx = apply_mask(batch)
+        # Run forward pass on masked data
         out_gnn, out_transformer, index_nodes = self.forward(input_data_masked) # batch: [B, C] with C being the number of tasks to predict, e.i.
-        # Calculate loss function
+        # Calculate loss function (only on masked nodes)
         y_true = []
 
         for i in range(batch.batch[-1] + 1):
@@ -113,10 +114,13 @@ class LitGNNTransformerMasked(BaseModule):
         y_true = torch.stack(y_true)
 
         if 'classification' in self.prediction_task:
-            return self.common_classification_step(out_transformer, y_true)
+            if 'node' in self.prediction_task:
+                return self._common_step_classification_metrics(out_transformer, y_true, mask_idx)
+            elif 'graph' in self.prediction_task:
+                return self._common_step_classification_metrics(out_transformer, y_true, None)
 
         if 'regression' in self.prediction_task:
-            return self.common_regression_step(out_transformer, y_true)
+            return self._common_step_regression_metrics(out_transformer, y_true, mask_idx)
 
     def extract_attention(self, x, src_padding_mask, average_attn_heads = True):
         """
