@@ -206,7 +206,9 @@ def normalized_attention(attention_matrix, clamp = 0.05):
 
 def normalized_class_attention(attention_matrix, clamp: int = 0.05):
     """
-    Returns the normalized attention for each class to class in the attention matrix
+    Given an attention matrix of size NxN with K classes it returns a normalized attention matrix KxK.
+    Each element in the normalized attention matrix can be interpreted as class k_i paying attention to class k_j, where i and j are elements of the K classes.
+
     Parameters
     ----------
         attention_matrix: PandasDataframe
@@ -327,7 +329,7 @@ def plot_attention_sender_receiver(
 
     for i, sender_type in enumerate(sender):
         for j, (current_sender, current_receiver) in enumerate([(sender_type, receiver), (receiver, sender_type)]):
-            ax = axes[i, j]
+            ax = axes[i][j] if num_senders > 1 else axes[j]
 
             # Extract the attention matrix from .obsm
             attention_matrix = adata.obsm[attn_matrix_key].copy()
@@ -391,80 +393,3 @@ def plot_attention_sender_receiver(
         fig.savefig(save_img, bbox_inches='tight')
 
     plt.show()
-
-
-    # def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, attention_obs=None, attention_class=None, library_key=None, split_key = 'split'):
-    # """
-    # Parameters
-    # ----------
-    #     adata: AnnData
-    #     obs_metadata: pandas.Dataframe
-    #         .obs metadata from object of interest
-    #     obs_col: str
-    #         Name of annotation column in .obs where the observation used as classes to 
-    #     class_name: str 
-    #         Name of class in .obs[obs_col] that we are interested in plotting the attention for
-    #     attention_class: str
-    #         If None, all classes in attention_obs are considered
-    #     library_key: Optional[str]
-    #     attention_obs: Optional: Dict()
-    #         Calculates the attention for the obs variables listed in the dictionary
-    # """
-    # assert (attention_obs is None and attention_class is None) or (attention_obs is not None and attention_class is not None), \
-    #     "Both attention_obs and attention_class must be either None or not None together."
-    # assert split_key in adata.obs
-    
-    # self_attention_relevance = SelfAttentionRelevance(model_transformer.transformer_encoder)
-    
-    # # subset relevant data
-    # sub_adata = adata[adata.obs[obs_col] == class_name]
-    
-    # # load PyG objects for evaluation
-    # pyg_datas, _ = prepare_geome_dataset(sub_adata, cfg, split_key=split_key) # datas = [datas_train, datas_test]
-    # datas = [pyg for datas in pyg_datas for pyg in datas]
-    # data_loader = DataLoader(datas)
-    
-    # sub_adata.obs['cls'] = -1
-    # attention_matrix_dict = {}
-    # transformer_in_dict = {}
-    # transformer_out_dict = {}
-    # if library_key:  
-    #     library_key_list = np.unique(sub_adata.obs[library_key])
-    # else: 
-    #     library_key_list = [None]
-    
-    # for batch, library_id in zip(data_loader, library_key_list):
-    #     print(batch, library_id)
-    #     transformer_in, transformer_out, src_padding_mask, index_nodes, dec_out = model_transformer.evaluation(batch)
-    #     print(index_nodes)
-    #     attention_index = np.arange(0, len(index_nodes))
-    #     if attention_obs is not None:
-    #         # Only consider the index class attention_class
-    #         assert attention_obs in adata.obs
-    #         if attention_class not in adata.obs[attention_obs]:
-    #             print(f'{attention_class} not in adata.obs[{attention_obs}] for {library_id}')
-    #             pass 
-    #         print(adata.obs[attention_obs][index_nodes[0]])
-    #         attention_index = adata.obs[attention_obs][index_nodes[0]]
-    #     I = self_attention_relevance.generate_relevance(transformer_in, src_padding_mask, category_index=attention_index)
-    #     cls = I[:1, 1:].cpu().detach().numpy() 
-    #     # Create a pandas DataFrame for the attention matrix with obs_names as row and column indices
-    #     if library_key:
-    #         sub_adata.obs['cls'][sub_adata.obs[library_key]==library_id][index_nodes[0]] = cls[0]
-    #         attention_matrix_df = pd.DataFrame(
-    #             I[1:, 1:].cpu().detach().numpy(),
-    #             index=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]],
-    #             columns=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]]
-    #         )
-    #     else:
-    #         sub_adata.obs['cls'][sub_adata.obs_names[index_nodes[0]]] = cls[0]
-    #         attention_matrix_df = pd.DataFrame(
-    #             I[1:, 1:].cpu().detach().numpy(),
-    #             index=sub_adata.obs_names[index_nodes[0]],
-    #             columns=sub_adata.obs_names[index_nodes[0]]
-    #         )
-    #     attention_matrix_dict[str(library_id)] = attention_matrix_df
-    #     transformer_in_dict[str(library_id)] = transformer_in
-    #     transformer_out_dict[str(library_id)] = transformer_out
-        
-    # return sub_adata, attention_matrix_dict, transformer_in_dict, transformer_out_dict
