@@ -116,7 +116,14 @@ def main(cfg_path):
         if 'classification' in cfg.dataset.prediction_task:
             checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
         if 'regression' in cfg.dataset.prediction_task:
-            checkpoint_callback = ModelCheckpoint(monitor="val_r2", mode="min", filename=run_name) 
+            if cfg.optim.loss == 'MSELoss':
+                checkpoint_callback = ModelCheckpoint(monitor="val_mse", mode="min", filename=run_name) 
+            elif cfg.optim.loss == 'GaussianNLL' or cfg.optim.loss == 'SmoothL1':
+                checkpoint_callback = ModelCheckpoint(monitor="val_r2", mode="max", filename=run_name) 
+            else:
+                raise Exception("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")
+        else:
+            raise Exception("Training must be classification or regression based.")
         print('Training...')
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(cfg.model.n_epochs), 
@@ -160,7 +167,7 @@ def main(cfg_path):
 
         if model_checkpoint_path:
             # Create an artifact
-            artifact = wandb.Artifact(name=f"{run_name}_model_{cfg.optim.seed}", type="model")
+            artifact = wandb.Artiftact(name=f"{run_name}_model_{cfg.optim.seed}", type="model")
             artifact.add_file(model_checkpoint_path, name=f"{run_name}.ckpt")
 
             # Log the artifact
