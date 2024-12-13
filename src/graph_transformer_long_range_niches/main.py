@@ -1,5 +1,5 @@
 from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN, LitGNNTransformerMasked
-from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset, split_adata
+from graph_transformer_long_range_niches.pp import prepare_geome_dataset, split_adata
 from graph_transformer_long_range_niches.modules import LitGCN
 from graph_transformer_long_range_niches.tl import MaskedNodeLightningDataset
 from graph_transformer_long_range_niches.config import load_config

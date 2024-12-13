@@ -150,18 +150,21 @@ class BaseModule(L.LightningModule):
                 True values
             mask_idx: List[torch.Tensor]
                 Indices of masked nodes to calculate metrics on
+        Output:
+            loss: torch.Tensor[int]
+            
         """
         if mask_idx is None: # graph-level prediction
             mask_idx = torch.arange(len(y_pred))
         mask_idx = mask_idx.numpy()
         print(f"mask_idx: {mask_idx}")
-        print(f"y_pred: {y_pred.shape}")
-        #loss = self.loss(y_pred[mask_idx, :], y_true[mask_idx])
-        loss = 1
-        acc = self.accurary(y_pred.argmax(dim=1)[mask_idx], y_true.argmax(dim=1)[mask_idx])
-        f1_score_micro = self.f1_score_micro(y_pred.argmax(dim=1)[mask_idx], y_true.argmax(dim=1)[mask_idx])
-        f1_score_macro = self.f1_score_macro(y_pred.argmax(dim=1)[mask_idx], y_true.argmax(dim=1)[mask_idx])
-        f1_score_per_class = self.f1_score_per_class(y_pred.argmax(dim=1)[mask_idx], y_true.argmax(dim=1)[mask_idx])
+        print(f"y_pred: {y_pred.shape}, {y_pred.argmax(dim=1)[mask_idx]}")
+        print(f"y_true: {y_true.shape}, {y_true[mask_idx]}")
+        loss = self.loss(y_pred[mask_idx, :], y_true[mask_idx])
+        acc = self.accurary(y_pred.argmax(dim=1)[mask_idx], y_true[mask_idx])
+        f1_score_micro = self.f1_score_micro(y_pred.argmax(dim=1)[mask_idx], y_true[mask_idx])
+        f1_score_macro = self.f1_score_macro(y_pred.argmax(dim=1)[mask_idx], y_true[mask_idx])
+        f1_score_per_class = self.f1_score_per_class(y_pred.argmax(dim=1)[mask_idx], y_true[mask_idx])
 
         return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
     

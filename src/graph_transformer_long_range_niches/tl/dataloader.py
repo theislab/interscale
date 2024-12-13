@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal, Any, Optional
+from typing import Any, Dict, Optional, Tuple, Type, Union
 
 from torch_geometric.data import Dataset
 from torch_geometric.data.lightning import LightningDataset
@@ -39,7 +39,11 @@ class MaskedNodeLightningDataset(LightningDataset):
         return MaskEveryNodeLoader(dataset, pct_mask_nodes=self.pct_mask_nodes, **kwargs)
 
 class MaskEveryNodeLoader(DataLoader):
-    def __init__(self, data, pct_mask_nodes=0.7, shuffle=False, **kwargs):
+    def __init__(self,
+                 data: Union[Dataset],
+                 pct_mask_nodes=0.7,
+                 shuffle=False,
+                 **kwargs):
         """
         A DataLoader that dynamically masks one node at a time.
         
@@ -50,15 +54,14 @@ class MaskEveryNodeLoader(DataLoader):
         """
         super().__init__(data, **kwargs)
         self.data = data
-        self.num_nodes = data.num_nodes
-        self.smallest_graph_num_nodes = self.smallest_data_batch_length(self.data)
-        self.indices = torch.arange(self.num_nodes)
+        # self.smallest_graph_num_nodes = self.smallest_data_batch_length(self.data)
+        # self.indices = torch.arange(self.num_nodes)
         self.pct_mask_nodes = pct_mask_nodes
-        if shuffle:
-            self.indices = self.indices[torch.randperm(self.num_nodes)]
+        # if shuffle:
+        #     self.indices = self.indices[torch.randperm(self.num_nodes)]
 
     def __len__(self):
-        return self.num_nodes
+        return None
     
     def smallest_data_batch_length(self, data_batch):
         batch_size = data_batch.batch.max().item() + 1  # Number of graphs
@@ -66,6 +69,7 @@ class MaskEveryNodeLoader(DataLoader):
         return min(lengths)
 
     def __iter__(self):
+        print(self)
         # To Do: Change equation: fails for very different number of cells in graph
         num_nodes = int(self.smallest_graph_num_nodes * self.pct_mask_nodes)
         index_list = []
