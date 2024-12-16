@@ -2,6 +2,7 @@ from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCAT
 from graph_transformer_long_range_niches.pp import prepare_geome_dataset, split_adata
 from graph_transformer_long_range_niches.modules import LitGCN
 from graph_transformer_long_range_niches.tl import MaskedNodeLightningDataset
+from graph_transformer_long_range_niches.tl.geome_dataloader import GraphAnnDataModule
 from graph_transformer_long_range_niches.config import load_config
 
 # PyTorch Lightning
@@ -61,21 +62,31 @@ def main(cfg_path):
     # Initialize Dataset for training
     if test_size > 0.0:
         test_ds = pyg_data_list[2]
-        dm = MaskedNodeLightningDataset(train_dataset = train_ds,
-                              val_dataset = val_ds,
-                              test_dataset = test_ds, 
-                              batch_size=int(cfg.dataset.batch_size), 
-                              pct_mask_nodes=cfg.dataset.pct_mask_nodes,
-                              shuffle=True)
+        dm = GraphAnnDataModule(datas=pyg_data_list, 
+                           num_workers=1, 
+                           batch_size=int(cfg.dataset.batch_size), 
+                           pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+                           learning_type="node")
+        # dm = MaskedNodeLightningDataset(train_dataset = train_ds,
+        #                       val_dataset = val_ds,
+        #                       test_dataset = test_ds, 
+        #                       batch_size=int(cfg.dataset.batch_size), 
+        #                       pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+        #                       shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}, test ds: {len(test_ds)}')
         datasets = [train_ds, val_ds, test_ds]
         names = ["training", "validation", "test"]
     else:
-        dm = MaskedNodeLightningDataset(train_dataset = train_ds, 
-                              val_dataset = val_ds, 
-                              batch_size=int(cfg.dataset.batch_size), 
-                              pct_mask_nodes=cfg.dataset.pct_mask_nodes,
-                              shuffle=True)
+        dm = GraphAnnDataModule(datas=pyg_data_list, 
+                           num_workers=1, 
+                           batch_size=int(cfg.dataset.batch_size), 
+                           pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+                           learning_type="node")
+        # dm = MaskedNodeLightningDataset(train_dataset = train_ds, 
+        #                       val_dataset = val_ds, 
+        #                       batch_size=int(cfg.dataset.batch_size), 
+        #                       pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+        #                       shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}')
         datasets = [train_ds, val_ds]
         names = ["training", "validation"]

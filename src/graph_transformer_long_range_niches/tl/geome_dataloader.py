@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import Literal, List
 
 import pytorch_lightning as pl
 from torch_geometric.data import Batch, Data
-from torch_geometric.loader import DataListLoader, NeighborLoader
+from torch_geometric.loader import DataLoader, DataListLoader
 from torch_geometric.transforms import RandomNodeSplit
 
 VALID_STAGE = {"fit", "test", None}
@@ -24,6 +24,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
         datas: Sequence[Sequence[Data]] | None = None,
         batch_size: int = 1,
         num_workers: int = 1,
+        pct_mask_nodes: float = 0.5,
         learning_type: Literal["node", "graph"] = "node",
     ):
         """Manages loading and sampling schemes before loading to GPU.
@@ -59,6 +60,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
         if learning_type not in VALID_SPLIT:
             raise ValueError("Learning type must be one of %r." % VALID_SPLIT)
         self.learning_type = learning_type
+        self.pct_mask_nodes = pct_mask_nodes
         self.first_time = True
 
     def _nodewise_setup(self, stage: str | None) -> None:
@@ -72,19 +74,10 @@ class GraphAnnDataModule(pl.LightningDataModule):
         -------
             None
         """
-        if self.first_time:
-            # Batch: Merged datas objects and adds .batch index 
-            # datas = [Data(), Data(), .., Data()] -> Data(batch = [N])
-            self.train_data = Batch.from_data_list(self.train_data)
-            self.val_data = Batch.from_data_list(self.val_data)
-            if self.test_data:
-                self.test_data = Batch.from_data_list(self.test_data)
-
-            self.first_time = False
 
         if stage == "fit" or stage is None:
-            self._train_dataloader = self._spatial_node_loader(data=self.train_data, shuffle=True)
-            self._val_dataloader = self._spatial_node_loader(data=self.val_data, shuffle=True)
+            self._train_dataloader = self._spatial_node_loader(data_list=self.train_data, shuffle=True)
+            self._val_dataloader = self._spatial_node_loader(data_list=self.val_data, shuffle=True)
         if stage == "test" or stage is None:
             self._test_dataloader = self._spatial_node_loader(data=self.test_data, shuffle=True)
 
@@ -99,17 +92,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
         -------
             None
         """
-        num_val = int(len(self.data) * 0.05 + 1)
-        num_test = int(len(self.data) * 0.01 + 1)
-
-        if stage == "fit" or stage is None:
-            self._train_dataloader = self._graph_loader(
-                data=self.data[num_val + num_test :],
-                shuffle=True,
-            )
-            self._val_dataloader = self._graph_loader(data=self.data[:num_val])
-        if stage == "test" or stage is None:
-            self._test_dataloader = self._graph_loader(data=self.data[num_val : num_val + num_test])
+        # ToTo: return unmasked object
 
     def setup(self, stage: str | None = None):
         """Setup function to be called at the beginning of training, validation or testing.
@@ -125,13 +108,13 @@ class GraphAnnDataModule(pl.LightningDataModule):
         if stage not in VALID_STAGE:
             raise ValueError("Stage must be one of %r." % VALID_STAGE)
 
-        if self.learning_type == "graph":
-            if len(self.data) <= 3:
-                raise RuntimeError("Not enough graphs in data to do graph-wise learning")
-            self._graphwise_setup(stage)
+        # if self.learning_type == "graph":
+        #     if len(self.data) <= 3:
+        #         raise RuntimeError("Not enough graphs in data to do graph-wise learning")
+        #     self._graphwise_setup(stage)
 
-        else:
-            self._nodewise_setup(stage)
+        # else:
+        self._nodewise_setup(stage)
         self.setup_called = True
 
     def train_dataloader(self):
@@ -168,16 +151,22 @@ class GraphAnnDataModule(pl.LightningDataModule):
             dataset=data, shuffle=shuffle, batch_size=self.batch_size, num_workers=self.num_workers, **kwargs
         )
     
-    def smallest_data_batch_length(self, data_batch):
-        batch_size = data_batch.batch.max().item() + 1  # Number of graphs
-        lengths = [(data_batch.batch == i).sum().item() for i in range(batch_size)]
+    # def smallest_data_batch_length(self, data_batch):
+    #     """Returns the number of nodes in the smallest graph from the Batch."""
+    #     batch_size = data_batch.batch.max().item() + 1  # Number of graphs
+    #     lengths = [(data_batch.batch == i).sum().item() for i in range(batch_size)]
+    #     return min(lengths)
+
+    def smallest_data_batch_length(self, data_list: List[Data]):
+        """Returns the number of nodes in the smallest graph from the list of BaseData."""
+        lengths = [data.num_nodes for data in data_list]
         return min(lengths)
 
     def _spatial_node_loader(self, 
-                             data: Batch, 
+                             data_list: List[Data], 
                              shuffle: bool = False, 
-                             **kwargs) -> DataListLoader:
-        """Loads the data in the form of nodes.
+                             **kwargs) -> DataLoader:
+        """Adds a one-node mask to each Data object. TODO: load each graph multiple times with a different mask.
 
         Args:
         ----
@@ -189,21 +178,28 @@ class GraphAnnDataModule(pl.LightningDataModule):
         -------
             NeighborLoader: the node dataloader
         """
-        print(self.smallest_data_batch_length(data))
-        num_nodes = int(self.smallest_data_batch_length(data) * self.pct_mask_nodes)
+        smallest_length = self.smallest_data_batch_length(data_list)
+        num_nodes = int(smallest_length * self.pct_mask_nodes)
+        # num_nodes = int(self.smallest_data_batch_length(data) * self.pct_mask_nodes)
         index_list = []
-        for batch_idx in np.unique(data.batch):
-            mask = data.batch.eq(batch_idx)
-            indices = np.where(mask)[0]
-            start = indices[0] if len(indices) > 0 else None
-            end = indices[-1] if len(indices) > 0 else None
-            assert (end - start) > num_nodes # don't sample more nodes than available in a batch
-            index_list.append(random.sample(range(start, end), num_nodes))
-        for idx in range(num_nodes):
-            masked_data = data.clone()
-            masked_data.mask = torch.zeros(self.num_nodes, dtype=torch.bool)
-            mask_index = [sublist[idx] for sublist in index_list]
-            masked_data.mask[mask_index] = True
-            return DataListLoader(
-                dataset=masked_data, shuffle=shuffle, batch_size=self.batch_size, num_workers=self.num_workers, **kwargs
-            )
+        for data in data_list:
+            if data.num_nodes < num_nodes:
+                raise ValueError("Cannot sample more nodes than available in any graph.")
+
+            # Randomly select nodes to mask
+            mask_indices = random.sample(range(data.num_nodes), 1)
+            data.mask = torch.zeros(data.num_nodes, dtype=torch.bool)
+            data.mask[mask_indices] = True
+
+        # def collate_fn(batch: List['BaseData']):
+        #     """Custom collate function to combine BaseData objects into a batch."""
+        #     return batch  # Keeping it as a simple list for now
+
+        return DataLoader(
+            dataset=data_list,
+            shuffle=shuffle,
+            batch_size=self.batch_size,
+            num_workers=self.num_workers,
+            #collate_fn=collate_fn,
+            **kwargs,
+        )    
