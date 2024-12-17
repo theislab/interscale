@@ -8,7 +8,7 @@ from torch_geometric.data import Batch, Data
 from torch_geometric.loader import DataLoader, DataListLoader
 from torch_geometric.transforms import RandomNodeSplit
 
-VALID_STAGE = {"fit", "test", None}
+VALID_STAGE = {"fit", "test", "validate", None}
 VALID_SPLIT = {"node", "graph"}
 
 # TODO: Fix dataloader
@@ -78,7 +78,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
         if stage == "fit" or stage is None:
             self._train_dataloader = self._spatial_node_loader(data_list=self.train_data, shuffle=True)
             self._val_dataloader = self._spatial_node_loader(data_list=self.val_data, shuffle=True)
-        if stage == "test" or stage is None:
+        if stage == "test" or stage == "validate" or stage is None:
             self._test_dataloader = self._spatial_node_loader(data=self.test_data, shuffle=True)
 
     def _graphwise_setup(self, stage: str | None) -> None:
@@ -151,11 +151,6 @@ class GraphAnnDataModule(pl.LightningDataModule):
             dataset=data, shuffle=shuffle, batch_size=self.batch_size, num_workers=self.num_workers, **kwargs
         )
     
-    # def smallest_data_batch_length(self, data_batch):
-    #     """Returns the number of nodes in the smallest graph from the Batch."""
-    #     batch_size = data_batch.batch.max().item() + 1  # Number of graphs
-    #     lengths = [(data_batch.batch == i).sum().item() for i in range(batch_size)]
-    #     return min(lengths)
 
     def smallest_data_batch_length(self, data_list: List[Data]):
         """Returns the number of nodes in the smallest graph from the list of BaseData."""
@@ -180,7 +175,6 @@ class GraphAnnDataModule(pl.LightningDataModule):
         """
         smallest_length = self.smallest_data_batch_length(data_list)
         num_nodes = int(smallest_length * self.pct_mask_nodes)
-        # num_nodes = int(self.smallest_data_batch_length(data) * self.pct_mask_nodes)
         index_list = []
         for data in data_list:
             if data.num_nodes < num_nodes:
@@ -191,10 +185,6 @@ class GraphAnnDataModule(pl.LightningDataModule):
             data.mask = torch.zeros(data.num_nodes, dtype=torch.bool)
             data.mask[mask_indices] = True
 
-        # def collate_fn(batch: List['BaseData']):
-        #     """Custom collate function to combine BaseData objects into a batch."""
-        #     return batch  # Keeping it as a simple list for now
-
         return DataLoader(
             dataset=data_list,
             shuffle=shuffle,
@@ -202,4 +192,4 @@ class GraphAnnDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             #collate_fn=collate_fn,
             **kwargs,
-        )    
+        )
