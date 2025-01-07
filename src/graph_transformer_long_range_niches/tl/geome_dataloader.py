@@ -176,14 +176,27 @@ class GraphAnnDataModule(pl.LightningDataModule):
         smallest_length = self.smallest_data_batch_length(data_list)
         num_nodes = int(smallest_length * self.pct_mask_nodes)
         index_list = []
+        print('num nodes, dataloader geome:', num_nodes)
+        print('datalist initial: ', len(data_list))
+        num_nodes = 2
         for data in data_list:
             if data.num_nodes < num_nodes:
                 raise ValueError("Cannot sample more nodes than available in any graph.")
 
             # Randomly select nodes to mask
-            mask_indices = random.sample(range(data.num_nodes), 1)
-            data.mask = torch.zeros(data.num_nodes, dtype=torch.bool)
-            data.mask[mask_indices] = True
+            index_list.append(random.sample(range(data.num_nodes), num_nodes))
+        dl_list = []
+        for i in range(num_nodes):
+            masked_data = data.clone()
+            for idx, data in enumerate(data_list):
+                masked_data.mask = torch.zeros(masked_data.num_nodes, dtype=torch.bool)
+                assert len(index_list[idx]) <= i
+                mask_index = index_list[idx][i]
+                masked_data.mask[mask_index] = True
+                masked_data.mask[mask_index] = True
+            dl_list.extend(masked_data)
+
+        print('datalist end: ', len(dl_list))
 
         return DataLoader(
             dataset=data_list,
