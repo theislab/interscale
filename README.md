@@ -75,8 +75,12 @@ The necessary configuration to define in the `.yaml` file are:
 | Config                 | Description                                                               |
 |------------------------|---------------------------------------------------------------------------|
 | `dataset.h5ad_data`    | Path to `.h5ad` data.                                                       |
-
+| `dataset.prediction_task` | Task to perform. Options: `node_regression`, `node_classification`. |
+| `dataset.prediction_obs` | Observation to predict. |
+| `dataset.library_key` | Key to use for the library. |
+| `dataset.spatial_neigbors_kwargs` | Keyword arguments for the spatial neighbors calculation. `radius` should be set such that number of average neighbors is 30. |
 TODO: Complete!
+
 
 ## Release notes
 

@@ -5,6 +5,9 @@ import pytorch_lightning as pl
 import numpy as np
 import torchmetrics
 
+import scanpy as sc
+import anndata as ad
+import squidpy as sq
 
 # PCA
 from sklearn.decomposition import PCA
@@ -13,9 +16,59 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 from sklearn.metrics import mean_absolute_error, r2_score
 
-class BaselinePCA():
+from graph_transformer_long_range_niches.config import load_config
 
-    def __init__(self):
+class Baseline():
+    def __init__(self, cfg_path): 
+        
+        cfg = load_config(cfg_path)
+           
+        self._cfg = cfg
+        super().__init__(cfg)
+
+        
+        # Load data
+        self.adata = sc.read_h5ad(cfg.dataset.h5ad_data)
+        
+        category_to_iterate_list = cfg.dataset.library_key
+        spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
+
+        # 1. Calculate spatial neighborhood graph using squidpy
+        sq.gr.spatial_neighbors(
+            self.adata,
+            n_neighbors=cfg.get('baseline/n_neighbors', 15),
+            coord_type="generic",
+            delaunay=False,
+            n_rings=None
+        )
+        
+        # Aggregate expression in spatial neighborhoods
+        # Get connectivities matrix
+        conn = self.adata.obsp['connectivities']
+        
+        # Add self-connections
+        conn = conn + sc.sparse.csr_matrix(np.eye(conn.shape[0]))
+        
+        # Normalize connections
+        conn = conn.multiply(1/conn.sum(axis=1))
+        
+        # Aggregate expression
+        self.adata.layers['aggregated'] = conn @ self.adata.X
+        
+        # Run Leiden clustering on aggregated expression
+        sc.tl.leiden(
+            self.adata,
+            resolution=cfg.get('baseline/leiden_resolution', 1.0),
+            use_weights=True,
+            key_added='leiden_clusters'
+        )
+        
+        self.clusters = self.adata.obs['leiden_clusters']
+        
+
+class BaselinePCA(Baseline):
+
+    def __init__(self, cfg):
         
         self.pipeline = Pipeline([
             ('scaler', StandardScaler()),  # Scale the data

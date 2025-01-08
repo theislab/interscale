@@ -9,7 +9,7 @@ from torch import nn
 
 from graph_transformer_long_range_niches.modules.transformer_encoder import TransformerNodeEncoder
 from graph_transformer_long_range_niches.modules.transformer_encoder_hook import TransformerNodeEncoderHook
-from graph_transformer_long_range_niches.tl import pad_batch, CosineWarmupScheduler
+from graph_transformer_long_range_niches.tl.utils import pad_batch
 from sklearn.decomposition import PCA
 
 from typing import List

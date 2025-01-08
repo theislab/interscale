@@ -5,7 +5,7 @@ from torch.nn.modules import TransformerEncoderLayer
 from typing import Union, Callable
 from torch import Tensor
 from torch.nn import functional as F
-from graph_transformer_long_range_niches.tl import MultiHeadAttentionWithEdits
+from graph_transformer_long_range_niches.tl.pytorch_utils import MultiHeadAttentionWithEdits
 
 class CustomTransformerEncoderLayer(TransformerEncoderLayer):
     """Overwrite TransformerEncoderLayer from PyTorch to implement attention map and gradient hook in the self-attention block."""
