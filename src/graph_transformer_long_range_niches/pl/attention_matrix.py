@@ -101,12 +101,8 @@ class SelfAttentionRelevance:
             attn_out_weights = encoder.get_attn_output_weights()
             attn_grad = encoder.get_attn_gradients()
 
-            print(f"Layer {idx + 1} attention gradient shape: {attn_grad.shape}")
-            print(f"Layer {idx + 1} attention output weights shape: {attn_out_weights.shape}")
-
             attn_map = self.avg_heads(attn_out_weights, attn_grad)
-            print(f"Average attention map shape: {attn_map.shape}")
-            print("I: ", I)
+
             #I += self.apply_self_attention_rules(I.cuda(), attn_map.cuda())
             I += self.apply_self_attention_rules(I, attn_map)
         
