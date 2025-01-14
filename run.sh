@@ -39,5 +39,4 @@ source activate GT_long_range_env
 #srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_fcnn_niche_lung5.yaml
 
 ## VISIUM BREAST CANCER
-python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/VisiumBreastCancer/visium_gnntrans_genes.yaml
-#python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/VisiumBreastCancer/visium_gnn_genes.yaml
+srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/VisiumBreastCancer/visium_gnntrans_genes.yaml #python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/VisiumBreastCancer/visium_gnn_genes.yaml

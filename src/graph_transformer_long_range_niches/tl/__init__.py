@@ -1,4 +1,4 @@
-from .evaluation import load_model
+from .evaluation import load_model, umap_embeddings
 from .scheduler import CosineWarmupScheduler
 from .utils import pad_batch, str_to_int_or_none
 from .wandb import log_data
@@ -14,5 +14,6 @@ __all__ = [
     "mask_nodes",
     "GraphAnnDataModule",
     "MultiHeadAttentionWithEdits",
-    "load_model"
+    "load_model", 
+    "umap_embeddings"
 ]

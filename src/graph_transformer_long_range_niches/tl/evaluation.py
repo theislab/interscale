@@ -8,6 +8,14 @@ from graph_transformer_long_range_niches._paths import RESULTS
 from pathlib import Path
 import pandas as pd
 
+from anndata import AnnData
+
+import scanpy as sc
+import numpy as np
+
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+import umap
+
 FOLDER = "legnini23"
 
 def eval_gnntransformer(model, batched_data):
@@ -45,6 +53,55 @@ def extract_attention(model, x, src_padding_mask):
         # attention_maps = torch.mean(attention_maps, dim=0)
         
     return attn_maps, attn_weights_maps
+
+def umap_embeddings(embedding_gnn, 
+                    embedding_trans, 
+                    leiden_res: float = 0.1):
+    """
+
+    
+    Input:
+    ------
+        embedding_gnn: numpy.array [N, E_gnn]
+        embedding_trans: numpy.array [N, E_trans]
+
+    Return:
+    -------
+        leiden_gnn: numpy.array [N]
+            Leiden cluster assignments for each cell based on GNN output
+        leiden_trans: numpy.array [N]
+            Leiden cluster assignments for each cell based on Transformer output
+    """
+    scaler = StandardScaler()
+    H_GNN_normalized = scaler.fit_transform(embedding_gnn)
+    H_T_normalized = scaler.fit_transform(embedding_trans)
+    
+    # Apply UMAP
+    umap_model = umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=2, random_state=42)
+    H_GNN_umap = umap_model.fit_transform(H_GNN_normalized)
+    H_T_umap = umap_model.fit_transform(H_T_normalized)
+
+    adata_gnn = AnnData(X=H_GNN_umap)
+    
+    # Build a KNN graph and perform Leiden clustering
+    sc.pp.neighbors(adata_gnn, n_neighbors=40, use_rep='X')
+    sc.tl.leiden(adata_gnn, resolution=leiden_res)
+
+    leiden_gnn = np.array(adata_gnn.obs['leiden'])
+    
+    adata_trans = AnnData(X=H_T_umap)
+    
+    # Build a KNN graph and perform Leiden clustering
+    sc.pp.neighbors(adata_trans, n_neighbors=40, use_rep='X')
+    sc.tl.leiden(adata_trans, resolution=leiden_res)
+    
+    # Extract Leiden clusters
+    leiden_trans = np.array(adata_trans.obs['leiden'])
+    print(f"Nr. of clusters: local = {len(np.unique(leiden_gnn))}, global = {len(np.unique(leiden_trans))}")
+
+    del adata_gnn, adata_trans
+    
+    return leiden_gnn, leiden_trans
 
 def load_model(PATH, model_type = "gnn-transformer", RESULTS = RESULTS, FOLDER = FOLDER):
     model_transformer_ckpt = torch.load(Path(RESULTS, FOLDER, f"{PATH}_{model_type}.ckpt"))

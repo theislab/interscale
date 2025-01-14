@@ -101,9 +101,11 @@ def main(cfg_path):
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     if 'classification' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
-    if 'regression' in cfg.dataset.prediction_task:
+    elif 'regression' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="min")
-
+    else:
+        raise Exception("Training must be classification or regression based.")
+    
     data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key[-1]}_{len(cfg.dataset.library_key)}_{cfg.optim.seed}"
     run_name = f"{data_name}_{cfg.model.model_type}"
 
@@ -115,7 +117,7 @@ def main(cfg_path):
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
         if 'classification' in cfg.dataset.prediction_task:
             checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
-        if 'regression' in cfg.dataset.prediction_task:
+        elif 'regression' in cfg.dataset.prediction_task:
             if cfg.optim.loss == 'MSELoss':
                 checkpoint_callback = ModelCheckpoint(monitor="val_mse", mode="min", filename=run_name) 
             elif cfg.optim.loss == 'GaussianNLL' or cfg.optim.loss == 'SmoothL1':
@@ -124,6 +126,7 @@ def main(cfg_path):
                 raise Exception("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")
         else:
             raise Exception("Training must be classification or regression based.")
+        
         print('Training...')
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(cfg.model.n_epochs), 
