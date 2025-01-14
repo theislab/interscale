@@ -5,6 +5,7 @@
 *.png
 *.yaml
 *.log
+*.txt
 
 # ignore ALL files in ANY directory named 
 figures/
@@ -15,3 +16,4 @@ artifacts/
 results/
 src/confi_files/
 InterScale_hyperparameter_sweep/
+__pycache__
