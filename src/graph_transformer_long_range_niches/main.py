@@ -127,7 +127,7 @@ def main(cfg_path):
         else:
             raise Exception("Training must be classification or regression based.")
         
-        print('Training...')
+        print('Training Wandb...')
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(cfg.model.n_epochs), 
                          logger=wandb_logger, 
