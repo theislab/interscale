@@ -19,8 +19,8 @@ def create_toy_graph(num_nodes=10, num_features=5):
 
 def test_graph_ann_data_module():
     # Create toy datasets
-    train_graphs = [create_toy_graph(10, 5) for _ in range(3)]
-    val_graphs = [create_toy_graph(10, 5) for _ in range(2)]
+    train_graphs = [create_toy_graph(15, 5) for _ in range(3)]
+    val_graphs = [create_toy_graph(8, 5) for _ in range(2)]
     test_graphs = [create_toy_graph(10, 5) for _ in range(2)]
     
     # Initialize the data module
@@ -42,6 +42,7 @@ def test_graph_ann_data_module():
     
     # Basic checks
     for batch in train_loader:
+        print(batch)
         assert isinstance(batch, Data)
         assert hasattr(batch, 'mask')
         assert batch.mask.dtype == torch.bool
