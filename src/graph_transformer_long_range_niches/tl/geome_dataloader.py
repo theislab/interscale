@@ -5,6 +5,7 @@ from typing import Literal, List
 
 import pytorch_lightning as pl
 from torch_geometric.data import Batch, Data
+from torch_geometric.data.data import BaseData
 from torch_geometric.loader import DataLoader, DataListLoader
 from torch_geometric.transforms import RandomNodeSplit
 
@@ -78,7 +79,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
         if stage == "fit" or stage is None:
             self._train_dataloader = self._spatial_node_loader(data_list=self.train_data, shuffle=True)
             self._val_dataloader = self._spatial_node_loader(data_list=self.val_data, shuffle=True)
-        if stage == "test" or stage == "validate" or stage is None:
+        if stage == "test" or stage is None:
             self._test_dataloader = self._spatial_node_loader(data=self.test_data, shuffle=True)
 
     def _graphwise_setup(self, stage: str | None) -> None:
@@ -151,16 +152,21 @@ class GraphAnnDataModule(pl.LightningDataModule):
             dataset=data, shuffle=shuffle, batch_size=self.batch_size, num_workers=self.num_workers, **kwargs
         )
     
+    # def smallest_data_batch_length(self, data_batch):
+    #     """Returns the number of nodes in the smallest graph from the Batch."""
+    #     batch_size = data_batch.batch.max().item() + 1  # Number of graphs
+    #     lengths = [(data_batch.batch == i).sum().item() for i in range(batch_size)]
+    #     return min(lengths)
 
-    def smallest_data_batch_length(self, data_list: List[Data]):
+    def smallest_data_batch_length(self, data_list: List['BaseData']):
         """Returns the number of nodes in the smallest graph from the list of BaseData."""
         lengths = [data.num_nodes for data in data_list]
         return min(lengths)
 
     def _spatial_node_loader(self, 
-                             data_list: List[Data], 
+                             data_list: List[BaseData], 
                              shuffle: bool = False, 
-                             **kwargs) -> DataLoader:
+                             **kwargs) -> DataListLoader:
         """Adds a one-node mask to each Data object. TODO: load each graph multiple times with a different mask.
 
         Args:
@@ -173,26 +179,24 @@ class GraphAnnDataModule(pl.LightningDataModule):
         -------
             NeighborLoader: the node dataloader
         """
+        print(data_list[:5])
         smallest_length = self.smallest_data_batch_length(data_list)
+        print(smallest_length)
         num_nodes = int(smallest_length * self.pct_mask_nodes)
-        index_list = []
-        print('num nodes, dataloader geome:', num_nodes)
-        print('datalist start: ', len(data_list))
+        # num_nodes = int(self.smallest_data_batch_length(data) * self.pct_mask_nodes)
+
         for data in data_list:
             if data.num_nodes < num_nodes:
                 raise ValueError("Cannot sample more nodes than available in any graph.")
-            # Randomly select nodes to mask
-            index_list.append(random.sample(range(data.num_nodes), num_nodes))
-        dl_list = []
-        for i in range(num_nodes):
-            for idx, data in enumerate(data_list):
-                masked_data = data.clone()
-                masked_data.mask = torch.zeros(masked_data.num_nodes, dtype=torch.bool)
-                mask_index = index_list[idx][i]
-                masked_data.mask[mask_index] = True
-            dl_list.extend(masked_data)
 
-        print('datalist end: ', len(dl_list))
+            # Randomly select nodes to mask
+            mask_indices = random.sample(range(data.num_nodes), 1)
+            data.mask = torch.zeros(data.num_nodes, dtype=torch.bool)
+            data.mask[mask_indices] = True
+
+        # def collate_fn(batch: List['BaseData']):
+        #     """Custom collate function to combine BaseData objects into a batch."""
+        #     return batch  # Keeping it as a simple list for now
 
         return DataLoader(
             dataset=data_list,
@@ -201,4 +205,4 @@ class GraphAnnDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             #collate_fn=collate_fn,
             **kwargs,
-        )
+        )    
