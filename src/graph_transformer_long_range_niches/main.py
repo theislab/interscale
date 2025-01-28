@@ -102,7 +102,7 @@ def main(cfg_path):
     if 'classification' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
     elif 'regression' in cfg.dataset.prediction_task:
-        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="min")
+        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
     else:
         raise Exception("Training must be classification or regression based.")
     
