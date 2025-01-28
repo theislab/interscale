@@ -178,11 +178,9 @@ class GraphAnnDataModule(pl.LightningDataModule):
         index_list = []
         print('num nodes, dataloader geome:', num_nodes)
         print('datalist initial: ', len(data_list))
-        num_nodes = 2
         for data in data_list:
             if data.num_nodes < num_nodes:
                 raise ValueError("Cannot sample more nodes than available in any graph.")
-
             # Randomly select nodes to mask
             index_list.append(random.sample(range(data.num_nodes), num_nodes))
         dl_list = []
@@ -192,7 +190,6 @@ class GraphAnnDataModule(pl.LightningDataModule):
                 masked_data.mask = torch.zeros(masked_data.num_nodes, dtype=torch.bool)
                 assert len(index_list[idx]) <= i
                 mask_index = index_list[idx][i]
-                masked_data.mask[mask_index] = True
                 masked_data.mask[mask_index] = True
             dl_list.extend(masked_data)
 

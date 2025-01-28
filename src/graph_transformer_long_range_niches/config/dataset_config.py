@@ -36,6 +36,6 @@ def get_dataset_cfg(cfg):
     cfg.dataset.k_folds = 0
     cfg.dataset.stratify_group = None
     
-    cfg.dataset.pct_mask_nodes = 0.5
+    cfg.dataset.pct_mask_nodes = 0.2
 
     return cfg

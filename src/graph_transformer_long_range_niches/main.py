@@ -53,7 +53,7 @@ def main(cfg_path):
 
     # Create PyG data
     print('Load PyG data...')
-    pyg_data_list, adata_list = prepare_geome_dataset(adata, cfg)
+    pyg_data_list, _ = prepare_geome_dataset(adata, cfg)
     train_ds, val_ds = pyg_data_list[0], pyg_data_list[1]
     # set number of classes and number of features
     cfg.dataset.merge_from_list(['num_features', len(train_ds[0].x[1])])
