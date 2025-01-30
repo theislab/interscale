@@ -32,7 +32,7 @@ source activate GT_long_range_env
 #python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/CosmX_Pancreas/pancreas_gnntrans_genes_sw_2.yaml
 
 ## LEGNINI
-python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/Legnini_23/legnini23_InterScale_genes_sample.yaml
+python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/Legnini_23/legnini23_InterScale_genes_sample_gnn.yaml
 
 
 ## BASELINE

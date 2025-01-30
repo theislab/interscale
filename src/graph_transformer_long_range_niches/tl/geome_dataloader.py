@@ -46,6 +46,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
             ValueError: If `learning_type` is not one of {"node", "graph"}.
         """
         # TODO: Fill the docstring
+        print('Masked dataloader')
 
         super().__init__()
         self.setup_called = False
@@ -80,7 +81,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
             self._train_dataloader = self._spatial_node_loader(data_list=self.train_data, shuffle=True)
             self._val_dataloader = self._spatial_node_loader(data_list=self.val_data, shuffle=True)
         if stage == "test" or stage is None:
-            self._test_dataloader = self._spatial_node_loader(data=self.test_data, shuffle=True)
+            self._test_dataloader = self._spatial_node_loader(data_list=self.test_data, shuffle=True)
 
     def _graphwise_setup(self, stage: str | None) -> None:
         """Sets up the data loaders for graph-wise learning.
@@ -179,9 +180,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
         -------
             NeighborLoader: the node dataloader
         """
-        print(data_list[:5])
         smallest_length = self.smallest_data_batch_length(data_list)
-        print(smallest_length)
         num_nodes = int(smallest_length * self.pct_mask_nodes)
         # num_nodes = int(self.smallest_data_batch_length(data) * self.pct_mask_nodes)
 
@@ -189,7 +188,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
             if data.num_nodes < num_nodes:
                 raise ValueError("Cannot sample more nodes than available in any graph.")
 
-            # Randomly select nodes to mask
+            # Randomly select a ndoe to mask
             mask_indices = random.sample(range(data.num_nodes), 1)
             data.mask = torch.zeros(data.num_nodes, dtype=torch.bool)
             data.mask[mask_indices] = True

@@ -6,14 +6,17 @@ from torch_geometric.nn import GCNConv, MessagePassing
 import torch.nn.functional as F
 
 import typing as List
+from scipy.stats import pearsonr
 
 import torchmetrics
 
 # PyTorch Lightning
 import pytorch_lightning as L
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
-    
-class LitGCN(L.LightningModule):
+from graph_transformer_long_range_niches.tl import apply_mask
+from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics
+
+class LitGCNMasked(L.LightningModule):
     def __init__(self,
                  cfg,
                  class_weights: List = None,
@@ -30,35 +33,23 @@ class LitGCN(L.LightningModule):
         self.num_classes = cfg.dataset.num_classes
         self.num_features = cfg.dataset.num_features
 
+        #define loss
+        self.loss = define_loss(cfg, class_weights)
+        
+        #define metrics
         if 'classification' in self.prediction_task:
-            if cfg.optim.loss == 'CrossEntropy':
-                self.loss = torch.nn.CrossEntropyLoss()
-            elif cfg.optim.loss == 'WeightedCE':
-                self.loss = torch.nn.CrossEntropyLoss(torch.from_numpy(class_weights))
-            else:
-                raise Exception("Classification must be run with CrossEntropy or WeightedCE loss.")
+            self.accurary, self.f1_score_micro, self.f1_score_macro, self.f1_score_per_class = define_classification_metrics(cfg)
         elif 'regression' in self.prediction_task:
-            if cfg.optim.loss == 'MSELoss':
-                self.loss = torch.nn.MSELoss()
-            elif cfg.optim.loss == 'GaussianNLL':
-                self.loss = torch.nn.GaussianNLLLoss()
-            elif cfg.optim.loss == 'SmoothL1':
-                self.loss = torch.nn.SmoothL1Loss()
+            if cfg.optim.cross_corr == 'gene':
+                print('cross-gene correlation metrics')
+                self.mse, self.r2_raw, self.r2, self.r2_single, self.pearson_corr, self.spearman = define_regression_metrics(cfg.dataset.num_features)
+                self.AXIS = 0 # for scipy pearsonr
+            elif cfg.optim.cross_corr == 'cell':
+                print('cross-cell correlation metrics')
+                self.mse, self.r2_raw, self.r2, self.r2_single, self.pearson_corr, self.spearman = define_regression_metrics(cfg.dataset.num_classes)
+                self.AXIS = 1 # for scipy pearsonr
             else:
-                raise Exception("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")
-        else:
-            raise Exception("Prediction task must define 'classification' or 'regression'.")
-
-         # Define metrics
-        if 'classification' in self.prediction_task:
-            self.accurary = torchmetrics.Accuracy(task="multiclass", num_classes=self.num_classes)
-            self.f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="micro")
-            self.f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average="macro")
-            self.f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=self.num_classes, average=None)
-        elif 'regression' in self.prediction_task:
-            self.mse = torchmetrics.MeanSquaredError()
-            self.r2 = torchmetrics.R2Score(num_outputs=self.num_features, multioutput = 'uniform_average')
-            self.pearson_corr = torchmetrics.PearsonCorrCoef(num_outputs=self.num_features)
+                raise Exception("Cross-correlation must be run with 'gene' or 'cell'.")
 
         layers = []
         for l_idx in range(cfg.gnn.num_layers - 1):
@@ -174,39 +165,44 @@ class LitGCN(L.LightningModule):
     def _common_step(self, batch):
         """Shared step between train, val and test.
         """
-        # Forward pass
         # Mask nodes 
         input_data_masked, mask_idx = apply_mask(batch)
         
+        # Forward pass
         gnn_x, gnn_z = self.forward(input_data_masked.x, input_data_masked.edge_index) # [B, C] with C being the number of tasks to predict, e.i.        
         
         if 'classification' in self.prediction_task:
-            loss = self.loss(gnn_z, batch.y)
-            acc = self.accurary(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
-            f1_score_micro = self.f1_score_micro(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
-            f1_score_macro = self.f1_score_macro(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
-            f1_score_per_class = self.f1_score_per_class(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
+            loss = self.loss(gnn_z[mask_idx, :], batch.y[mask_idx, :]  )
+            acc = self.accurary(gnn_z.argmax(dim=1)[mask_idx], batch.y.argmax(dim=1)[mask_idx])
+            f1_score_micro = self.f1_score_micro(gnn_z.argmax(dim=1)[mask_idx], batch.y.argmax(dim=1)[mask_idx])
+            f1_score_macro = self.f1_score_macro(gnn_z.argmax(dim=1)[mask_idx], batch.y.argmax(dim=1)[mask_idx])
+            f1_score_per_class = self.f1_score_per_class(gnn_z.argmax(dim=1)[mask_idx], batch.y.argmax(dim=1)[mask_idx])
             return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
 
-        if 'regression' in self.prediction_task:
+        if 'regression' in self.prediction_task: #TODO: Problem currently correlation calculated across spatial slides (cross-gene)
             y_var = torch.var(batch.x, dim=1, keepdim=True)  # You can adjust the estimation method
             # Ensure variance is non-zero and positive
-            y_var = y_var.clamp(min=1e-6)
-            loss = self.loss(gnn_z, batch.x, y_var)
-            mse = self.mse(gnn_z, batch.x)
-            r2 = self.r2(gnn_z, batch.x)
-            pearson_corr = torch.mean(self.pearson_corr(gnn_z, batch.x))
-            return loss, [mse, r2, pearson_corr]
+            y_var = y_var.clamp(min=1e-6)[mask_idx]
+            y_pred = gnn_z[mask_idx]
+            y_true = batch.x[mask_idx]
+            assert y_true.shape == y_pred.shape
+            if y_true.shape[0] > 1:
+                loss = self.loss(y_pred, y_true, y_var)
+                mse = self.mse(y_pred, y_true)
+                r2_raw = self.r2_raw(y_pred, y_true)
+                r2 = self.r2(y_pred, y_true)
+                # pearson_corr_raw = pearsonr(y_pred, y_true, axis=self.AXIS)
+                # pearson_corr = torch.mean(torch.tensor(pearson_corr_raw[0], dtype=torch.float32))
+                spearman_corr_raw = self.spearman(y_pred, y_true)
+                spearman_corr = torch.mean(spearman_corr_raw)
+                return loss, [mse, r2, 0.1]
+            else: # single data obect in the batch
+                loss = self.loss(y_pred, y_true, y_var)
+                mse = self.mse(y_pred, y_true)
+                r2 = self.r2_single(y_pred[0], y_true[0])
+                print('r2: ', r2, torch.mean(r2))
+                return loss, [mse, torch.mean(r2), 0.1]
 
-        loss = self.loss(gnn_z, batch.y)
-        #print('predicted and true: ', gnn_z.argmax(dim=1)[:10], batch.y.argmax(dim=1)[:10])
-        acc = self.accurary(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
-        f1_score_micro = self.f1_score_micro(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
-        f1_score_macro = self.f1_score_macro(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
-        f1_score_per_class = self.f1_score_per_class(gnn_z.argmax(dim=1), batch.y.argmax(dim=1))
-        # #print(f'acc: {acc}, f1_score: {f1_score}, loss: {loss}')
-
-        # return loss, acc, f1_score_micro, f1_score_macro, f1_score_per_class
 
     def evaluation(self, model, batched_data):
          return model.forward(batched_data.x, batched_data.edge_index)

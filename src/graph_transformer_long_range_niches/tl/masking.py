@@ -20,5 +20,6 @@ def apply_mask(batched_data: Batch):
     mask_idx = torch.where(mask == 1)[0]
     masked_values = batched_data.x.clone()
     masked_values[mask] = MASK_VALUE
-    batched_data.x = masked_values
-    return batched_data, mask_idx
+    batched_data_w_mask = batched_data.clone()
+    batched_data_w_mask.x = masked_values
+    return batched_data_w_mask, mask_idx

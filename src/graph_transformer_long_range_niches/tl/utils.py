@@ -1,5 +1,44 @@
 
 import random
+import torch
+import torchmetrics
+from scipy.stats import pearsonr
+
+def define_loss(cfg, class_weights):
+    if 'classification' in cfg.dataset.prediction_task:
+        if cfg.optim.loss == 'CrossEntropy':
+            return torch.nn.CrossEntropyLoss()
+        elif cfg.optim.loss == 'WeightedCE':
+            return torch.nn.CrossEntropyLoss(torch.from_numpy(class_weights))
+        else:
+            raise Exception("Classification must be run with CrossEntropy or WeightedCE loss.")
+    elif 'regression' in cfg.dataset.prediction_task:
+        if cfg.optim.loss == 'MSELoss':
+            return torch.nn.MSELoss()
+        elif cfg.optim.loss == 'GaussianNLL':
+            return torch.nn.GaussianNLLLoss()
+        elif cfg.optim.loss == 'SmoothL1':
+            return torch.nn.SmoothL1Loss()
+        else:
+            raise Exception("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")
+    else:
+        raise Exception("Prediction task must define 'classification' or 'regression'.")
+    
+def define_classification_metrics(cfg):
+    accurary = torchmetrics.Accuracy(task="multiclass", num_classes=cfg.dataset.num_classes)
+    f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=cfg.dataset.num_classes, average="micro")
+    f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=cfg.dataset.num_classes, average="macro")
+    f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=cfg.dataset.num_classes, average=None)
+    return accurary, f1_score_micro, f1_score_macro, f1_score_per_class
+
+def define_regression_metrics(num_outputs):
+    mse = torchmetrics.MeanSquaredError()
+    r2_raw = torchmetrics.R2Score(num_outputs=num_outputs, multioutput = 'raw_values')
+    r2 = torchmetrics.R2Score(num_outputs=num_outputs, multioutput = 'uniform_average')
+    r2_single = torchmetrics.R2Score()
+    pearson_corr = torchmetrics.PearsonCorrCoef(num_outputs=num_outputs)
+    spearman = torchmetrics.SpearmanCorrCoef(num_outputs=num_outputs)
+    return mse, r2_raw, r2, r2_single, pearson_corr, spearman
 
 def pad_batch(h_node, batch, max_input_len, get_mask=False):
     """

@@ -1,6 +1,6 @@
 from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN, LitGNNTransformerMasked
 from graph_transformer_long_range_niches.pp import prepare_geome_dataset, split_adata
-from graph_transformer_long_range_niches.modules import LitGCN
+from graph_transformer_long_range_niches.modules import LitGCN, LitGCNMasked
 from graph_transformer_long_range_niches.tl import MaskedNodeLightningDataset
 from graph_transformer_long_range_niches.tl.geome_dataloader import GraphAnnDataModule
 from graph_transformer_long_range_niches.config import load_config
@@ -99,7 +99,7 @@ def main(cfg_path):
             model = LitGNNTransformerMasked(cfg)
         elif cfg.model.model_type == 'gnn':
             print('Load GNN...')
-            model = LitGCN(cfg, class_weigths)
+            model = LitGCNMasked(cfg, class_weigths)
         elif cfg.model.model_type == 'fcnn':
             print('Load FCNN...')
             model = BaselineFCNN(cfg)
@@ -115,7 +115,7 @@ def main(cfg_path):
     if 'classification' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
     if 'regression' in cfg.dataset.prediction_task:
-        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="min")
+        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
 
     data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key[-1]}_{len(cfg.dataset.library_key)}_{cfg.optim.seed}"
     run_name = f"{data_name}_{cfg.model.model_type}"
@@ -129,7 +129,7 @@ def main(cfg_path):
         if 'classification' in cfg.dataset.prediction_task:
             checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
         if 'regression' in cfg.dataset.prediction_task:
-            checkpoint_callback = ModelCheckpoint(monitor="val_r2", mode="min", filename=run_name) 
+            checkpoint_callback = ModelCheckpoint(monitor="val_r2", mode="max", filename=run_name) 
         print('Training...')
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(cfg.model.n_epochs), 
