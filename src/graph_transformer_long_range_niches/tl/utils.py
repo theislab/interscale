@@ -28,7 +28,7 @@ def define_classification_metrics(cfg):
     accurary = torchmetrics.Accuracy(task="multiclass", num_classes=cfg.dataset.num_classes)
     f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=cfg.dataset.num_classes, average="micro")
     f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=cfg.dataset.num_classes, average="macro")
-    f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=cfg.dataset.num_classes, average=None)
+    f1_score_per_class = torchmetrics.F1Score(task="multticlass", num_classes=cfg.dataset.num_classes, average=None)
     return accurary, f1_score_micro, f1_score_macro, f1_score_per_class
 
 def define_regression_metrics(num_outputs):

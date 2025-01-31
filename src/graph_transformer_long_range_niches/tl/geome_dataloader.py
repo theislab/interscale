@@ -56,7 +56,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
             self.train_data = datas[0]
             self.val_data = datas[1]
             if len(datas) == 3:
-                self.test_data = datas[1]
+                self.test_data = datas[2]
         else:
             raise ValueError("datas must be list of list with at least train and validation set.")
         if learning_type not in VALID_SPLIT:

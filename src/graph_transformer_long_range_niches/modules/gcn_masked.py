@@ -46,7 +46,7 @@ class LitGCNMasked(L.LightningModule):
                 self.AXIS = 0 # for scipy pearsonr
             elif cfg.optim.cross_corr == 'cell':
                 print('cross-cell correlation metrics')
-                self.mse, self.r2_raw, self.r2, self.r2_single, self.pearson_corr, self.spearman = define_regression_metrics(cfg.dataset.num_classes)
+                # define in common_step because nr cells is variable
                 self.AXIS = 1 # for scipy pearsonr
             else:
                 raise Exception("Cross-correlation must be run with 'gene' or 'cell'.")
@@ -169,7 +169,9 @@ class LitGCNMasked(L.LightningModule):
         input_data_masked, mask_idx = apply_mask(batch)
         
         # Forward pass
-        gnn_x, gnn_z = self.forward(input_data_masked.x, input_data_masked.edge_index) # [B, C] with C being the number of tasks to predict, e.i.        
+        gnn_x, gnn_z = self.forward(input_data_masked.x, input_data_masked.edge_index) # [B, C] with C being the number of tasks to predict, e.i.    
+        
+         
         
         if 'classification' in self.prediction_task:
             loss = self.loss(gnn_z[mask_idx, :], batch.y[mask_idx, :]  )
@@ -186,6 +188,10 @@ class LitGCNMasked(L.LightningModule):
             y_pred = gnn_z[mask_idx]
             y_true = batch.x[mask_idx]
             assert y_true.shape == y_pred.shape
+            
+            if self.cfg.optim.cross_corr == 'cell':
+                self.mse, self.r2_raw, self.r2, self.r2_single, self.pearson_corr, self.spearman = define_regression_metrics(y_true.shape[0]) 
+      
             if y_true.shape[0] > 1:
                 loss = self.loss(y_pred, y_true, y_var)
                 mse = self.mse(y_pred, y_true)
