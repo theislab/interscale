@@ -10,8 +10,6 @@ from torch import nn
 from typing import List
 from scipy.stats import pearsonr
 
-import numpy as np
-
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
 from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics
 

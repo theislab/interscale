@@ -10,8 +10,11 @@ from scipy.stats import pearsonr
 
 import torchmetrics
 
+import numpy as np
+
 # PyTorch Lightning
 import pytorch_lightning as L
+from pytorch_lightning.callbacks import Timer, Callback
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
 from graph_transformer_long_range_niches.tl import apply_mask
 from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics
@@ -42,7 +45,7 @@ class LitGCNMasked(L.LightningModule):
         elif 'regression' in self.prediction_task:
             if cfg.optim.cross_corr == 'gene':
                 print('cross-gene correlation metrics')
-                self.mse, self.r2_raw, self.r2, self.r2_single, self.pearson_corr, self.spearman = define_regression_metrics(cfg.dataset.num_features)
+                self.mse, self.r2_raw, self.r2, self.r2_single, self.spearman = define_regression_metrics(cfg.dataset.num_features)
                 self.AXIS = 0 # for scipy pearsonr
             elif cfg.optim.cross_corr == 'cell':
                 print('cross-cell correlation metrics')
@@ -169,8 +172,7 @@ class LitGCNMasked(L.LightningModule):
         input_data_masked, mask_idx = apply_mask(batch)
         
         # Forward pass
-        gnn_x, gnn_z = self.forward(input_data_masked.x, input_data_masked.edge_index) # [B, C] with C being the number of tasks to predict, e.i.    
-        
+        gnn_x, gnn_z = self.forward(input_data_masked.x, input_data_masked.edge_index) # [B, C] with C being the number of tasks to predict, e.i.     
          
         
         if 'classification' in self.prediction_task:
@@ -181,34 +183,44 @@ class LitGCNMasked(L.LightningModule):
             f1_score_per_class = self.f1_score_per_class(gnn_z.argmax(dim=1)[mask_idx], batch.y.argmax(dim=1)[mask_idx])
             return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
 
-        if 'regression' in self.prediction_task: #TODO: Problem currently correlation calculated across spatial slides (cross-gene)
+        if 'regression' in self.prediction_task: 
             y_var = torch.var(batch.x, dim=1, keepdim=True)  # You can adjust the estimation method
             # Ensure variance is non-zero and positive
             y_var = y_var.clamp(min=1e-6)[mask_idx]
             y_pred = gnn_z[mask_idx]
             y_true = batch.x[mask_idx]
             assert y_true.shape == y_pred.shape
+            loss = self.loss(y_pred, y_true, y_var)
             
-            if self.cfg.optim.cross_corr == 'cell':
-                self.mse, self.r2_raw, self.r2, self.r2_single, self.pearson_corr, self.spearman = define_regression_metrics(y_true.shape[0]) 
-      
+            if self._cfg.optim.cross_corr == 'cell':
+                self.mse, self.r2_raw, self.r2, self.r2_single, self.spearman = define_regression_metrics(y_true.shape[0]) 
+                y_pred = y_pred.T.contiguous()
+                y_true = y_true.T.contiguous()
+                assert y_true.shape == y_pred.shape
+            
             if y_true.shape[0] > 1:
-                loss = self.loss(y_pred, y_true, y_var)
                 mse = self.mse(y_pred, y_true)
                 r2_raw = self.r2_raw(y_pred, y_true)
                 r2 = self.r2(y_pred, y_true)
-                # pearson_corr_raw = pearsonr(y_pred, y_true, axis=self.AXIS)
-                # pearson_corr = torch.mean(torch.tensor(pearson_corr_raw[0], dtype=torch.float32))
+                pearson_corr_raw = pearsonr(y_pred.detach().cpu().numpy(), 
+                                           y_true.detach().cpu().numpy(), 
+                                           axis=self.AXIS)
+                pearson_corr = torch.tensor(np.nanmean(pearson_corr_raw[0]), 
+                                           dtype=torch.float32, 
+                                           device=y_pred.device)
                 spearman_corr_raw = self.spearman(y_pred, y_true)
                 spearman_corr = torch.mean(spearman_corr_raw)
-                return loss, [mse, r2, 0.1]
+                return loss, [mse, r2, pearson_corr]
             else: # single data obect in the batch
                 loss = self.loss(y_pred, y_true, y_var)
                 mse = self.mse(y_pred, y_true)
                 r2 = self.r2_single(y_pred[0], y_true[0])
-                print('r2: ', r2, torch.mean(r2))
-                return loss, [mse, torch.mean(r2), 0.1]
+                # For single element, correlation is undefined, return NaN or 1.0 if values are identical
+                if torch.allclose(y_pred, y_true):
+                    pearson_corr = torch.tensor(1.0, dtype=torch.float32, device=y_pred.device)
+                else:
+                    pearson_corr = torch.tensor(float('nan'), dtype=torch.float32, device=y_pred.device)
+                return loss, [mse, torch.mean(r2), pearson_corr]
 
-
-    def evaluation(self, model, batched_data):
-         return model.forward(batched_data.x, batched_data.edge_index)
+    def evaluation(self, batched_data):
+         return self.forward(batched_data.x, batched_data.edge_index)

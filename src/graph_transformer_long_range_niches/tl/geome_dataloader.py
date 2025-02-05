@@ -4,10 +4,9 @@ from collections.abc import Sequence
 from typing import Literal, List
 
 import pytorch_lightning as pl
-from torch_geometric.data import Batch, Data
+from torch_geometric.data import Data
 from torch_geometric.data.data import BaseData
 from torch_geometric.loader import DataLoader, DataListLoader
-from torch_geometric.transforms import RandomNodeSplit
 
 VALID_STAGE = {"fit", "test", "validate", None}
 VALID_SPLIT = {"node", "graph"}
@@ -181,15 +180,15 @@ class GraphAnnDataModule(pl.LightningDataModule):
             NeighborLoader: the node dataloader
         """
         smallest_length = self.smallest_data_batch_length(data_list)
-        num_nodes = int(smallest_length * self.pct_mask_nodes)
+        num_nodes_to_mask = int(smallest_length * self.pct_mask_nodes)
         # num_nodes = int(self.smallest_data_batch_length(data) * self.pct_mask_nodes)
 
         for data in data_list:
-            if data.num_nodes < num_nodes:
+            if data.num_nodes < num_nodes_to_mask:
                 raise ValueError("Cannot sample more nodes than available in any graph.")
 
             # Randomly select a ndoe to mask
-            mask_indices = random.sample(range(data.num_nodes), 1)
+            mask_indices = random.sample(range(data.num_nodes), num_nodes_to_mask)
             data.mask = torch.zeros(data.num_nodes, dtype=torch.bool)
             data.mask[mask_indices] = True
 
