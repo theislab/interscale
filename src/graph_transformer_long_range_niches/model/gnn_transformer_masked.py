@@ -106,14 +106,15 @@ class LitGNNTransformerMasked(BaseModule):
         
         for i in range(batch.batch[-1] + 1):
             mask = batch.batch.eq(i)
-            original_nodes = torch.where(mask)[0]
-            # Map original masked indices to new positions in padded sequence
+            pad_indices = torch.tensor(pad_index_nodes[i], device=batch.x.device)
+
             for idx in mask_idx:
-                if idx in original_nodes:
-                    # Find position of this node in pad_index_nodes[i]
-                    new_pos = torch.where(pad_index_nodes[i] == original_nodes.tolist().index(idx))[0]
-                    if len(new_pos) > 0:
-                        adjusted_mask_idx.append(new_pos.item() + current_offset)
+                # Convert to tensor if not already
+                if idx in pad_indices:
+                    new_idx = torch.where(pad_indices == idx)[0].item()
+                    adjusted_mask_idx.append(new_idx + current_offset)
+            
+            current_offset += len(pad_indices)
             
             if 'classification' in self.prediction_task:
                 if 'node' in self.prediction_task:
@@ -124,9 +125,7 @@ class LitGNNTransformerMasked(BaseModule):
                 y_true += torch.tensor(batch.x[mask][pad_index_nodes[i]])
             else:
                 raise Exception('Choose a valid prediction tasks (graph or node).')
-            
-            current_offset += len(pad_index_nodes[i])
-        
+                    
         y_true = torch.stack(y_true)
         adjusted_mask_idx = torch.tensor(adjusted_mask_idx, device=y_true.device)
 
