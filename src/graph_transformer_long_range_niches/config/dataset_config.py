@@ -7,6 +7,7 @@ def get_dataset_cfg(cfg):
         subset_dict: {adata}
         num_features: number of gene expressions (added in prepare_geome_function)
         num_features: number of classes in prediction_obs (added in prepare_geome_function)
+        pct_mask_nodes: percentage of single nodes to mask during training in a graph
     """
     cfg.dataset = CN()
 
@@ -34,5 +35,7 @@ def get_dataset_cfg(cfg):
 
     cfg.dataset.k_folds = 0
     cfg.dataset.stratify_group = None
+    
+    cfg.dataset.pct_mask_nodes = 0.2
 
     return cfg

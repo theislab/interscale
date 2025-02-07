@@ -1,4 +1,8 @@
 ## 
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
 # ignore ALL .out files
 *.out
 *.csv
@@ -17,4 +21,6 @@ artifacts/
 results/
 src/confi_files/
 InterScale_hyperparameter_sweep/
-__pycache__/
+src/graph_transformer_long_range_niches/model/__pycache__/
+src/graph_transformer_long_range_niches/tl/__pycache__/ 
+src/graph_transformer_long_range_niches/modules/__pycache__/

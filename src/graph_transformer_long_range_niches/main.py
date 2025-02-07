@@ -1,7 +1,8 @@
-from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN
-from graph_transformer_long_range_niches.pp.geome_utils import prepare_geome_dataset, split_adata
-from graph_transformer_long_range_niches.modules import LitGCN
-from graph_transformer_long_range_niches.tl.wandb import log_data
+from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN, LitGNNTransformerMasked
+from graph_transformer_long_range_niches.pp import prepare_geome_dataset, split_adata
+from graph_transformer_long_range_niches.modules import LitGCN, LitGCNMasked
+from graph_transformer_long_range_niches.tl import MaskedNodeLightningDataset
+from graph_transformer_long_range_niches.tl.geome_dataloader import GraphAnnDataModule
 from graph_transformer_long_range_niches.config import load_config
 
 # PyTorch Lightning
@@ -52,7 +53,7 @@ def main(cfg_path):
 
     # Create PyG data
     print('Load PyG data...')
-    pyg_data_list, adata_list = prepare_geome_dataset(adata, cfg)
+    pyg_data_list, _ = prepare_geome_dataset(adata, cfg)
     train_ds, val_ds = pyg_data_list[0], pyg_data_list[1]
     # set number of classes and number of features
     cfg.dataset.merge_from_list(['num_features', len(train_ds[0].x[1])])
@@ -61,19 +62,31 @@ def main(cfg_path):
     # Initialize Dataset for training
     if test_size > 0.0:
         test_ds = pyg_data_list[2]
-        dm = LightningDataset(train_dataset = train_ds,
-                              val_dataset = val_ds,
-                              test_dataset = test_ds, 
-                              batch_size=int(cfg.dataset.batch_size), 
-                              shuffle=True)
+        dm = GraphAnnDataModule(datas=pyg_data_list, 
+                           num_workers=1, 
+                           batch_size=int(cfg.dataset.batch_size), 
+                           pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+                           learning_type="node")
+        # dm = MaskedNodeLightningDataset(train_dataset = train_ds,
+        #                       val_dataset = val_ds,
+        #                       test_dataset = test_ds, 
+        #                       batch_size=int(cfg.dataset.batch_size), 
+        #                       pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+        #                       shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}, test ds: {len(test_ds)}')
         datasets = [train_ds, val_ds, test_ds]
         names = ["training", "validation", "test"]
     else:
-        dm = LightningDataset(train_dataset = train_ds, 
-                              val_dataset = val_ds, 
-                              batch_size=int(cfg.dataset.batch_size), 
-                              shuffle=True)
+        dm = GraphAnnDataModule(datas=pyg_data_list, 
+                           num_workers=1, 
+                           batch_size=int(cfg.dataset.batch_size), 
+                           pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+                           learning_type="node")
+        # dm = MaskedNodeLightningDataset(train_dataset = train_ds, 
+        #                       val_dataset = val_ds, 
+        #                       batch_size=int(cfg.dataset.batch_size), 
+        #                       pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+        #                       shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}')
         datasets = [train_ds, val_ds]
         names = ["training", "validation"]
@@ -83,10 +96,10 @@ def main(cfg_path):
     try:
         if cfg.model.model_type == 'gnn-transformer':
             print('Load GNNTransfomer...')
-            model = LitGNNTransformer(cfg)
+            model = LitGNNTransformerMasked(cfg)
         elif cfg.model.model_type == 'gnn':
             print('Load GNN...')
-            model = LitGCN(cfg, class_weigths)
+            model = LitGCNMasked(cfg, class_weigths)
         elif cfg.model.model_type == 'fcnn':
             print('Load FCNN...')
             model = BaselineFCNN(cfg)
@@ -101,11 +114,17 @@ def main(cfg_path):
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     if 'classification' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
+<<<<<<< HEAD
     elif 'regression' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
     else:
         raise Exception("Training must be classification or regression based.")
     
+=======
+    if 'regression' in cfg.dataset.prediction_task:
+        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
+
+>>>>>>> masking
     data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key[-1]}_{len(cfg.dataset.library_key)}_{cfg.optim.seed}"
     run_name = f"{data_name}_{cfg.model.model_type}"
 
@@ -117,6 +136,7 @@ def main(cfg_path):
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
         if 'classification' in cfg.dataset.prediction_task:
             checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
+<<<<<<< HEAD
         elif 'regression' in cfg.dataset.prediction_task:
             if cfg.optim.loss == 'MSELoss':
                 checkpoint_callback = ModelCheckpoint(monitor="val_mse", mode="min", filename=run_name) 
@@ -128,6 +148,11 @@ def main(cfg_path):
             raise Exception("Training must be classification or regression based.")
         
         print('Training Wandb...')
+=======
+        if 'regression' in cfg.dataset.prediction_task:
+            checkpoint_callback = ModelCheckpoint(monitor="val_r2", mode="max", filename=run_name) 
+        print('Training...')
+>>>>>>> masking
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(cfg.model.n_epochs), 
                          logger=wandb_logger, 

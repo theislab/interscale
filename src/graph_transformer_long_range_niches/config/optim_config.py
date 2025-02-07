@@ -16,4 +16,5 @@ def get_optim_cfg(cfg):
   cfg.optim.warm_up = 40
   cfg.optim.loss = "CrossEntropy" 
   cfg.optim.seed = 40
+  cfg.optim.cross_corr = 'gene' # cross-gene or cross-cell correlation
   return cfg
