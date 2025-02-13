@@ -13,7 +13,7 @@ from scipy.stats import pearsonr
 import numpy as np
 
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
-from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics
+from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics, compute_dynamic_variance
 
 class BaseModule(L.LightningModule):
     """Base class for all models (Local, Global, Local+Global)"""
@@ -50,6 +50,31 @@ class BaseModule(L.LightningModule):
                 self.AXIS = 0 # selecting columns / genes
             else:
                 raise Exception("Cross-correlation must be run with 'gene' or 'cell'.")
+            
+        ## Prediction units
+        self.graph_pred_linear_list = torch.nn.ModuleList()
+        n_in = self._cfg.transformer.d_model
+        if 'classification' in self.prediction_task:
+            n_out = self.num_classes
+            layers_dim = [n_in] + self._cfg.model.decoder.hidden_dims + [self.num_classes]
+        elif 'regression' in self.prediction_task:
+            n_out = self.num_features
+            layers_dim = [n_in] + self._cfg.model.decoder.hidden_dims + [self.num_features]
+                
+        if self._cfg.model.decoder.type == 'linear':
+            self.graph_pred_linear = torch.nn.Linear(n_in, n_out)
+        elif self._cfg.model.decoder.type == 'nonlinear':
+            self.graph_pred_linear = nn.Sequential(
+                    *[nn.Sequential(
+                        nn.Linear(n_in, n_out),
+                        nn.BatchNorm1d(n_out, momentum=0.01, eps=0.001),
+                        nn.ReLU(),
+                        nn.Dropout(p=self._cfg.model.decoder.dropout)
+                    ) for n_in, n_out in zip(layers_dim[:-1], layers_dim[1:-1])],
+                    nn.Linear(layers_dim[-2], layers_dim[-1])  # Final layer without activation
+            )
+        else:
+            raise ValueError(f"Invalid decoder type: {self._cfg.model.decoder}. Must be either 'linear' or 'nonlinear'")
 
     def common_configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=self.wd)
@@ -171,9 +196,10 @@ class BaseModule(L.LightningModule):
         y_pred = y_pred[mask_idx]
         y_true = y_true[mask_idx]
         assert y_true.shape == y_pred.shape
-        # Estimate variance based on the true values (e.g., using batch variance)
-        y_var = torch.var(y_true, dim=self.AXIS, keepdim=False)  # along the gene or cell axis of the true values
         
+        # Estimate variance based on the true values (e.g., using batch variance)
+        y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
+            
         if self._cfg.optim.cross_corr == 'gene':
             # score per cell, cell numbers dependent on sliding windows / spatial slide
             nr_cells = y_true.shape[0]

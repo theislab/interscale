@@ -199,7 +199,6 @@ def prepare_geome_dataset(adata, cfg, split_key: str = 'split'):
             datas_test.extend(pyg_test)
     
     if 'test' in np.unique(adata.obs[split_key]):
-        print('test')
         datas_test, adata_test = list(a2d(adata[adata.obs[split_key] == 'test']))
         return [datas_train, datas_val, datas_test], [adata_train, adata_val, adata_test]
 

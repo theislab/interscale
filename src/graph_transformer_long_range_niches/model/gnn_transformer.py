@@ -31,13 +31,13 @@ class LitGNNTransformer(BaseModule):
         # Transformer encoder initialization
         self.transformer_encoder = TransformerNodeEncoderHook(cfg)
 
-        ## Prediction units
-        self.graph_pred_linear_list = torch.nn.ModuleList()
-        if 'classification' in self.prediction_task:
-            self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_classes)
-        elif 'regression' in self.prediction_task:
-            print('num features:', self.num_features)
-            self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_features)
+        # ## Prediction units
+        # self.graph_pred_linear_list = torch.nn.ModuleList()
+        # if 'classification' in self.prediction_task:
+        #     self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_classes)
+        # elif 'regression' in self.prediction_task:
+        #     print('num features:', self.num_features)
+        #     self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_features)
 
     def forward(self, batched_data):
         """

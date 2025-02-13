@@ -19,3 +19,5 @@ artifacts/
 results/
 src/confi_files/
 InterScale_hyperparameter_sweep/
+src/graph_transformer_long_range_niches/tmp/
+src/graph_transformer_long_range_niches/logs/

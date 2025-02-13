@@ -15,7 +15,7 @@ import numpy as np
 # PyTorch Lightning
 import pytorch_lightning as L
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
-from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics
+from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics, compute_dynamic_variance
 
     
 class LitGCN(L.LightningModule):
@@ -186,7 +186,8 @@ class LitGCN(L.LightningModule):
                 y_true = y_true.T.contiguous()
                 assert y_true.shape == y_pred.shape
             
-            y_var = torch.var(batch.x, dim=1, keepdim=True)  # You can adjust the estimation method
+            # Estimate variance based on the true values (e.g., using batch variance)
+            y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
             # Ensure variance is non-zero and positive
             y_var = y_var.clamp(min=1e-6)
             loss = self.loss(gnn_z, y_true, y_var)

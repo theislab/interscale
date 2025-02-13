@@ -20,5 +20,4 @@ source activate GT_long_range_env
 
 # ROBUSTNESS SWEEP
 #python src/graph_transformer_long_range_niches/main_sweep.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/CosmX_Pancreas/pancreas_gnntrans_ct_sw_2.yaml --model_type gnn-transformer --sweep_goal robustness
-python src/graph_transformer_long_range_niches/main_sweep.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/CosmX_Pancreas/pancreas_gnn_ct_sw_2.yaml --model_type gnn --sweep_goal robustness
-
+python src/graph_transformer_long_range_niches/main_sweep.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/Legnini_23/legnini23_InterScale_genes_sample_gnn.yaml --model_type gnn --sweep_goal robustness

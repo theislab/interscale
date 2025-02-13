@@ -27,7 +27,7 @@ from torch_geometric.loader import DataLoader
 def main(cfg_path):
 
     cfg = load_config(cfg_path)
-
+    
     ####### PREPROCESSING #######
     # Load adata
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
@@ -62,31 +62,35 @@ def main(cfg_path):
     # Initialize Dataset for training
     if test_size > 0.0:
         test_ds = pyg_data_list[2]
-        dm = GraphAnnDataModule(datas=pyg_data_list, 
+        if cfg.dataset.pct_mask_nodes > 0:
+            dm = GraphAnnDataModule(datas=pyg_data_list, 
                            num_workers=1, 
                            batch_size=int(cfg.dataset.batch_size), 
                            pct_mask_nodes=cfg.dataset.pct_mask_nodes,
                            learning_type="node")
-        # dm = MaskedNodeLightningDataset(train_dataset = train_ds,
-        #                       val_dataset = val_ds,
-        #                       test_dataset = test_ds, 
-        #                       batch_size=int(cfg.dataset.batch_size), 
-        #                       pct_mask_nodes=cfg.dataset.pct_mask_nodes,
-        #                       shuffle=True)
+        else:   
+            dm = MaskedNodeLightningDataset(train_dataset = train_ds,
+                                val_dataset = val_ds,
+                                test_dataset = test_ds, 
+                                batch_size=int(cfg.dataset.batch_size), 
+                                pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+                                shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}, test ds: {len(test_ds)}')
         datasets = [train_ds, val_ds, test_ds]
         names = ["training", "validation", "test"]
     else:
-        dm = GraphAnnDataModule(datas=pyg_data_list, 
-                           num_workers=1, 
-                           batch_size=int(cfg.dataset.batch_size), 
-                           pct_mask_nodes=cfg.dataset.pct_mask_nodes,
-                           learning_type="node")
-        # dm = MaskedNodeLightningDataset(train_dataset = train_ds, 
-        #                       val_dataset = val_ds, 
-        #                       batch_size=int(cfg.dataset.batch_size), 
-        #                       pct_mask_nodes=cfg.dataset.pct_mask_nodes,
-        #                       shuffle=True)
+        if cfg.dataset.pct_mask_nodes > 0:
+            dm = GraphAnnDataModule(datas=pyg_data_list, 
+                        num_workers=1, 
+                        batch_size=int(cfg.dataset.batch_size), 
+                        pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+                        learning_type="node")
+        else:
+            dm = MaskedNodeLightningDataset(train_dataset = train_ds, 
+                            val_dataset = val_ds, 
+                            batch_size=int(cfg.dataset.batch_size), 
+                            pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+                            shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}')
         datasets = [train_ds, val_ds]
         names = ["training", "validation"]
@@ -96,10 +100,16 @@ def main(cfg_path):
     try:
         if cfg.model.model_type == 'gnn-transformer':
             print('Load GNNTransfomer...')
-            model = LitGNNTransformerMasked(cfg)
+            if cfg.dataset.pct_mask_nodes > 0:
+                model = LitGNNTransformerMasked(cfg)
+            else:
+                model = LitGNNTransformer(cfg)
         elif cfg.model.model_type == 'gnn':
             print('Load GNN...')
-            model = LitGCNMasked(cfg, class_weigths)
+            if cfg.dataset.pct_mask_nodes > 0:
+                model = LitGCNMasked(cfg, class_weigths)
+            else:
+                model = LitGCN(cfg, class_weigths)
         elif cfg.model.model_type == 'fcnn':
             print('Load FCNN...')
             model = BaselineFCNN(cfg)

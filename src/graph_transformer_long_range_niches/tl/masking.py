@@ -17,7 +17,7 @@ def apply_mask(batched_data: Batch):
         print("No mask found in batched_data")
         return batched_data
     mask = batched_data.mask
-    mask_idx = torch.where(mask == 1)[0]
+    mask_idx = torch.where(mask == 1)[0] # TODO into 2D array [B, N_batched_nodes]
     masked_values = batched_data.x.clone()
     masked_values[mask] = MASK_VALUE
     batched_data_w_mask = batched_data.clone()

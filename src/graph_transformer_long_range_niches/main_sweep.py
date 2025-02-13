@@ -251,12 +251,14 @@ if __name__ == '__main__':
         print("Robustness sweep")
         
         parameter_dict = {
-            'dataset.spatial_neigbors_kwargs.radius': {'values': [10, 30, 50, 70]}
+            'dataset.spatial_neigbors_kwargs.radius': {'values': [0, 200, 400]},
+            'dataset.pct_mask_nodes': {'values': [0, 0.1, 0.25, 0.5]},
+            'model.decoder.type': {'values': ['linear', 'nonlinear']},
         }
-        if args.model_type == 'gnn-transformer' or args.model_type == 'pca-transformer':
-            parameter_dict.update({ 
-                'transformer.max_seq_len': {'values': [1000, 1500, 2000]},
-            })
+        # if args.model_type == 'gnn-transformer' or args.model_type == 'pca-transformer':
+        #     parameter_dict.update({ 
+        #         'transformer.max_seq_len': {'values': [1000, 1500, 2000]},
+        #     })
 
     sweep_config['parameters'] = parameter_dict
     print(sweep_config)
