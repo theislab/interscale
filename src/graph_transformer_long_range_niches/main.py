@@ -21,9 +21,6 @@ import numpy as np
 
 from sklearn.utils.class_weight import compute_class_weight
 
-from graph_transformer_long_range_niches.pp import prepare_geome_dataset
-from torch_geometric.loader import DataLoader
-
 def main(cfg_path):
 
     cfg = load_config(cfg_path)
@@ -98,6 +95,7 @@ def main(cfg_path):
     ####### TRAINING #######
     # Model Initialization
     try:
+        print('cfg.dataset.pct_mask_nodes', cfg.dataset.pct_mask_nodes)
         if cfg.model.model_type == 'gnn-transformer':
             print('Load GNNTransfomer...')
             if cfg.dataset.pct_mask_nodes > 0:
@@ -117,7 +115,7 @@ def main(cfg_path):
             print('Load PCA Transformer...')
             model = LitPCATransformer(cfg, class_weigths)
     except ValueError:
-        print("No valid model defined in .yaml file.")
+        raise ValueError("No valid model defined in .yaml file.")
 
     steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
 
