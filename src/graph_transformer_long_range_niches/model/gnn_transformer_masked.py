@@ -9,7 +9,7 @@ from graph_transformer_long_range_niches.tl import apply_mask
 
 from typing import List
 
-from graph_transformer_long_range_niches.modules import TransformerNodeEncoderHook, BaseModule, LitGCN
+from graph_transformer_long_range_niches.modules import TransformerNodeEncoderHook, BaseModule, LitGCN, LitGCNMasked
 from graph_transformer_long_range_niches.tl import pad_batch, apply_mask
 
 class LitGNNTransformerMasked(BaseModule):
@@ -37,28 +37,22 @@ class LitGNNTransformerMasked(BaseModule):
 
         # GNN initialization
         self.gnn = LitGCN(cfg)
-        if pretrained_gnn_path:
-            # Load pre-trained GNN weights
-            pretrained_state_dict = torch.load(pretrained_gnn_path)
-            self.gnn.load_state_dict(pretrained_state_dict)
+        # if pretrained_gnn_path:
+        #     # Load pre-trained GNN weights
+        #     if cfg.dataset.pct_mask_nodes > 0:
+        #         self.gnn = LitGCNMasked.load_from_checkpoint(pretrained_gnn_path)
+        #     else:
+        #         self.gnn = LitGCN.load_from_checkpoint(pretrained_gnn_path)
             
-            # Freeze GNN parameters
-            for param in self.gnn.parameters():
-                param.requires_grad = False
+        #     # Freeze GNN parameters
+        #     for param in self.gnn.parameters():
+        #         param.requires_grad = False
             
-            print("Loaded pre-trained GNN from:", pretrained_gnn_path)
-            print("GNN parameters have been frozen")
+        #     print("Loaded pre-trained GNN from:", pretrained_gnn_path)
+        #     print("GNN parameters have been frozen")
         
         # Transformer encoder initialization
         self.transformer_encoder = TransformerNodeEncoderHook(cfg)
-
-        # ## Prediction units
-        # self.graph_pred_linear_list = torch.nn.ModuleList()
-        # if 'classification' in self.prediction_task:
-        #     self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_classes)
-        # elif 'regression' in self.prediction_task:
-        #     print('num features:', self.num_features)
-        #     self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_features)
 
     def forward(self, batched_data):
         """
@@ -147,11 +141,11 @@ class LitGNNTransformerMasked(BaseModule):
             
             if 'classification' in self.prediction_task:
                 if 'node' in self.prediction_task:
-                    y_true += torch.tensor(batch.y[mask][pad_index_nodes[i]])
+                    y_true += batch.y[mask][pad_index_nodes[i]].clone().detach()
                 elif 'graph' in self.prediction_task:
-                    y_true.append(torch.tensor(batch.y[mask][-1]))
+                    y_true.append(batch.y[mask][-1].clone().detach())
             elif 'regression' in self.prediction_task:
-                y_true += torch.tensor(batch.x[mask][pad_index_nodes[i]])
+                y_true += batch.x[mask][pad_index_nodes[i]].clone().detach()
             else:
                 raise Exception('Choose a valid prediction tasks (graph or node).')
                     

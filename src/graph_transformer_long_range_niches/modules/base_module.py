@@ -45,7 +45,7 @@ class BaseModule(L.LightningModule):
                 self.AXIS = 1 # selecting rows / cells
             elif cfg.optim.cross_corr == 'cell':
                 print('cross-cell per gene correlation metrics')
-                self.mse, self.r2_raw, self.r2, self.r2_single, self.spearman = define_regression_metrics(cfg.dataset.num_features)
+                self.mse, self.r2_raw, self.r2, self.r2_single = define_regression_metrics(cfg.dataset.num_features)
                 # define in common_step because nr cells is variable
                 self.AXIS = 0 # selecting columns / genes
             else:
@@ -199,17 +199,16 @@ class BaseModule(L.LightningModule):
         
         # Estimate variance based on the true values (e.g., using batch variance)
         y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
+        nr_cells = y_true.shape[0]
             
         if self._cfg.optim.cross_corr == 'gene':
             # score per cell, cell numbers dependent on sliding windows / spatial slide
-            nr_cells = y_true.shape[0]
-            self.mse, self.r2_raw, self.r2, self.r2_single, self.spearman = define_regression_metrics(nr_cells) 
+            self.mse, self.r2_raw, self.r2, self.r2_single = define_regression_metrics(nr_cells) 
             # for GPU usage
             self.mse = self.mse.to(y_pred.device)
             self.r2_raw = self.r2_raw.to(y_pred.device)
             self.r2 = self.r2.to(y_pred.device)
             self.r2_single = self.r2_single.to(y_pred.device)
-            self.spearman = self.spearman.to(y_pred.device)
             loss = self.loss(y_pred, y_true, y_var)
             y_pred = y_pred.T.contiguous()
             y_true = y_true.T.contiguous()
@@ -218,7 +217,7 @@ class BaseModule(L.LightningModule):
             loss = self.loss(y_pred.T.contiguous(), y_true.T.contiguous(), y_var) # loss calculated over [N,:]
             assert y_pred.shape[1] == self.num_features
 
-        if y_true.shape[0] > 1:
+        if nr_cells > 1:
             mse = self.mse(y_pred, y_true)
             assert y_pred.shape[1] == y_true.shape[1] == self.r2_raw.num_outputs # multioutput (N, M)
             r2_raw = self.r2_raw(y_pred, y_true)
@@ -229,8 +228,6 @@ class BaseModule(L.LightningModule):
             pearson_corr = torch.tensor(np.nanmean(pearson_corr_raw[0]), 
                                         dtype=torch.float32, 
                                         device=y_pred.device)
-            spearman_corr_raw = self.spearman(y_pred, y_true)
-            spearman_corr = torch.mean(spearman_corr_raw)
             if self._cfg.optim.cross_corr == 'cell':
                 # metric value for each gene
                 assert r2_raw.shape[0] == pearson_corr_raw[0].shape[0] == self.num_features
@@ -239,9 +236,8 @@ class BaseModule(L.LightningModule):
                 assert r2_raw.shape[0] == pearson_corr_raw[0].shape[0] == nr_cells
             return loss, [mse, r2, pearson_corr]
         else: # single data obect in the batch
-            loss = self.loss(y_pred, y_true, y_var)
             mse = self.mse(y_pred, y_true)
-            r2 = self.r2_single(y_pred[0], y_true[0])
+            r2 = self.r2_single(y_pred, y_true)
             # For single element, correlation is undefined, return NaN or 1.0 if values are identical
             if torch.allclose(y_pred, y_true):
                 pearson_corr = torch.tensor(1.0, dtype=torch.float32, device=y_pred.device)

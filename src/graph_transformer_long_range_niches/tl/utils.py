@@ -1,4 +1,3 @@
-
 import random
 import torch
 import torchmetrics
@@ -28,7 +27,7 @@ def define_classification_metrics(cfg):
     accurary = torchmetrics.Accuracy(task="multiclass", num_classes=cfg.dataset.num_classes)
     f1_score_micro = torchmetrics.F1Score(task="multiclass", num_classes=cfg.dataset.num_classes, average="micro")
     f1_score_macro = torchmetrics.F1Score(task="multiclass", num_classes=cfg.dataset.num_classes, average="macro")
-    f1_score_per_class = torchmetrics.F1Score(task="multticlass", num_classes=cfg.dataset.num_classes, average=None)
+    f1_score_per_class = torchmetrics.F1Score(task="multiclass", num_classes=cfg.dataset.num_classes, average=None)
     return accurary, f1_score_micro, f1_score_macro, f1_score_per_class
 
 def define_regression_metrics(num_outputs):
@@ -36,12 +35,12 @@ def define_regression_metrics(num_outputs):
     r2_raw = torchmetrics.R2Score(num_outputs=num_outputs, multioutput = 'raw_values')
     r2 = torchmetrics.R2Score(num_outputs=num_outputs, multioutput = 'uniform_average')
     r2_single = torchmetrics.R2Score()
-    spearman = torchmetrics.SpearmanCorrCoef(num_outputs=num_outputs)
-    return mse, r2_raw, r2, r2_single, spearman
+    return mse, r2_raw, r2, r2_single
 
-def compute_dynamic_variance(y_true, y_pred, axis=0, epsilon=1e-6):
+def compute_dynamic_variance(y_true, y_pred, axis=1, epsilon=1e-6):
     """
     Computes a dynamic variance estimate using both true and predicted values.
+    Handles single-sample batches by using a default variance.
 
     Args:
         y_true (torch.Tensor): Ground truth values.
@@ -52,16 +51,21 @@ def compute_dynamic_variance(y_true, y_pred, axis=0, epsilon=1e-6):
     Returns:
         torch.Tensor: Combined variance estimate.
     """
-    # Compute variance of true values
-    var_true = torch.var(y_true, dim=axis, unbiased=False, keepdim=True)
+    batch_size = y_true.size(0)
     
-    # Compute variance of predictions
+    if batch_size == 1:
+        # For single samples, compute squared difference between pred and true
+        # as a simple variance estimate
+        diff = (y_true - y_pred) ** 2
+        default_var = diff.mean(dim=axis, keepdim=True) + epsilon
+        return default_var
+    
+    # Normal case with multiple samples
+    var_true = torch.var(y_true, dim=axis, unbiased=False, keepdim=True)
     var_pred = torch.var(y_pred, dim=axis, unbiased=False, keepdim=True)
+    combined_var = 0.5 * (var_true + var_pred) + epsilon
 
-    # Combine variances (weighted sum or mean)
-    combined_var = 0.5 * (var_true + var_pred) + epsilon  # Ensure non-zero variance
-
-    return combined_var.squeeze()  # Remove extra dimensions if necessary
+    return combined_var.squeeze()
 
 def pad_batch(h_node, batch, max_seq_len, get_mask=False, keep_indices=None):
     """

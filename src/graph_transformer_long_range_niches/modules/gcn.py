@@ -44,7 +44,7 @@ class LitGCN(L.LightningModule):
         elif 'regression' in self.prediction_task:
             if cfg.optim.cross_corr == 'gene':
                 print('cross-gene correlation metrics')
-                self.mse, self.r2_raw, self.r2, self.r2_single, self.spearman = define_regression_metrics(cfg.dataset.num_features)
+                self.mse, self.r2_raw, self.r2, self.r2_single = define_regression_metrics(cfg.dataset.num_features)
                 self.AXIS = 0 # for scipy pearsonr
             elif cfg.optim.cross_corr == 'cell':
                 print('cross-cell correlation metrics')
@@ -181,7 +181,7 @@ class LitGCN(L.LightningModule):
 
         if 'regression' in self.prediction_task:
             if self._cfg.optim.cross_corr == 'cell':
-                self.mse, self.r2_raw, self.r2, self.r2_single, self.pearson_corr, self.spearman = define_regression_metrics(y_true.shape[0]) 
+                self.mse, self.r2_raw, self.r2, self.r2_single, self.pearson_corr = define_regression_metrics(y_true.shape[0]) 
                 y_pred = y_pred.T.contiguous()
                 y_true = y_true.T.contiguous()
                 assert y_true.shape == y_pred.shape

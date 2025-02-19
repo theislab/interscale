@@ -144,6 +144,7 @@ def prepare_geome_dataset(adata, cfg, split_key: str = 'split'):
     for category_to_iterate in category_to_iterate_list:
         cfg.dataset.spatial_neigbors_kwargs.merge_from_list(['library_key', category_to_iterate])
         spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
+        print(spatial_neigbors_kwargs)
 
         one_hot_encode_list = [prediction_obs]
 

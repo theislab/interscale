@@ -86,7 +86,6 @@ class SelfAttentionRelevance:
         category_mask = torch.zeros(output.size())
         if category_index is not None:
             category_mask[category_index, :, :] = 1
-        print('Category mask: ', category_mask.shape)
         loss = (output * category_mask).sum()
         self.model.zero_grad()
         loss.backward(retain_graph=True)
@@ -101,12 +100,7 @@ class SelfAttentionRelevance:
             attn_out_weights = encoder.get_attn_output_weights()
             attn_grad = encoder.get_attn_gradients()
 
-            print(f"Layer {idx + 1} attention gradient shape: {attn_grad.shape}")
-            print(f"Layer {idx + 1} attention output weights shape: {attn_out_weights.shape}")
-
             attn_map = self.avg_heads(attn_out_weights, attn_grad)
-            print(f"Average attention map shape: {attn_map.shape}")
-            print("I: ", I)
             #I += self.apply_self_attention_rules(I.cuda(), attn_map.cuda())
             I += self.apply_self_attention_rules(I, attn_map)
         
@@ -132,38 +126,63 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, atte
     # subset relevant data
     sub_adata = adata[adata.obs[obs_col] == class_name]
     assert split_key in adata.obs
+
+    cfg.set_new_allowed(True)
+    cfg.defrost()
+    cfg.dataset.library_key = [library_key]
+    cfg.freeze()
+
+    if library_key:  
+        assert library_key in sub_adata.obs
+        cfg.set_new_allowed(True)
+        cfg.defrost()
+        cfg.dataset.library_key = [library_key]
+        cfg.freeze()
+        library_key_list = np.unique(sub_adata.obs[library_key])
+    else: 
+        library_key_list = [None]
+    print(library_key_list)
     
     # load PyG objects for evaluation
     pyg_datas, _ = prepare_geome_dataset(sub_adata, cfg, split_key=split_key) # datas = [datas_train, datas_test]
     datas = [pyg for datas in pyg_datas for pyg in datas]
     data_loader = DataLoader(datas)
     
-    sub_adata.obs['cls'] = -1
+    sub_adata.obs['cls'] = np.nan
     attention_matrix_dict = {}
     transformer_in_dict = {}
     transformer_out_dict = {}
-    if library_key:  
-        library_key_list = np.unique(sub_adata.obs[library_key])
-    else: 
-        library_key_list = [None]
+
     
     for batch, library_id in zip(data_loader, library_key_list):
-        print(batch, library_id)
+        print('batch: ', batch, 'library_id', library_id)
         transformer_in, transformer_out, src_padding_mask, index_nodes, dec_out = model_transformer.evaluation(batch)
         if not attention_obs:
             attention_index = np.arange(0, len(index_nodes))
         I = self_attention_relevance.generate_relevance(transformer_in, src_padding_mask, category_index=attention_index)
         cls = I[:1, 1:].cpu().detach().numpy() 
+        print('cls', len(cls[0]))
         # Create a pandas DataFrame for the attention matrix with obs_names as row and column indices
         if library_key:
-            sub_adata.obs['cls'][sub_adata.obs[library_key]==library_id][index_nodes[0]] = cls[0]
+            library_mask = (sub_adata.obs[library_key] == library_id)
+            library_indices = sub_adata.obs[library_mask].index
+            print('library_mask: ', len(library_mask), ' library_indices: ' , len(library_indices), ' index_nodes :', len(index_nodes[0]))
+            
+            # Then, use these indices to select only the ones in index_nodes[0]
+            final_indices = library_indices[index_nodes[0]]
+            
+            # Now assign the values using these indices
+            sub_adata.obs.loc[final_indices, 'cls'] = cls[0]
             attention_matrix_df = pd.DataFrame(
                 I[1:, 1:].cpu().detach().numpy(),
-                index=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]],
-                columns=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]]
+                # TODO: check if this is correct
+                # index=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]],
+                # columns=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]]
+                index = final_indices,
+                columns = final_indices
             )
         else:
-            sub_adata.obs['cls'][sub_adata.obs_names[index_nodes[0]]] = cls[0]
+            sub_adata.obs['cls'][sub_adata.obs_names[index_nodes[0]]] = cls[0] # TODO change
             attention_matrix_df = pd.DataFrame(
                 I[1:, 1:].cpu().detach().numpy(),
                 index=sub_adata.obs_names[index_nodes[0]],
