@@ -1,6 +1,6 @@
 from .evaluation import load_model, umap_embeddings
 from .scheduler import CosineWarmupScheduler
-from .utils import pad_batch, str_to_int_or_none
+from .utils import pad_batch, str_to_int_or_none, compute_dynamic_variance
 from .wandb import log_data
 from .pytorch_utils import MultiHeadAttentionWithEdits 
 from .dataloader import MaskedNodeLightningDataset
@@ -18,5 +18,6 @@ __all__ = [
     "load_model", 
     "umap_embeddings"
     "MaskedNodeLightningDataset",
-    "apply_mask"
+    "apply_mask",
+    "compute_dynamic_variance"
 ]

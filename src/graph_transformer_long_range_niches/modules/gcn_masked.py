@@ -17,7 +17,7 @@ import pytorch_lightning as L
 from pytorch_lightning.callbacks import Timer, Callback
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
 from graph_transformer_long_range_niches.tl import apply_mask
-from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics
+from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics, compute_dynamic_variance
 
 class LitGCNMasked(L.LightningModule):
     def __init__(self,
@@ -44,13 +44,13 @@ class LitGCNMasked(L.LightningModule):
             self.accurary, self.f1_score_micro, self.f1_score_macro, self.f1_score_per_class = define_classification_metrics(cfg)
         elif 'regression' in self.prediction_task:
             if cfg.optim.cross_corr == 'gene':
-                print('cross-gene correlation metrics')
-                self.mse, self.r2_raw, self.r2, self.r2_single, self.spearman = define_regression_metrics(cfg.dataset.num_features)
-                self.AXIS = 0 # for scipy pearsonr
+                print('cross-gene per cellcorrelation metrics')
+                self.AXIS = 1 # selecting rows / cells
             elif cfg.optim.cross_corr == 'cell':
-                print('cross-cell correlation metrics')
+                print('cross-cell per gene correlation metrics')
+                self.mse, self.r2_raw, self.r2, self.r2_single = define_regression_metrics(cfg.dataset.num_features)
                 # define in common_step because nr cells is variable
-                self.AXIS = 1 # for scipy pearsonr
+                self.AXIS = 0 # selecting columns / genes
             else:
                 raise Exception("Cross-correlation must be run with 'gene' or 'cell'.")
 
@@ -184,32 +184,45 @@ class LitGCNMasked(L.LightningModule):
             return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
 
         if 'regression' in self.prediction_task: 
-            y_var = torch.var(batch.x, dim=1, keepdim=True)  # You can adjust the estimation method
-            # Ensure variance is non-zero and positive
-            y_var = y_var.clamp(min=1e-6)[mask_idx]
             y_pred = gnn_z[mask_idx]
             y_true = batch.x[mask_idx]
+            y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
             assert y_true.shape == y_pred.shape
-            loss = self.loss(y_pred, y_true, y_var)
             
-            if self._cfg.optim.cross_corr == 'cell':
-                self.mse, self.r2_raw, self.r2, self.r2_single, self.spearman = define_regression_metrics(y_true.shape[0]) 
+            if self._cfg.optim.cross_corr == 'gene':
+                # score per cell, cell numbers dependent on sliding windows / spatial slide
+                nr_cells = y_true.shape[0]
+                self.mse, self.r2_raw, self.r2, self.r2_single = define_regression_metrics(nr_cells) 
+                # for GPU usage
+                self.mse = self.mse.to(y_pred.device)
+                self.r2_raw = self.r2_raw.to(y_pred.device)
+                self.r2 = self.r2.to(y_pred.device)
+                self.r2_single = self.r2_single.to(y_pred.device)
+                loss = self.loss(y_pred, y_true, y_var)
                 y_pred = y_pred.T.contiguous()
                 y_true = y_true.T.contiguous()
-                assert y_true.shape == y_pred.shape
-            
+                assert y_pred.shape[0] == self.num_features
+            elif self._cfg.optim.cross_corr == 'cell':
+                loss = self.loss(y_pred.T.contiguous(), y_true.T.contiguous(), y_var) # loss calculated over [N,:]
+                assert y_pred.shape[1] == self.num_features
+
             if y_true.shape[0] > 1:
                 mse = self.mse(y_pred, y_true)
+                assert y_pred.shape[1] == y_true.shape[1] == self.r2_raw.num_outputs # multioutput (N, M)
                 r2_raw = self.r2_raw(y_pred, y_true)
                 r2 = self.r2(y_pred, y_true)
                 pearson_corr_raw = pearsonr(y_pred.detach().cpu().numpy(), 
-                                           y_true.detach().cpu().numpy(), 
-                                           axis=self.AXIS)
+                                            y_true.detach().cpu().numpy())
+                                            #axis=self.AXIS)
                 pearson_corr = torch.tensor(np.nanmean(pearson_corr_raw[0]), 
-                                           dtype=torch.float32, 
-                                           device=y_pred.device)
-                spearman_corr_raw = self.spearman(y_pred, y_true)
-                spearman_corr = torch.mean(spearman_corr_raw)
+                                            dtype=torch.float32, 
+                                            device=y_pred.device)
+                if self._cfg.optim.cross_corr == 'cell':
+                    # metric value for each gene
+                    assert r2_raw.shape[0] == pearson_corr_raw[0].shape[0] == self.num_features
+                if self._cfg.optim.cross_corr == 'gene':
+                    # metric value for each cell
+                    assert r2_raw.shape[0] == pearson_corr_raw[0].shape[0] == nr_cells
                 return loss, [mse, r2, pearson_corr]
             else: # single data obect in the batch
                 loss = self.loss(y_pred, y_true, y_var)

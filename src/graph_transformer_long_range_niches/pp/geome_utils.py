@@ -144,6 +144,7 @@ def prepare_geome_dataset(adata, cfg, split_key: str = 'split'):
     for category_to_iterate in category_to_iterate_list:
         cfg.dataset.spatial_neigbors_kwargs.merge_from_list(['library_key', category_to_iterate])
         spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
+        print(spatial_neigbors_kwargs)
 
         one_hot_encode_list = [prediction_obs]
 
@@ -199,7 +200,6 @@ def prepare_geome_dataset(adata, cfg, split_key: str = 'split'):
             datas_test.extend(pyg_test)
     
     if 'test' in np.unique(adata.obs[split_key]):
-        print('test')
         datas_test, adata_test = list(a2d(adata[adata.obs[split_key] == 'test']))
         return [datas_train, datas_val, datas_test], [adata_train, adata_val, adata_test]
 

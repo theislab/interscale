@@ -9,15 +9,25 @@ from graph_transformer_long_range_niches.tl import apply_mask
 
 from typing import List
 
-from graph_transformer_long_range_niches.modules import TransformerNodeEncoderHook, BaseModule, LitGCN
+from graph_transformer_long_range_niches.modules import TransformerNodeEncoderHook, BaseModule, LitGCN, LitGCNMasked
 from graph_transformer_long_range_niches.tl import pad_batch, apply_mask
 
 class LitGNNTransformerMasked(BaseModule):
-    def __init__(self, cfg, class_weights: List = None, **model_kwargs):
+    def __init__(self, 
+                 cfg, 
+                 class_weights: List = None, 
+                 pretrained_gnn_path: str = None, 
+                 **model_kwargs
+        ):
         # initialize all hyperparameters from BaseModule
         super().__init__(cfg, class_weights, **model_kwargs)
         
         assert cfg.gnn.embed_dim == cfg.transformer.d_model, "GNN and Transformer must have the same embedding dimension."
+        
+        if cfg.dataset.pct_mask_nodes > 0:
+            self.masked_nodes = True
+        else:
+            self.masked_nodes = False
         
         self.model_type = 'GNN_Transformer'
         self.output_dim = cfg.transformer.d_model
@@ -27,17 +37,22 @@ class LitGNNTransformerMasked(BaseModule):
 
         # GNN initialization
         self.gnn = LitGCN(cfg)
+        # if pretrained_gnn_path:
+        #     # Load pre-trained GNN weights
+        #     if cfg.dataset.pct_mask_nodes > 0:
+        #         self.gnn = LitGCNMasked.load_from_checkpoint(pretrained_gnn_path)
+        #     else:
+        #         self.gnn = LitGCN.load_from_checkpoint(pretrained_gnn_path)
+            
+        #     # Freeze GNN parameters
+        #     for param in self.gnn.parameters():
+        #         param.requires_grad = False
+            
+        #     print("Loaded pre-trained GNN from:", pretrained_gnn_path)
+        #     print("GNN parameters have been frozen")
         
         # Transformer encoder initialization
         self.transformer_encoder = TransformerNodeEncoderHook(cfg)
-
-        ## Prediction units
-        self.graph_pred_linear_list = torch.nn.ModuleList()
-        if 'classification' in self.prediction_task:
-            self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_classes)
-        elif 'regression' in self.prediction_task:
-            print('num features:', self.num_features)
-            self.graph_pred_linear = torch.nn.Linear(self.output_dim, self.num_features)
 
     def forward(self, batched_data):
         """
@@ -48,19 +63,23 @@ class LitGNNTransformerMasked(BaseModule):
         h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
         
         h_node = self.norm_input(h_node)
+        
+        if self.masked_nodes:
+            keep_indices = batched_data.mask
+        else:
+            keep_indices = None
 
         # Ensure masked nodes are included in padding
         padded_h_node, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
             h_node, 
             batched_data.batch, 
             self.transformer_encoder.max_seq_len, 
-            get_mask=True,
-            keep_indices=batched_data.mask  # Add parameter to ensure masked nodes are kept
+            get_mask=self.masked_nodes,
+            keep_indices=keep_indices  # Add parameter to ensure masked nodes are kept
         )
-
         transformer_out = padded_h_node
         transformer_out, src_padding_mask = self.transformer_encoder(transformer_out, src_padding_mask)  # [S+1, B, E], [B, s]
-
+        
         # ## Graph-level prediction: get cls
         if 'graph' in self.prediction_task:
             cls = transformer_out[-1,:, :] # [B, E]
@@ -72,7 +91,7 @@ class LitGNNTransformerMasked(BaseModule):
             h_graph = transformer_out[:-1] # [E, B, C]
             h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
             src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
-            masked_output = h_graph[~ src_padding_mask] # [N, E]
+            masked_output = h_graph[~src_padding_mask] # [N, E]
             out = self.graph_pred_linear(masked_output)
             return z, out, index_nodes
 
@@ -104,25 +123,29 @@ class LitGNNTransformerMasked(BaseModule):
         adjusted_mask_idx = []  # Track new positions of masked nodes
         current_offset = 0
         
+        start = 0
+        
         for i in range(batch.batch[-1] + 1):
             mask = batch.batch.eq(i)
             pad_indices = torch.tensor(pad_index_nodes[i], device=batch.x.device)
+            end = start + len(pad_indices)
 
-            for idx in mask_idx:
+            for idx in mask_idx[start:end]:
                 # Convert to tensor if not already
                 if idx in pad_indices:
                     new_idx = torch.where(pad_indices == idx)[0].item()
                     adjusted_mask_idx.append(new_idx + current_offset)
             
             current_offset += len(pad_indices)
+            start = end
             
             if 'classification' in self.prediction_task:
                 if 'node' in self.prediction_task:
-                    y_true += torch.tensor(batch.y[mask][pad_index_nodes[i]])
+                    y_true += batch.y[mask][pad_index_nodes[i]].clone().detach()
                 elif 'graph' in self.prediction_task:
-                    y_true.append(torch.tensor(batch.y[mask][-1]))
+                    y_true.append(batch.y[mask][-1].clone().detach())
             elif 'regression' in self.prediction_task:
-                y_true += torch.tensor(batch.x[mask][pad_index_nodes[i]])
+                y_true += batch.x[mask][pad_index_nodes[i]].clone().detach()
             else:
                 raise Exception('Choose a valid prediction tasks (graph or node).')
                     
@@ -227,9 +250,19 @@ class LitGNNTransformerMasked(BaseModule):
     def evaluation(self, batched_data):
         h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
 
+        if self.masked_nodes:
+            keep_indices = batched_data.mask
+        else:
+            keep_indices = None
+
+        # Ensure masked nodes are included in padding
         padded_h_node, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
-                h_node, batched_data.batch, self.transformer_encoder.max_seq_len, get_mask=True
-            )
+            h_node, 
+            batched_data.batch, 
+            self.transformer_encoder.max_seq_len, 
+            get_mask=self.masked_nodes,
+            keep_indices=keep_indices  # Add parameter to ensure masked nodes are kept
+        )
         transformer_out, src_padding_mask = self.transformer_encoder(padded_h_node, src_padding_mask)
 
         src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node

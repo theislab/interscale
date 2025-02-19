@@ -15,7 +15,7 @@ import numpy as np
 # PyTorch Lightning
 import pytorch_lightning as L
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
-from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics
+from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics, compute_dynamic_variance
 
     
 class LitGCN(L.LightningModule):
@@ -44,7 +44,7 @@ class LitGCN(L.LightningModule):
         elif 'regression' in self.prediction_task:
             if cfg.optim.cross_corr == 'gene':
                 print('cross-gene correlation metrics')
-                self.mse, self.r2_raw, self.r2, self.r2_single, self.spearman = define_regression_metrics(cfg.dataset.num_features)
+                self.mse, self.r2_raw, self.r2, self.r2_single = define_regression_metrics(cfg.dataset.num_features)
                 self.AXIS = 0 # for scipy pearsonr
             elif cfg.optim.cross_corr == 'cell':
                 print('cross-cell correlation metrics')
@@ -181,12 +181,13 @@ class LitGCN(L.LightningModule):
 
         if 'regression' in self.prediction_task:
             if self._cfg.optim.cross_corr == 'cell':
-                self.mse, self.r2_raw, self.r2, self.r2_single, self.pearson_corr, self.spearman = define_regression_metrics(y_true.shape[0]) 
+                self.mse, self.r2_raw, self.r2, self.r2_single, self.pearson_corr = define_regression_metrics(y_true.shape[0]) 
                 y_pred = y_pred.T.contiguous()
                 y_true = y_true.T.contiguous()
                 assert y_true.shape == y_pred.shape
             
-            y_var = torch.var(batch.x, dim=1, keepdim=True)  # You can adjust the estimation method
+            # Estimate variance based on the true values (e.g., using batch variance)
+            y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
             # Ensure variance is non-zero and positive
             y_var = y_var.clamp(min=1e-6)
             loss = self.loss(gnn_z, y_true, y_var)
