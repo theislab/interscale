@@ -34,9 +34,9 @@ python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca
 ## LEGNINI
 #python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/Legnini_23/legnini23_InterScale_genes_sample_gnn.yaml
 
+
 ## BASELINE
 #srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_fcnn_niche_lung5.yaml
 
 ## VISIUM BREAST CANCER
-#python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/VisiumBreastCancer/visium_gnntrans_genes.yaml
-#python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/VisiumBreastCancer/visium_gnn_genes.yaml
+srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/VisiumBreastCancer/visium_gnntrans_genes.yaml #python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/VisiumBreastCancer/visium_gnn_genes.yaml

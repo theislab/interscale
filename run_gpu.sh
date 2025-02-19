@@ -16,5 +16,5 @@ source activate GT_long_range_env #exphormer_geome
 #srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_ct.yaml
 #srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/He23/he23_gnntrans_ct.yaml #he23_gnn_ct_lung5.yaml #he23_gnn_ct.yaml #he23_gnn_niche_lung5.yaml
 #python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_ct_gnn.yaml
+srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/VisiumBreastCancer/visium_gnntrans_genes.yaml
 
-python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/CosmX_Pancreas/pancreas_gnntrans_ct_sw_2.yaml

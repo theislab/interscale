@@ -106,7 +106,7 @@ class SelfAttentionRelevance:
         
         return I
 
-def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, attention_obs=None, attention_class=None, library_key=None, split_key = 'split'):
+def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, attn_obs=None, attn_class=None, library_key=None, split_key = 'split'):
     """
     Parameters
     ----------
@@ -117,10 +117,17 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, atte
             Name of annotation column in .obs where the observation used as classes to 
         class_name: str 
             Name of class in .obs[obs_col] that we are interested in plotting the attention for
-        attention_class: str
-            If None, all classes in attention_obs are considered
+        attn_obs: str
+            Attention gradient is calculated only considering the gradient of adata.obs[attn_obs] == attn_class.
+            If None, attention gradients is calculated across all classes. 
+        attn_class: str
+            Attention gradient is calculated only considering the gradient of adata.obs[attn_obs] == attn_class.
         library_key: Optional[str]
     """
+    assert (attn_obs is None and attn_class is None) or (attn_obs is not None and attn_class is not None), \
+        "Both attention_obs and attention_class must be either None or not None together."
+    assert split_key in adata.obs
+    
     self_attention_relevance = SelfAttentionRelevance(model_transformer.transformer_encoder)
     
     # subset relevant data
@@ -157,8 +164,20 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, atte
     for batch, library_id in zip(data_loader, library_key_list):
         print('batch: ', batch, 'library_id', library_id)
         transformer_in, transformer_out, src_padding_mask, index_nodes, dec_out = model_transformer.evaluation(batch)
-        if not attention_obs:
-            attention_index = np.arange(0, len(index_nodes))
+        attention_index = np.arange(0, len(index_nodes))
+        if attn_obs is not None:
+            # Only consider the index class attention_class
+            assert attn_obs in sub_adata.obs
+            batch_obs_names = list(batch.obs_names[index_nodes].numpy().astype(int)) # remove nodes not included in index because of sequence length
+            selected_obs = sub_adata.obs.loc[sub_adata.obs['obs_names'].astype(int).isin(batch_obs_names)]
+            selected_obs['index'] = range(0, len(selected_obs))
+            if attn_class in np.unique(selected_obs[attn_obs]):
+                attention_index = np.array(selected_obs.loc[(selected_obs[attn_obs] == attn_class)]['index'])
+                assert attention_index.max() < batch.obs_names.max()
+            else:
+                print(f'{attn_class} not in adata.obs[{attn_obs}] for {library_id}. SKIP')
+                continue 
+
         I = self_attention_relevance.generate_relevance(transformer_in, src_padding_mask, category_index=attention_index)
         cls = I[:1, 1:].cpu().detach().numpy() 
         print('cls', len(cls[0]))
@@ -192,7 +211,7 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, atte
         transformer_in_dict[str(library_id)] = transformer_in
         transformer_out_dict[str(library_id)] = transformer_out
         
-    return sub_adata, attention_matrix_dict, transformer_in_dict, transformer_out_dict, dec_out
+    return sub_adata, attention_matrix_dict, transformer_in_dict, transformer_out_dict
 
 def normalized_attention(attention_matrix, clamp = 0.05):
     np.fill_diagonal(attention_matrix.values, 0)
@@ -207,7 +226,9 @@ def normalized_attention(attention_matrix, clamp = 0.05):
 
 def normalized_class_attention(attention_matrix, clamp: int = 0.05):
     """
-    Returns the normalized attention for each class to class in the attention matrix
+    Given an attention matrix of size NxN with K classes it returns a normalized attention matrix KxK.
+    Each element in the normalized attention matrix can be interpreted as class k_i paying attention to class k_j, where i and j are elements of the K classes.
+
     Parameters
     ----------
         attention_matrix: PandasDataframe
@@ -328,7 +349,7 @@ def plot_attention_sender_receiver(
 
     for i, sender_type in enumerate(sender):
         for j, (current_sender, current_receiver) in enumerate([(sender_type, receiver), (receiver, sender_type)]):
-            ax = axes[i, j]
+            ax = axes[i][j] if num_senders > 1 else axes[j]
 
             # Extract the attention matrix from .obsm
             attention_matrix = adata.obsm[attn_matrix_key].copy()

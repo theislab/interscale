@@ -9,6 +9,8 @@ __pycache__/
 *.png
 *.yaml
 *.log
+*.txt
+*.pyc
 
 # ignore ALL files in ANY directory named 
 figures/
@@ -21,3 +23,6 @@ src/confi_files/
 InterScale_hyperparameter_sweep/
 src/graph_transformer_long_range_niches/tmp/
 src/graph_transformer_long_range_niches/logs/
+src/graph_transformer_long_range_niches/model/__pycache__/
+src/graph_transformer_long_range_niches/tl/__pycache__/ 
+src/graph_transformer_long_range_niches/modules/__pycache__/
