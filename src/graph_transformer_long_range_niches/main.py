@@ -122,17 +122,11 @@ def main(cfg_path):
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     if 'classification' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
-<<<<<<< HEAD
     elif 'regression' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
     else:
         raise Exception("Training must be classification or regression based.")
     
-=======
-    if 'regression' in cfg.dataset.prediction_task:
-        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
-
->>>>>>> masking
     data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key[-1]}_{len(cfg.dataset.library_key)}_{cfg.optim.seed}"
     run_name = f"{data_name}_{cfg.model.model_type}"
 
@@ -144,7 +138,6 @@ def main(cfg_path):
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
         if 'classification' in cfg.dataset.prediction_task:
             checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
-<<<<<<< HEAD
         elif 'regression' in cfg.dataset.prediction_task:
             if cfg.optim.loss == 'MSELoss':
                 checkpoint_callback = ModelCheckpoint(monitor="val_mse", mode="min", filename=run_name) 
@@ -156,11 +149,6 @@ def main(cfg_path):
             raise Exception("Training must be classification or regression based.")
         
         print('Training Wandb...')
-=======
-        if 'regression' in cfg.dataset.prediction_task:
-            checkpoint_callback = ModelCheckpoint(monitor="val_r2", mode="max", filename=run_name) 
-        print('Training...')
->>>>>>> masking
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(cfg.model.n_epochs), 
                          logger=wandb_logger, 

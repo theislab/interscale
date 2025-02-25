@@ -13,5 +13,6 @@ def get_transformer_cfg(cfg):
     cfg.transformer.activation_func = "relu"
     cfg.transformer.num_layers = 2
     cfg.transformer.max_seq_len = 2000
+    cfg.transformer.long_range_attention = True # if True, takes inverse of adjacency matrix as long-range attention mask
     
     return cfg

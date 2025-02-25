@@ -15,9 +15,14 @@ import numpy as np
 # PyTorch Lightning
 import pytorch_lightning as L
 from pytorch_lightning.callbacks import Timer, Callback
+from graph_transformer_long_range_niches.tl.masking import apply_mask
+from graph_transformer_long_range_niches.tl.utils import (
+    define_loss,
+    define_classification_metrics,
+    define_regression_metrics,
+    compute_dynamic_variance
+)
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
-from graph_transformer_long_range_niches.tl import apply_mask
-from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics, compute_dynamic_variance
 
 class LitGCNMasked(L.LightningModule):
     def __init__(self,

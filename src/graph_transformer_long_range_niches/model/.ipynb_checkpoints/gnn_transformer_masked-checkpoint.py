@@ -9,8 +9,7 @@ from torch import nn
 from typing import List
 
 from graph_transformer_long_range_niches.modules import TransformerNodeEncoderHook, BaseModule, LitGCN, LitGCNMasked
-from graph_transformer_long_range_niches.tl.utils import pad_batch, create_transformer_attention_mask_from_edges
-from graph_transformer_long_range_niches.tl.masking import apply_mask
+from graph_transformer_long_range_niches.tl import pad_batch, apply_mask
 
 class LitGNNTransformerMasked(BaseModule):
     def __init__(self, 
@@ -21,8 +20,6 @@ class LitGNNTransformerMasked(BaseModule):
         ):
         # initialize all hyperparameters from BaseModule
         super().__init__(cfg, class_weights, **model_kwargs)
-        
-        self._cfg = cfg
         
         assert cfg.gnn.embed_dim == cfg.transformer.d_model, "GNN and Transformer must have the same embedding dimension."
         
@@ -79,14 +76,8 @@ class LitGNNTransformerMasked(BaseModule):
             get_mask=self.masked_nodes,
             keep_indices=keep_indices  # Add parameter to ensure masked nodes are kept
         )
-        
-        if self._cfg.transformer.long_range_attention:
-            attention_mask = create_transformer_attention_mask_from_edges(batched_data.edge_index, len(batched_data.obs_names), batched_data.batch, index_nodes, self.transformer_encoder.n_heads)
-        else:
-            attention_mask = None
-            
         transformer_out = padded_h_node
-        transformer_out, src_padding_mask = self.transformer_encoder(transformer_out, src_padding_mask, mask = attention_mask)  # [S+1, B, E], [B, s]
+        transformer_out, src_padding_mask = self.transformer_encoder(transformer_out, src_padding_mask)  # [S+1, B, E], [B, s]
         
         # ## Graph-level prediction: get cls
         if 'graph' in self.prediction_task:

@@ -5,7 +5,7 @@ from .gnn_transformer_masked import LitGNNTransformerMasked
 
 __all__ = [
     "LitGNNTransformer",
+    "LitGNNTransformerMasked",
     "LitPCATransformer",
     "BaselineFCNN",
-    "LitGNNTransformerMasked"
 ]
