@@ -34,13 +34,17 @@ def main(cfg_path):
 
     # Split data into train, val (and test)
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
-    if 'graph' in cfg.dataset.prediction_task:
-        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, stratify_groups = cfg.dataset.prediction_obs)
-    elif cfg.dataset.stratify_group is not None:
-        print('Stratifying by group: ', cfg.dataset.stratify_group)
-        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, stratify_groups = cfg.dataset.stratify_group)
+    
+    if cfg.dataset.split_key in adata.obs.columns:
+        print('Split already exists in adata.obs')
     else:
-        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed)
+        if 'graph' in cfg.dataset.prediction_task:
+            split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, split_key = cfg.dataset.split_key, stratify_groups = cfg.dataset.prediction_obs)
+        elif cfg.dataset.stratify_group is not None:
+            print('Stratifying by group: ', cfg.dataset.stratify_group)
+            split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, split_key = cfg.dataset.split_key, stratify_groups = cfg.dataset.stratify_group)
+        else:
+            split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, split_key = cfg.dataset.split_key)
 
     if cfg.optim.loss == 'WeightedCE':
         class_weigths = compute_class_weight("balanced", classes = np.unique(adata.obs[cfg.dataset.prediction_obs]), y=adata.obs[cfg.dataset.prediction_obs])
@@ -154,7 +158,7 @@ def main(cfg_path):
                          logger=wandb_logger, 
                          enable_progress_bar=False, 
                          callbacks=[lr_monitor, checkpoint_callback, early_stop_callback],
-                         log_every_n_steps=steps_per_epoch,
+                         log_every_n_steps=1,
                          # Sanity checks: Debugging model
                          #overfit_batches=1,
                          )
@@ -164,7 +168,7 @@ def main(cfg_path):
                          max_epochs=int(cfg.model.n_epochs),
                          enable_progress_bar=False,
                          callbacks=[lr_monitor, early_stop_callback],
-                         log_every_n_steps=steps_per_epoch,
+                         log_every_n_steps=1,
                          # Sanity checks: Debugging model
                          #overfit_batches=1,
                          )

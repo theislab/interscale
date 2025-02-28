@@ -79,17 +79,17 @@ def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, num_n
         index_nodes (list): List of indices of nodes to keep [B, S] (range: 0, num_nodes)
         num_heads (int): Number of attention heads
     Returns:
-        torch.Tensor: Attention mask of shape [num_batch*num_heads, max_seq_len, max_seq_len]
+        torch.Tensor: Attention mask of shape [num_batch*num_heads, max_seq_len, max_seq_len] with 1s for no attention (True -> mask attention) and 0s for attention (False -> no mask)
     """
     num_batch = batch[-1].item() + 1
     max_seq_len = max(len(nodes) for nodes in index_nodes)
     
     # Initialize with 1s (no attention allowed) 
-    attention_mask = torch.ones((num_batch*num_heads, max_seq_len+1, max_seq_len+1), device=edge_index.device)
+    attention_mask = torch.zeros((num_batch*num_heads, max_seq_len+1, max_seq_len+1), device=edge_index.device)
     
     # Create full adjacency matrix + 1 for cls token (end of sequence)
     adj_matrix = torch.ones((num_nodes, num_nodes), device=edge_index.device) 
-    adj_matrix[edge_index[0], edge_index[1]] = 0  # Set 0s for connected nodes
+    adj_matrix[edge_index[0], edge_index[1]] = 1  
     
     # For each batch, extract the submatrix for kept nodes
     for b in range(num_batch):
@@ -98,8 +98,8 @@ def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, num_n
         # Extract submatrix for the kept nodes
         batch_mask = adj_matrix[nodes][:, nodes]  # Get submatrix for kept nodes
         # Add row and column of ones for CLS token - full attention
-        batch_mask = torch.cat([batch_mask, torch.ones(batch_mask.size(0), 1, device=batch_mask.device)], dim=1)  # Add column
-        batch_mask = torch.cat([batch_mask, torch.ones(1, batch_mask.size(1), device=batch_mask.device)], dim=0)  # Add row
+        batch_mask = torch.cat([batch_mask, torch.zeros(batch_mask.size(0), 1, device=batch_mask.device)], dim=1)  # Add column
+        batch_mask = torch.cat([batch_mask, torch.zeros(1, batch_mask.size(1), device=batch_mask.device)], dim=0)  # Add row
         attention_mask[b*num_heads:b*num_heads+num_heads, :seq_len+1, :seq_len+1] = batch_mask
     return attention_mask
 

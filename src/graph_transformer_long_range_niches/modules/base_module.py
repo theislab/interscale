@@ -84,7 +84,7 @@ class BaseModule(L.LightningModule):
 
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
 
-    def common_training_step(self, batch, batch_idx):
+    def common_training_step(self, batch):
         loss, metric_list = self._common_step(batch)
         if 'classification' in self.prediction_task:
             acc, f1_score_micro, f1_score_macro, f1_score_per_class = metric_list
@@ -110,7 +110,7 @@ class BaseModule(L.LightningModule):
     def _common_step(self, batch):
         raise NotImplementedError("Subclasses must implement the _common_step method.")
 
-    def common_validation_step(self, batch, batch_idx):
+    def common_validation_step(self, batch):
         loss, metric_list = self._common_step(batch)
         if 'classification' in self.prediction_task:
             acc, f1_score_micro, f1_score_macro, f1_score_per_class = metric_list
@@ -145,7 +145,7 @@ class BaseModule(L.LightningModule):
             }
             for class_idx in range(self.num_classes):
                 log_dict[f'test_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
-            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
+            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True, sync_dist=True)
         elif 'regression' in self.prediction_task:
             mse, r2, pearson_corr = metric_list
             log_dict = {
@@ -153,7 +153,8 @@ class BaseModule(L.LightningModule):
                 'test_r2': r2,
                 'test_pearson_corr': pearson_corr,
             }
-            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
+            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True, sync_dist=True)
+            print(f"Test step (regression) - Loss: {loss:.4f}, MSE: {mse:.4f}, R2: {r2:.4f}")
         return loss
     
     def _common_step_classification_metrics(self, y_pred, y_true, mask_idx=None):

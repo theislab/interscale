@@ -19,6 +19,7 @@ def get_dataset_cfg(cfg):
     cfg.dataset.library_key = []
     cfg.dataset.fine_tuning = []
     cfg.dataset.subset_dict = CN()
+    cfg.dataset.split_key = "split"
     cfg.dataset.obs_split = ""
 
     cfg.dataset.spatial_neigbors_kwargs = CN()

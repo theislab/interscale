@@ -110,11 +110,11 @@ class LitGNNTransformerMasked(BaseModule):
     def configure_optimizers(self):
         return self.common_configure_optimizers()
 
-    def training_step(self, batch, batch_idx):
-        return self.common_training_step(batch, batch_idx)
+    def training_step(self, batch):
+        return self.common_training_step(batch)
 
-    def validation_step(self, batch, batch_idx):
-        return self.common_validation_step(batch, batch_idx)
+    def validation_step(self, batch):
+        return self.common_validation_step(batch)
 
     def test_step(self, batch):
         return self.common_test_step(batch)
@@ -270,8 +270,12 @@ class LitGNNTransformerMasked(BaseModule):
             self.transformer_encoder.max_seq_len, 
             get_mask=self.masked_nodes,
             keep_indices=keep_indices  # Add parameter to ensure masked nodes are kept
-        )
-        transformer_out, src_padding_mask = self.transformer_encoder(padded_h_node, src_padding_mask)
+        )       
+        if self._cfg.transformer.long_range_attention:
+            attention_mask = create_transformer_attention_mask_from_edges(batched_data.edge_index, len(batched_data.obs_names), batched_data.batch, index_nodes, self.transformer_encoder.n_heads)
+        else:
+            attention_mask = None
+        transformer_out, src_padding_mask = self.transformer_encoder(padded_h_node, src_padding_mask, mask = attention_mask)
 
         src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
 
