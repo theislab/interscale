@@ -26,11 +26,6 @@ class LitGNNTransformerMasked(BaseModule):
         
         assert cfg.gnn.embed_dim == cfg.transformer.d_model, "GNN and Transformer must have the same embedding dimension."
         
-        if cfg.dataset.pct_mask_nodes > 0:
-            self.masked_nodes = True
-        else:
-            self.masked_nodes = False
-        
         self.model_type = 'GNN_Transformer'
         self.output_dim = cfg.transformer.d_model
 
@@ -62,6 +57,7 @@ class LitGNNTransformerMasked(BaseModule):
             batched_data: Pytorch geometric object 
                 batched_data.x = [N, F]
         """
+        # Local step
         h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
         
         h_node = self.norm_input(h_node)
@@ -258,18 +254,13 @@ class LitGNNTransformerMasked(BaseModule):
     def evaluation(self, batched_data):
         h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
 
-        if self.masked_nodes:
-            keep_indices = batched_data.mask
-        else:
-            keep_indices = None
-
         # Ensure masked nodes are included in padding
         padded_h_node, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
             h_node, 
             batched_data.batch, 
             self.transformer_encoder.max_seq_len, 
-            get_mask=self.masked_nodes,
-            keep_indices=keep_indices  # Add parameter to ensure masked nodes are kept
+            get_mask=False,
+            keep_indices=None  # Add parameter to ensure masked nodes are kept
         )       
         if self._cfg.transformer.long_range_attention:
             attention_mask = create_transformer_attention_mask_from_edges(batched_data.edge_index, len(batched_data.obs_names), batched_data.batch, index_nodes, self.transformer_encoder.n_heads)

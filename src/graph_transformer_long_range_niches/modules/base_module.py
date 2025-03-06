@@ -13,7 +13,8 @@ from scipy.stats import pearsonr
 import numpy as np
 
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
-from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics, compute_dynamic_variance
+from graph_transformer_long_range_niches.tl.masking import apply_mask
+from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics, compute_dynamic_variance, create_transformer_attention_mask_from_edges, pad_batch
 
 class BaseModule(L.LightningModule):
     """Base class for all models (Local, Global, Local+Global)"""
@@ -32,6 +33,11 @@ class BaseModule(L.LightningModule):
         self.num_classes = cfg.dataset.num_classes
         self.num_features = cfg.dataset.num_features
         self.max_seq_len = cfg.transformer.max_seq_len
+        
+        if cfg.dataset.pct_mask_nodes > 0:
+            self.masked_nodes = True
+        else:
+            self.masked_nodes = False
 
         #define loss
         self.loss = define_loss(cfg, class_weights)
@@ -83,7 +89,10 @@ class BaseModule(L.LightningModule):
                                              max_epochs=100000)
 
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
-
+    
+    def _common_step(self, batch):
+        raise NotImplementedError("Subclasses must implement the _common_step method.")
+    
     def common_training_step(self, batch):
         loss, metric_list = self._common_step(batch)
         if 'classification' in self.prediction_task:
@@ -106,9 +115,6 @@ class BaseModule(L.LightningModule):
             }
             self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
-    
-    def _common_step(self, batch):
-        raise NotImplementedError("Subclasses must implement the _common_step method.")
 
     def common_validation_step(self, batch):
         loss, metric_list = self._common_step(batch)

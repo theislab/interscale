@@ -26,10 +26,11 @@ def predict_gene_r2(adata: AnnData, layers_pred: str, top_n: int = 5) -> pd.Data
     
     # Compute R² scores for each gene
     r2_scores = [r2_score(y_true[:, i], y_pred[:, i]) for i in range(y_true.shape[1])]
+    r2_scores_log  = [np.log(r2_score(y_true[:, i], y_pred[:, i]) + 1) for i in range(y_true.shape[1])]
     
     # Convert to DataFrame for easy sorting
     genes = adata.var_names  # Gene names
-    r2_df = pd.DataFrame({'gene': genes, 'r2': r2_scores})
+    r2_df = pd.DataFrame({'gene': genes, 'r2': r2_scores, 'r2_log': r2_scores_log})
     
     # Get top 5 genes for each model
     top = r2_df.nlargest(top_n, 'r2')
@@ -41,6 +42,7 @@ def predict_gene_r2(adata: AnnData, layers_pred: str, top_n: int = 5) -> pd.Data
 def compare_model_variance(df1: pd.DataFrame, df2: pd.DataFrame, 
                          model1_name: str = "Model 1", 
                          model2_name: str = "Model 2",
+                         metric: str = 'r2',
                          top_n: int | None = None) -> pd.DataFrame:
     """
     Compare explained variance between two models using their top R² scores.
@@ -59,7 +61,7 @@ def compare_model_variance(df1: pd.DataFrame, df2: pd.DataFrame,
     # Calculate explained variance (0.5% maximum per model)
     def calc_explained_variance(df):
         df = df.copy()  # Create a copy to avoid modifying the original
-        df['exp'] = df['r2'] / 2
+        df['exp'] = df[metric] / 2
         df['unexp'] = 0.5 - df['exp']
         return df
     
@@ -68,8 +70,8 @@ def compare_model_variance(df1: pd.DataFrame, df2: pd.DataFrame,
 
     if top_n is not None:
         # Get top genes from both models
-        top1_genes = df1.nlargest(top_n, 'r2').index
-        top2_genes = df2.nlargest(top_n, 'r2').index
+        top1_genes = df1.nlargest(top_n, metric).index
+        top2_genes = df2.nlargest(top_n, metric).index
         
         # Combine unique genes from both models
         all_top_genes = pd.Index(set(top1_genes) | set(top2_genes))
@@ -83,19 +85,21 @@ def compare_model_variance(df1: pd.DataFrame, df2: pd.DataFrame,
     # Add metrics for model 1
     combined_df[f'exp_{model1_name}'] = df1.loc[all_top_genes, 'exp']
     combined_df[f'unexp_{model1_name}'] = df1.loc[all_top_genes, 'unexp']
-    combined_df[f'r2_{model1_name}'] = df1.loc[all_top_genes, 'r2']
+    combined_df[f'{metric}_{model1_name}'] = df1.loc[all_top_genes, metric]
     
     # Add metrics for model 2
     combined_df[f'exp_{model2_name}'] = df2.loc[all_top_genes, 'exp']
     combined_df[f'unexp_{model2_name}'] = df2.loc[all_top_genes, 'unexp']
-    combined_df[f'r2_{model2_name}'] = df2.loc[all_top_genes, 'r2']
+    combined_df[f'{metric}_{model2_name}'] = df2.loc[all_top_genes, metric]
     
     # Fill NaN values with 0 for exp and 0.5 for unexp
     combined_df = combined_df.fillna({
         f'exp_{model1_name}': 0,
         f'exp_{model2_name}': 0,
         f'unexp_{model1_name}': 0.5,
-        f'unexp_{model2_name}': 0.5
+        f'unexp_{model2_name}': 0.5,
+        f'{metric}_{model1_name}': 0,
+        f'{metric}_{model2_name}': 0,
     })
     
     # Calculate total unexplained variance (sum of individual unexplained variances)

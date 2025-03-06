@@ -35,13 +35,12 @@ class TransformerNodeEncoderHook(nn.Module):
         self.cls_embedding = nn.Parameter(torch.randn([1, 1, self.d_model], requires_grad=True))
 
 
-    def forward(self, padded_h_node, src_padding_mask, mask,
-                register_hook: bool = False):
+    def forward(self, padded_h_node, src_padding_mask, mask = None, register_hook: bool = False):
         """
         Input: 
             padded_h_node: [n_b x B X h_d] with n_b: dimension of batch, B: batch size, h_d: dimension of transformer
             src_padding_mask: [B x n_b] matrix indicating the size of the padding mask to be ignored during calculation 
-            mask: [n_b x n_b] matrix indicating the long-range connections (inverse of adjacency matrix)
+            mask: [n_b x n_b] matrix indicating the long-range connections (inverse of adjacency matrix). Default: None
         """
         if register_hook:
             for encoder in self.transformer_encoder.layers:

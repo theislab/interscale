@@ -1,4 +1,4 @@
-from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformer, BaselineFCNN, LitGNNTransformerMasked
+from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformerMasked, BaselineFCNN, LitGNNTransformerMasked
 from graph_transformer_long_range_niches.pp import prepare_geome_dataset, split_adata
 from graph_transformer_long_range_niches.modules import LitGCN, LitGCNMasked
 from graph_transformer_long_range_niches.tl import MaskedNodeLightningDataset
@@ -57,7 +57,7 @@ def main_sweep(cfg_path, sweep_goal):
                 cfg.gnn.hidden_dim = sweep_config['gnn.hidden_dim']
                 cfg.gnn.embed_dim = sweep_config['gnn.embed_dim']
                 cfg.gnn.dropout = sweep_config['gnn.dropout']
-            if cfg.model.model_type == 'pca-transformer' or cfg.model.model_type == 'gnn-transformer':
+            if 'transformer' in cfg.model.model_type:
                 print('transformer configs')
                 cfg.transformer.d_model = sweep_config['gnn.embed_dim'] # input transformer dimension equal to gnn embed dim
                 cfg.transformer.dim_feedforward = sweep_config['transformer.dim_feedforward']
@@ -65,25 +65,27 @@ def main_sweep(cfg_path, sweep_goal):
                 cfg.transformer.n_heads = sweep_config['transformer.n_heads']
                 cfg.transformer.dropout = sweep_config['transformer.dropout']
                 #cfg.transformer.max_seq_len = sweep_run.config.transformer.max_seq_len
-        elif sweep_goal == 'parameter_space':
+        elif sweep_goal == 'parameter':
             print('parameter space sweep')
-            if cfg.model.model_type == 'gnn-transformer' or cfg.model.model_type == 'gnn':
+            if 'gnn' in cfg.model.model_type:
                 print('gnn configs')
                 cfg.gnn.num_layers = sweep_config['gnn.num_layers']
                 cfg.gnn.hidden_dim = sweep_config['gnn.hidden_dim']
-                # Ensure embed_dim doesn't exceed hidden_dim
                 cfg.gnn.embed_dim = sweep_config['gnn.embed_dim']
-            if cfg.model.model_type == 'pca-transformer' or cfg.model.model_type == 'gnn-transformer':
+                assert cfg.gnn.num_layers == sweep_config['gnn.num_layers'] and cfg.gnn.hidden_dim == sweep_config['gnn.hidden_dim'] and cfg.gnn.embed_dim == sweep_config['gnn.embed_dim']
+            if 'transformer' in cfg.model.model_type:
                 print('transformer configs')
                 cfg.transformer.d_model = sweep_config['gnn.embed_dim'] # input transformer dimension equal to gnn embed dim
                 cfg.transformer.dim_feedforward = sweep_config['transformer.dim_feedforward']
                 cfg.transformer.num_layers = sweep_config['transformer.num_layers']
                 cfg.transformer.n_heads = sweep_config['transformer.n_heads']
+                assert cfg.transformer.d_model == sweep_config['gnn.embed_dim'] and cfg.transformer.num_layers == sweep_config['transformer.num_layers']
         elif sweep_goal == 'robustness':
             print('robustness sweep')
-            cfg.dataset.spatial_neigbors_kwargs.radius = sweep_config['dataset']['spatial_neigbors_kwargs']['radius']
-            cfg.dataset.pct_mask_nodes =  sweep_config['dataset']['pct_mask_nodes']
-            cfg.model.decoder.type = sweep_config['model']['decoder']['type']
+            cfg.dataset.spatial_neigbors_kwargs.radius = sweep_config['dataset.spatial_neigbors_kwargs.radius']
+            cfg.dataset.split_key = sweep_config['dataset.split_key']
+            cfg.dataset.pct_mask_nodes =  sweep_config['dataset.pct_mask_nodes']
+            cfg.model.decoder.type = sweep_config['model.decoder.type']
         elif sweep_goal == 'experiment':    
             print('experiment sweep')
             cfg.optim.seed = sweep_config['optim.seed']        
@@ -102,13 +104,16 @@ def main_sweep(cfg_path, sweep_goal):
 
     # Split data into train, val (and test)
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
-    if 'graph' in cfg.dataset.prediction_task:
-        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, stratify_groups = cfg.dataset.prediction_obs)
-    elif cfg.dataset.stratify_group is not None:
-        print('Stratifying by group: ', cfg.dataset.stratify_group)
-        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, stratify_groups = cfg.dataset.stratify_group)
+    if cfg.dataset.split_key in adata.obs.columns:
+        print('Split already exists in adata.obs')
     else:
-        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed)
+        if 'graph' in cfg.dataset.prediction_task:
+            split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, split_key = cfg.dataset.split_key, stratify_groups = cfg.dataset.prediction_obs)
+        elif cfg.dataset.stratify_group is not None:
+            print('Stratifying by group: ', cfg.dataset.stratify_group)
+            split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, split_key = cfg.dataset.split_key, stratify_groups = cfg.dataset.stratify_group)
+        else:
+            split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, split_key = cfg.dataset.split_key)
 
     if cfg.optim.loss == 'WeightedCE':
         class_weigths = compute_class_weight("balanced", classes = np.unique(adata.obs[cfg.dataset.prediction_obs]), y=adata.obs[cfg.dataset.prediction_obs])
@@ -180,7 +185,18 @@ def main_sweep(cfg_path, sweep_goal):
             model = BaselineFCNN(cfg)
         elif cfg.model.model_type == 'pca-transformer':
             print('Load PCA Transformer...')
-            model = LitPCATransformer(cfg, class_weigths)
+            model = LitPCATransformerMasked(cfg, class_weigths)
+        
+        # Log total number of parameters
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        if cfg.wandb.use:
+            wandb.log({
+                "total_parameters": total_params,
+                "trainable_parameters": trainable_params
+            })
+            print(f"Total parameters: {total_params:,}")
+            print(f"Trainable parameters: {trainable_params:,}")
     except ValueError:
         print("No valid model defined in .yaml file.")
 
@@ -261,17 +277,6 @@ def main_sweep(cfg_path, sweep_goal):
         run.finish()
         wandb.finish()
 
-
-def run_sweep(sweep_config, cfg, sweep_goal):
-    sweep_id = wandb.sweep(sweep_config, project='InterScale_hyperparameter_sweep')
-    
-    def train_sweep_function():
-        # Pass the sweep run object to main
-        main_sweep(cfg, sweep_goal, sweep_run=wandb.run)
-    
-    # Run the sweep agent
-    wandb.agent(sweep_id, function=train_sweep_function)
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GTLongRange')
 
@@ -289,27 +294,24 @@ if __name__ == '__main__':
         yaml_config = yaml.safe_load(f)
     
     sweep_config = yaml_config['sweep_config']
-            
-    if args.sweep_goal == 'parameter_space':
-        print("Parameter space sweep")
-        parameter_dict = {}
-
-        if args.model_type == 'gnn' or args.model_type == 'gnn-transformer':
-            parameter_dict.update({
-                # GNN configs
-                'gnn.num_layers': {'values': [2,4]},
-                'gnn.hidden_dim': {'values': [32, 64, 128, 256, 512]},
-                'gnn.embed_dim': {'values': [16, 32, 64, 128, 256, 512]},  # List all possible values
-            })
-
-        if args.model_type == 'gnn-transformer' or args.model_type == 'pca-transformer':
-            parameter_dict.update({ 
-                # Transformer configs
-                'transformer.dim_feedforward': {'values': [32, 64, 128, 256, 512]},  # List all possible values
-                'transformer.num_layers': {'values': [1,2,4]},
-                'transformer.n_heads': {'values': [2,4,6]},
-            })
-
+    
+    if args.prediction_task == 'classification':
+        sweep_config.update({
+            'metric': {
+                'name': 'val_acc', 
+                'goal': 'maximize'},  # Use 'val_r2' for regression tasks
+        })
+    elif args.prediction_task == 'regression':
+        sweep_config.update({
+            'metric': {
+                'name': 'val_r2', 
+                'goal': 'maximize'},  # Use 'val_r2' for regression tasks
+        })
+    
+    if "transformer" not in args.model_type:
+        transformer_keys = [key for key in sweep_config['parameters'] if key.startswith("transformer.")]
+        for key in transformer_keys:
+            del sweep_config['parameters'][key]
 
     print(sweep_config)
     

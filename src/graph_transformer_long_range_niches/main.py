@@ -152,6 +152,16 @@ def main(cfg_path):
         else:
             raise Exception("Training must be classification or regression based.")
         
+        # Log total number of parameters
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        wandb.log({
+            "total_parameters": total_params,
+            "trainable_parameters": trainable_params
+        })
+        print(f"Total parameters: {total_params:,}")
+        print(f"Trainable parameters: {trainable_params:,}")
+        
         print('Training Wandb...')
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(cfg.model.n_epochs), 

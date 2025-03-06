@@ -123,6 +123,13 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, attn
         attn_class: str
             Attention gradient is calculated only considering the gradient of adata.obs[attn_obs] == attn_class.
         library_key: Optional[str]
+        
+    Return
+    ------
+        sub_adata: AnnData
+            
+            with .obsm['attention_matrix']: attention values for each cell
+            with .obs['cls']: CLS token values
     """
     assert (attn_obs is None and attn_class is None) or (attn_obs is not None and attn_class is not None), \
         "Both attention_obs and attention_class must be either None or not None together."
@@ -160,6 +167,8 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, attn
     transformer_in_dict = {}
     transformer_out_dict = {}
 
+    obsm_key = "attention_matrix"
+    sub_adata.obsm[obsm_key] = np.full((sub_adata.n_obs, sub_adata.n_obs), np.nan)
     
     for batch, library_id in zip(data_loader, library_key_list):
         print('batch: ', batch, 'library_id', library_id)
@@ -194,9 +203,6 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, attn
             sub_adata.obs.loc[final_indices, 'cls'] = cls[0]
             attention_matrix_df = pd.DataFrame(
                 I[1:, 1:].cpu().detach().numpy(),
-                # TODO: check if this is correct
-                # index=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]],
-                # columns=sub_adata.obs_names[sub_adata.obs[library_key]==library_id][index_nodes[0]]
                 index = final_indices,
                 columns = final_indices
             )
@@ -210,6 +216,13 @@ def calculate_attention(adata, cfg, model_transformer, obs_col, class_name, attn
         attention_matrix_dict[str(library_id)] = attention_matrix_df
         transformer_in_dict[str(library_id)] = transformer_in
         transformer_out_dict[str(library_id)] = transformer_out
+
+        if library_key:
+            final_idx_positions = sub_adata.obs.index.get_indexer(final_indices)
+            sub_adata.obsm[obsm_key][np.ix_(final_idx_positions, final_idx_positions)] = attention_matrix_df.values
+        else:
+            index_node_positions = sub_adata.obs.index.get_indexer(index_nodes[0])
+            sub_adata.obsm[obsm_key][np.ix_(index_node_positions, index_node_positions)] = attention_matrix_df.values
         
     return sub_adata, attention_matrix_dict, transformer_in_dict, transformer_out_dict
 
