@@ -4,6 +4,8 @@ import pandas as pd
 from sklearn.metrics import r2_score
 import seaborn as sns
 import matplotlib.pyplot as plt
+from scipy.stats import rankdata
+
 
 def predict_gene_r2(adata: AnnData, layers_pred: str, top_n: int = 5) -> pd.DataFrame:
     """
@@ -27,10 +29,11 @@ def predict_gene_r2(adata: AnnData, layers_pred: str, top_n: int = 5) -> pd.Data
     # Compute R² scores for each gene
     r2_scores = [r2_score(y_true[:, i], y_pred[:, i]) for i in range(y_true.shape[1])]
     r2_scores_log  = [np.log(r2_score(y_true[:, i], y_pred[:, i]) + 1) for i in range(y_true.shape[1])]
+    r2_ranked = rankdata(r2_scores, method="average")
     
     # Convert to DataFrame for easy sorting
     genes = adata.var_names  # Gene names
-    r2_df = pd.DataFrame({'gene': genes, 'r2': r2_scores, 'r2_log': r2_scores_log})
+    r2_df = pd.DataFrame({'gene': genes, 'r2': r2_scores, 'r2_log': r2_scores_log, 'r2_rank': r2_ranked})
     
     # Get top 5 genes for each model
     top = r2_df.nlargest(top_n, 'r2')
@@ -171,7 +174,6 @@ def plot_lfc_scatter(df, model1_name, model2_name, metric='r2'):
 
     # Highlight top genes in both plots
     top_genes = df.loc[df[[f'{metric}_{model1_name}', f'{metric}_{model2_name}']].max(axis=1) > 0.1, 'gene']
-    print(top_genes)
     for gene in top_genes:
         gene_data = df[df['gene'] == gene]
         axes[0].text(gene_data[f'{metric}_{model1_name}'].values[0], 
@@ -184,3 +186,74 @@ def plot_lfc_scatter(df, model1_name, model2_name, metric='r2'):
 
     plt.tight_layout()
     plt.show()
+
+def plot_r2_gene_ranks(local_df, global_df, top_n=5, return_top_genes=False):
+    """
+    Plots the rank comparison of genes between local and global models, 
+    highlighting the top_n genes that are:
+    - Most locally influenced (blue)
+    - Most globally influenced (red)
+    - Best predicted overall (green, based on highest average rank)
+    
+    Parameters:
+    - local_df (pd.DataFrame): DataFrame containing 'gene' and 'r2_rank' for the local model.
+    - global_df (pd.DataFrame): DataFrame containing 'gene' and 'r2_rank' for the global model.
+    - top_n (int): Number of top genes to highlight for local/global influence and best predictions.
+    - return_top_genes (bool): Whether to return DataFrames of top genes.
+
+    Returns:
+    - If return_top_genes=True, returns (top_local_genes, top_global_genes, top_best_genes).
+      Otherwise, returns None.
+    """
+
+    # Select relevant columns and rename for clarity
+    local_df = local_df[['gene', 'r2_rank']].rename(columns={'r2_rank': 'Local Rank'})
+    global_df = global_df[['gene', 'r2_rank']].rename(columns={'r2_rank': 'Global Rank'})
+    
+    # Merge on 'gene'
+    merged_df = pd.merge(local_df, global_df, on='gene', how='inner')
+    
+    # Compute rank difference
+    merged_df['Rank Difference'] = merged_df['Local Rank'] - merged_df['Global Rank']
+    
+    # Compute overall prediction quality (higher avg rank means better prediction)
+    merged_df['Avg Rank'] = (merged_df['Local Rank'] + merged_df['Global Rank']) / 2
+    
+    # Get top_n genes in each category
+    top_local_genes = merged_df.nsmallest(top_n, "Rank Difference")  # More local-driven
+    top_global_genes = merged_df.nlargest(top_n, "Rank Difference")  # More global-driven
+    top_best_genes = merged_df.nlargest(top_n, "Avg Rank")  # Best overall predicted genes
+    
+    # Plot all genes
+    plt.figure(figsize=(8, 8))
+    plt.scatter(merged_df["Local Rank"], merged_df["Global Rank"], alpha=0.6, label="All Genes", color="gray")
+
+    # Plot and label top local genes
+    plt.scatter(top_local_genes["Local Rank"], top_local_genes["Global Rank"], color="blue", label="Top Local")
+    for _, row in top_local_genes.iterrows():
+        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=10, color="blue")
+
+    # Plot and label top global genes
+    plt.scatter(top_global_genes["Local Rank"], top_global_genes["Global Rank"], color="red", label="Top Global")
+    for _, row in top_global_genes.iterrows():
+        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=10, color="red")
+    
+    # Plot and label best-predicted genes
+    plt.scatter(top_best_genes["Local Rank"], top_best_genes["Global Rank"], color="green", label="Best Predicted")
+    for _, row in top_best_genes.iterrows():
+        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=10, color="green")
+
+    # Reference diagonal
+    min_rank, max_rank = merged_df[['Local Rank', 'Global Rank']].values.min(), merged_df[['Local Rank', 'Global Rank']].values.max()
+    plt.plot([min_rank, max_rank], [min_rank, max_rank], 'r--', label="Equal Ranking (y=x)")  
+    
+    # Labels and legend
+    plt.xlabel("Local Model Rank")
+    plt.ylabel("Global Model Rank")
+    plt.title("Gene Prediction Rank: Local vs. Global")
+    plt.legend()
+    plt.show()
+
+    # Return top genes if requested
+    if return_top_genes:
+        return top_local_genes, top_global_genes, top_best_genes
