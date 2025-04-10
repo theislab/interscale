@@ -1,4 +1,4 @@
-from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformerMasked, BaselineFCNN, LitGNNTransformerMasked
+from graph_transformer_long_range_niches.model import LitGNNTransformer, LitPCATransformerMasked, BaselineFCNN, LitGNNTransformerMasked, LitNeighTransformerMasked
 from graph_transformer_long_range_niches.pp import prepare_geome_dataset, split_adata
 from graph_transformer_long_range_niches.modules import LitGCN, LitGCNMasked
 from graph_transformer_long_range_niches.tl import MaskedNodeLightningDataset
@@ -90,7 +90,7 @@ def main_sweep(cfg_path, sweep_goal):
             print('experiment sweep')
             cfg.optim.seed = sweep_config['optim.seed']        
             cfg.dataset.spatial_neigbors_kwargs.radius = sweep_config['dataset.spatial_neigbors_kwargs.radius']
-            cfg.transformer.pct_mask_nodes = sweep_config['transformer.pct_mask_nodes']
+            cfg.dataset.pct_mask_nodes = sweep_config['dataset.pct_mask_nodes']
             cfg.model.decoder.type = sweep_config['model.decoder.type']
         cfg.freeze()
 
@@ -147,7 +147,6 @@ def main_sweep(cfg_path, sweep_goal):
                                 shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}, test ds: {len(test_ds)}')
         datasets = [train_ds, val_ds, test_ds]
-        names = ["training", "validation", "test"]
     else:
         if cfg.dataset.pct_mask_nodes > 0:
             dm = GraphAnnDataModule(datas=pyg_data_list, 
@@ -163,7 +162,6 @@ def main_sweep(cfg_path, sweep_goal):
                             shuffle=True)
         print(f'train ds: {len(train_ds)}, val ds: {len(val_ds)}')
         datasets = [train_ds, val_ds]
-        names = ["training", "validation"]
 
     ####### TRAINING #######
     # Model Initialization
@@ -186,6 +184,9 @@ def main_sweep(cfg_path, sweep_goal):
         elif cfg.model.model_type == 'pca-transformer':
             print('Load PCA Transformer...')
             model = LitPCATransformerMasked(cfg, class_weigths)
+        elif cfg.model.model_type == 'neigh-transformer':
+            print('Load Neigh Transformer...')
+            model = LitNeighTransformerMasked(cfg, class_weigths)
         
         # Log total number of parameters
         total_params = sum(p.numel() for p in model.parameters())

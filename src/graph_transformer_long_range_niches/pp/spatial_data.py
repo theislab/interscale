@@ -181,7 +181,7 @@ def sliding_window(
             overlap=overlap,
             partial_window=partial_window,
         )
-        lib_key = f"{lib}_" if lib is not None else ""
+        lib_key = f"{lib}" if lib is not None else ""
 
         # assign observations to windows
         if partial_window == "merge":
@@ -231,7 +231,7 @@ def sliding_window(
             # Update sliding_window_df with merged assignments
             for idx, cells in window_assignments.items():
                 if cells:  # Only assign non-empty windows
-                    sliding_window_df.loc[cells, sliding_window_key] = f"{lib_key}window_{idx}"
+                    sliding_window_df.loc[cells, sliding_window_key] = f"{lib_key}_{idx}"
 
         else:
             # Original window assignment logic
@@ -254,7 +254,7 @@ def sliding_window(
                 obs_indices = lib_coords.index[mask]
 
                 if overlap == 0:
-                    sliding_window_df.loc[obs_indices, sliding_window_key] = f"{lib_key}window_{idx}"
+                    sliding_window_df.loc[obs_indices, sliding_window_key] = f"{lib_key}_{idx}"
 
     if overlap == 0:
         # create categorical variable for ordered windows

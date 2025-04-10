@@ -137,6 +137,10 @@ def prepare_geome_dataset(adata, cfg, split_key: str = 'split'):
     prediction_obs = cfg.dataset.prediction_obs
     category_to_iterate_list = cfg.dataset.library_key
     subset_dict = cfg.dataset.subset_dict
+    
+    if cfg.dataset.split_key in adata.obs.columns:
+        print(f'Split key {cfg.dataset.split_key} already exists in adata.obs')
+        split_key = cfg.dataset.split_key
 
     # initalize object to save train, val and test PyG datas
     datas_train, datas_val, datas_test = list(), list(), list()

@@ -73,7 +73,7 @@ class BaseModule(L.LightningModule):
             self.graph_pred_linear = nn.Sequential(
                     *[nn.Sequential(
                         nn.Linear(n_in, n_out),
-                        nn.BatchNorm1d(n_out, momentum=0.01, eps=0.001),
+                        nn.LayerNorm(n_out),
                         nn.ReLU(),
                         nn.Dropout(p=self._cfg.model.decoder.dropout)
                     ) for n_in, n_out in zip(layers_dim[:-1], layers_dim[1:-1])],
