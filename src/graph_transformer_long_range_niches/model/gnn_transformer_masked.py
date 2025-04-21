@@ -60,29 +60,10 @@ class LitGNNTransformerMasked(BaseModule):
         # Local step
         h_node, z = self.gnn(batched_data.x, batched_data.edge_index)
         
-        h_node = self.norm_input(h_node)
-        
-        if self.masked_nodes:
-            keep_indices = batched_data.mask
-        else:
-            keep_indices = None
-
-        # Ensure masked nodes are included in padding
-        padded_h_node, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
-            h_node, 
-            batched_data.batch, 
-            self.transformer_encoder.max_seq_len, 
-            get_mask=self.masked_nodes,
-            keep_indices=keep_indices  # Add parameter to ensure masked nodes are kept
-        )
-        
-        if self._cfg.transformer.long_range_attention:
-            attention_mask = create_transformer_attention_mask_from_edges(batched_data.edge_index, len(batched_data.obs_names), batched_data.batch, index_nodes, self.transformer_encoder.n_heads)
-        else:
-            attention_mask = None
+        # Convert local node embeddings to global node embeddings
+        padded_emb, src_padding_mask, attention_mask = self.common_step_local_to_global(batched_data, h_node)
             
-        transformer_out = padded_h_node
-        transformer_out, src_padding_mask = self.transformer_encoder(transformer_out, src_padding_mask, mask = attention_mask)  # [S+1, B, E], [B, s]
+        transformer_out, src_padding_mask = self.transformer_encoder(padded_emb, src_padding_mask, mask = attention_mask)  # [S+1, B, E], [B, s]
         
         # ## Graph-level prediction: get cls
         if 'graph' in self.prediction_task:

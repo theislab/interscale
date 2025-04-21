@@ -93,6 +93,64 @@ class BaseModule(L.LightningModule):
     def _common_step(self, batch):
         raise NotImplementedError("Subclasses must implement the _common_step method.")
     
+    def common_step_local(self, batch):
+        raise NotImplementedError("Subclasses must implement the _common_step method.")
+    
+    # def common_step_local_to_global(self, batched_data, emb):
+    #     """
+    #     Convert local node embeddings [N, E] to padded local node embeddings [max_seq_len, E] 
+    #     with N being the number of nodes in the graph and E being the embedding dimension.
+        
+    #     Parameters:
+    #         batched_data: Pytorch geometric object 
+    #         emb: torch.Tensor [N, E]
+    #             Embedding of the local nodes
+        
+    #     Returns:
+    #         padded_emb: torch.Tensor [max_seq_len, E]
+    #             Padded local node embeddings
+    #         src_padding_mask: torch.Tensor [max_seq_len]
+    #             Mask indicating padding nodes
+    #         index_nodes: torch.Tensor [N]
+    #             Indices of the nodes in the original graph
+    #     """
+        
+    #     # Layer normalization
+    #     emb = self.norm_input(emb)
+        
+    #     if self.masked_nodes:
+    #         keep_indices = batched_data.mask
+    #     else:
+    #         keep_indices = None
+
+    #     # Ensure masked nodes are included in padding
+    #     padded_emb, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
+    #         emb, 
+    #         batched_data.batch, 
+    #         self.transformer_encoder.max_seq_len, 
+    #         get_mask=self.masked_nodes,
+    #         keep_indices=keep_indices  # Add parameter to ensure masked nodes are kept
+    #     )
+        
+    #     if self._cfg.transformer.long_range_attention:
+    #         attention_mask = create_transformer_attention_mask_from_edges(
+    #             batched_data.edge_index, 
+    #             len(batched_data.obs_names), 
+    #             batched_data.batch, 
+    #             index_nodes, 
+    #             self.transformer_encoder.n_heads
+    #         )
+    #         # Convert attention_mask to same dtype as src_padding_mask
+    #         attention_mask = attention_mask.to(dtype=src_padding_mask.dtype)
+    #     else:
+    #         attention_mask = None
+            
+    #     return padded_emb, src_padding_mask, index_nodes, attention_mask
+    
+    
+    def common_step_global(self, batch):
+        raise NotImplementedError("Subclasses must implement the _common_step method.")
+    
     def common_training_step(self, batch):
         loss, metric_list = self._common_step(batch)
         if 'classification' in self.prediction_task:
