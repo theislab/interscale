@@ -1,3 +1,5 @@
-from .base._base_model import BaseModel  
+from .base._base_model import BaseModel 
+from .LocalModel import LocalModel
 
-__all__ = ["BaseModel"]
+__all__ = ["BaseModel", 
+           "LocalModel"]

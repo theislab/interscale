@@ -44,8 +44,6 @@ class BaseModule(L.LightningModule, ABC):
         n_input: int,
         prediction_task: Literal["classification", "regression"] = "classification",
         prediction_level: Literal["node", "graph"] = None,
-        loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"] = None,
-        n_classes: int = None,
         n_embed: int = 16,
         warmup: int = 10,
         max_epochs: int = 1000,
@@ -68,17 +66,6 @@ class BaseModule(L.LightningModule, ABC):
         self.class_weights = class_weights
         self.prediction_task = prediction_task
         self.prediction_level = prediction_level
-        self.loss = loss
-        if self.prediction_task == "classification":
-            assert self.prediction_level is not None, "Prediction level must be provided for classification task."
-            self.n_classes = n_classes
-            if self.loss is None:
-                print("No loss function provided for classification task. Using CrossEntropy loss.")
-                self.loss = "CrossEntropy"
-        elif self.prediction_task == "regression":
-            if self.loss is None:
-                print("No loss function provided for regression task. Using MSELoss loss.")
-                self.loss = "MSELoss"
         
         # Define components 
         self.local_component = None
@@ -125,28 +112,6 @@ class BaseModule(L.LightningModule, ABC):
                 'mse': self.mse,
                 'r2': self.r2
             })
-    
-    def _setup_loss(self):
-        """Setup loss function based on prediction task and configuration."""
-        if 'classification' in self.prediction_task:
-            assert self.loss == 'CrossEntropy' or self.loss == 'WeightedCE', "Classification must be run with CrossEntropy or WeightedCE loss."
-            if self.loss == 'CrossEntropy':
-                self.loss = nn.CrossEntropyLoss()
-            elif self.loss == 'WeightedCE':
-                assert self.class_weights is not None, "Class weights must be provided for WeightedCE loss."
-                self.loss = nn.CrossEntropyLoss(torch.from_numpy(self.class_weights))
-        elif 'regression' in self.prediction_task:
-            assert self.loss == 'MSELoss' or self.loss == 'GaussianNLL' or self.loss == 'SmoothL1', "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
-            if self.loss == 'MSELoss':
-                self.loss = nn.MSELoss()
-            elif self.loss == 'GaussianNLL':
-                self.loss = nn.GaussianNLLLoss()
-            elif self.loss == 'SmoothL1':
-                self.loss = nn.SmoothL1Loss()
-            else:
-                raise ValueError("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")
-        else:
-            raise ValueError("Prediction task must define 'classification' or 'regression'.")
             
     def training_step(self, batch: Any, batch_idx: int) -> torch.Tensor:
         """Training step."""
@@ -160,40 +125,6 @@ class BaseModule(L.LightningModule, ABC):
         """Test step."""
         return self._common_step(batch, "test")
         
-    def _classification_metrics(
-        self,
-        y_pred: torch.Tensor,
-        y_true: torch.Tensor,
-        mask_idx: Optional[torch.Tensor] = None
-    ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        """Calculate classification metrics."""
-        if mask_idx is not None:
-            y_pred = y_pred[mask_idx]
-            y_true = y_true[mask_idx]
-            
-        loss = self.loss(y_pred, y_true)
-        metrics = self.metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
-        metrics['loss'] = loss
-        
-        return loss, metrics
-        
-    def _regression_metrics(
-            self,
-            y_pred: torch.Tensor,
-            y_true: torch.Tensor,
-            mask_idx: Optional[torch.Tensor] = None
-        ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        
-        """Calculate regression metrics."""
-        if mask_idx is not None:
-            y_pred = y_pred[mask_idx]
-            y_true = y_true[mask_idx]
-            
-        loss = self.loss(y_pred, y_true)
-        metrics = self.metrics(y_pred, y_true)
-        metrics['loss'] = loss
-        
-        return loss, metrics
         
     def configure_optimizers(self) -> tuple[List[torch.optim.Optimizer], List[Dict[str, Any]]]:
         """Configure optimizers and learning rate schedulers."""

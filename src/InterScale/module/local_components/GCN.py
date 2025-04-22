@@ -15,7 +15,7 @@ class GCN(LocalComponent):
     def __init__(self,
         n_layers: int = 2,
         hidden_dim: int = 16,
-        ):
+        **kwargs):
         super().__init__()      
         
         self.n_layers = n_layers
@@ -35,9 +35,14 @@ class GCN(LocalComponent):
             
     def forward(self, x, edge_index):
         """
-        Input:
-            x: Adjacency matrix (n x obs)
-            edge_index: gene expressiong (var x obs)
+        Parameters:
+        -----------
+            x: gene expression (var x obs)
+            edge_index: Adjacency matrix (n x obs)
+            
+        Returns:
+        --------
+            h: Embeddings (n x embed_dim)
         """
         for layer in self.layers:
             if isinstance(layer, MessagePassing):

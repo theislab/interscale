@@ -1,10 +1,58 @@
 from anndata import AnnData
 import scvi
 from scvi.data import AnnDataManager, fields
-from abc import ABC, abstractmethod
-from InterScale.nn import LinearDecoder, NonLinearDecoder
+from scvi.data._constants import (
+    _ADATA_MINIFY_TYPE_UNS_KEY,
+    _MODEL_NAME_KEY,
+    _SCVI_UUID_KEY,
+    _SETUP_ARGS_KEY,
+    _SETUP_METHOD_NAME,
+    ADATA_MINIFY_TYPE,
+)
+from abc import ABC, ABCMeta, abstractmethod
+from yacs.config import CfgNode as CN
+from uuid import uuid4
 
-class BaseModel(ABC):
+
+from typing import List, Optional, Literal, Dict, Any
+
+import torch
+import torch.nn as nn
+from torchmetrics import MetricCollection
+
+from InterScale.nn import LinearDecoder, NonLinearDecoder
+from InterScale.module.base._base_component import LocalComponent, GlobalComponent  
+from InterScale.module.local_components.GCN import GCN
+# adjusted from scvi-tools
+# https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
+# accessed on 22.April 2025
+class BaseModelMetaClass(ABCMeta):
+    """Metaclass for :class:`~scvi.model.base.BaseModelClass`.
+
+    Constructs model class-specific mappings for :class:`~scvi.data.AnnDataManager` instances.
+    ``cls._setup_adata_manager_store`` maps from AnnData object UUIDs to
+    :class:`~scvi.data.AnnDataManager` instances.
+
+    This mapping is populated everytime ``cls.setup_anndata()`` is called.
+    ``cls._per_isntance_manager_store`` maps from model instance UUIDs to AnnData UUID:
+    :class:`~scvi.data.AnnDataManager` mappings.
+    These :class:`~scvi.data.AnnDataManager` instances are tied to a single model instance and
+    populated either
+    during model initialization or after running ``self._validate_anndata()``.
+    """
+
+    @abstractmethod
+    def __init__(cls, name, bases, dct):
+        cls._setup_adata_manager_store: dict[
+            str, type[AnnDataManager]
+        ] = {}  # Maps adata id to AnnDataManager instances.
+        cls._per_instance_manager_store: dict[
+            str, dict[str, type[AnnDataManager]]
+        ] = {}  # Maps model instance id to AnnDataManager mappings.
+        super().__init__(name, bases, dct)
+
+
+class BaseModel(metaclass=BaseModelMetaClass):
     """Abstract class for InterScale models
     
     Parameters
@@ -18,9 +66,31 @@ class BaseModel(ABC):
     """
     
     def __init__(self, 
-                 adata: AnnData):    
+                 adata: AnnData,
+                 cfg: CN,
+                 loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"] = None,
+                 decoder: Literal["linear", "nonlinear"] = "linear",
+                 ):    
+        self.id = str(uuid4())  # Used for cls._manager_store keys.
         
+        # scvi-tools like data handling
         self._adata = adata
+        self._adata_manager = self._get_most_recent_anndata_manager(adata, required=True)
+        self._register_manager_for_instance(self._adata_manager)
+        # Suffix registry instance variable with _ to include it when saving the model.
+        self.registry_ = self._adata_manager.registry
+        self.summary_stats = self._adata_manager.summary_stats
+        
+        self._cfg = cfg
+        
+        self.n_input = self.summary_stats['n_x']
+        
+        if 'classification' in cfg.dataset.prediction_task:
+            self.n_output = self.summary_stats['n_prediction_obs']
+        elif 'regression' in cfg.dataset.prediction_task:
+            self.n_output = self.summary_stats['n_x']
+        else:
+            raise ValueError(f"Prediction task {cfg.dataset.prediction_task} not supported.")
         
         self.is_trained_ = False
         self._model_summary_string = ""
@@ -32,15 +102,19 @@ class BaseModel(ABC):
         self.local_component = None
         self.global_component = None
         
-        # # TODO: before I load the data I don't know the dimensions of the input and output
-        # if decoder == 'linear':
-        #     self.decoder = LinearDecoder(n_input = None,
-        #                                 n_output = None)
-        # elif decoder == 'nonlinear':
-        #     self.decoder = NonLinearDecoder(n_input = None,
-        #                                    n_output = None)
+        # Initialize metrics and loss
+        self._setup_metrics()
+        self._setup_loss(loss)
         
-    def _setup_anndata(self,
+        if decoder == 'linear':
+            self.decoder = LinearDecoder(n_input = self.n_input,
+                                        n_output = self.n_output)
+        elif decoder == 'nonlinear':
+            self.decoder = NonLinearDecoder(n_input = self.n_input,
+                                           n_output = self.n_output)
+        
+    @classmethod
+    def _setup_anndata(cls,
                        adata: AnnData,
                        layer_key: str,
                        sample_key: str,
@@ -53,6 +127,8 @@ class BaseModel(ABC):
 
         Parameters
         ----------
+        cls
+            Class of the model. Required for class method.
         adata
             AnnData object
         layer_key
@@ -72,7 +148,7 @@ class BaseModel(ABC):
             AnnDataManager object that contains the data.
         """  
         
-        anndata_fields = [fields.LayerField("x", layer = None),
+        anndata_fields = [fields.LayerField("x", layer = layer_key),
                           fields.CategoricalObsField(registry_key = 'prediction_obs', attr_key = prediction_obs),
                           fields.CategoricalObsField(registry_key = 'sample_key', attr_key = sample_key)]
         
@@ -83,34 +159,184 @@ class BaseModel(ABC):
             anndata_fields.append(fields.CategoricalObsField(registry_key = 'group_key', attr_key = group_key))    
             
         manager = scvi.data.AnnDataManager(anndata_fields)
-        manager.register_fields(self._adata,
-                               layer_key = layer_key,
-                               sample_key = sample_key,
-                               labels_key = labels_key,
-                               group_key = group_key)
+        manager.register_fields(adata)
+        manager.view_registry()
         
+        # Store the manager in the class's store
+        if _SCVI_UUID_KEY not in adata.uns:
+            adata.uns[_SCVI_UUID_KEY] = str(id(adata))
+        cls._setup_adata_manager_store[adata.uns[_SCVI_UUID_KEY]] = manager
+        
+    # adjusted from scvi-tools
+    # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
+    # accessed on 22.April 2025
+    @classmethod
+    def _get_most_recent_anndata_manager(
+        cls, adata: AnnData, required: bool = False
+    ) -> AnnDataManager | None:
+        """Retrieves the :class:`~scvi.data.AnnDataManager` for a given AnnData object.
+
+        Checks for the most recent :class:`~scvi.data.AnnDataManager` created for the given AnnData
+        object via ``setup_anndata()`` on model initialization. Unlike
+        :meth:`scvi.model.base.BaseModelClass.get_anndata_manager`, this method is not model
+        instance specific and can be called before a model is fully initialized.
+
+        Parameters
+        ----------
+        adata
+            AnnData object to find manager instance for.
+        required
+            If True, errors on missing manager. Otherwise, returns None when manager is missing.
+        """
+        if _SCVI_UUID_KEY not in adata.uns:
+            if required:
+                raise ValueError(
+                    f"Please set up your AnnData with {cls.__name__}.setup_anndata first."
+                )
+            return None
+
+        adata_id = adata.uns[_SCVI_UUID_KEY]
+
+        if adata_id not in cls._setup_adata_manager_store:
+            if required:
+                raise ValueError(
+                    f"Please set up your AnnData with {cls.__name__}.setup_anndata first. "
+                    "It appears the AnnData object has been setup with a different model."
+                )
+            return None
+
+        adata_manager = cls._setup_adata_manager_store[adata_id]
+        if adata_manager.adata is not adata:
+            raise ValueError(
+                "The provided AnnData object does not match the AnnData object "
+                "previously provided for setup. Did you make a copy?"
+            )
+
+        return adata_manager
+    
+    # adjusted from scvi-tools
+    # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
+    # accessed on 22.April 2025
+    def _register_manager_for_instance(self, adata_manager: AnnDataManager):
+        """Registers an :class:`~scvi.data.AnnDataManager` instance with this model instance.
+
+        Creates a model-instance specific mapping in ``cls._per_instance_manager_store`` for this
+        :class:`~scvi.data.AnnDataManager` instance.
+        """
+        if self.id not in self._per_instance_manager_store:
+            self._per_instance_manager_store[self.id] = {}
+
+        adata_id = adata_manager.adata_uuid
+        instance_manager_store = self._per_instance_manager_store[self.id]
+        instance_manager_store[adata_id] = adata_manager
+
     
     def _make_dataloader(self):
         return None
     
-    def training_step(self,
-                      batch,
-                      batch_idx):
-        """Training step for the module."""
-        return None
-    
-    def validation_step(self,
-                        batch,
-                        batch_idx):
-        """Validation step for the module."""
-        return None 
-    
-    def test_step(self,
-                  batch,
-                  batch_idx):
-        """Test step for the module."""
-        return None
-    
     @abstractmethod
-    def train(self):
+    def train(self,
+              max_epochs: int | None = None,
+              train_size: float | None = None,
+              validation_size: float | None = None,
+              test_size: float | None = None,
+              batch_size: int | None = None,
+              early_stopping: bool | None = None,):
         """Trains the model."""
+        
+        
+    @abstractmethod
+    def _common_step(self,
+              batch):
+        """Shared step between train, val and test."""
+        
+    def _setup_loss(self, 
+                    loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"] = None):
+        """Setup loss function based on prediction task and configuration."""
+        
+        if 'classification' in self.prediction_task:
+            assert loss == 'CrossEntropy' or loss == 'WeightedCE', "Classification must be run with CrossEntropy or WeightedCE loss."
+            if loss == 'CrossEntropy':
+                self.loss = nn.CrossEntropyLoss()
+            elif loss == 'WeightedCE':
+                assert self.class_weights is not None, "Class weights must be provided for WeightedCE loss."
+                self.loss = nn.CrossEntropyLoss(torch.from_numpy(self.class_weights))
+        elif 'regression' in self.prediction_task:
+            assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1', "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
+            if loss == 'MSELoss':
+                self.loss = nn.MSELoss()
+            elif loss == 'GaussianNLL':
+                self.loss = nn.GaussianNLLLoss()
+            elif loss == 'SmoothL1':
+                self.loss = nn.SmoothL1Loss()
+            else:
+                raise ValueError("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")
+        else:
+            raise ValueError("Prediction task must define 'classification' or 'regression'.")
+        
+    def _setup_metrics(self):
+        """Setup metrics based on prediction task."""
+        if 'classification' in self.prediction_task:
+            self.metrics = MetricCollection({
+                'accuracy': self.accuracy,
+                'f1_micro': self.f1_score_micro,
+                'f1_macro': self.f1_score_macro,
+                **{f'f1_class_{i}': self.f1_score_per_class[i] for i in range(self.num_classes)}
+            })
+        elif 'regression' in self.prediction_task:
+            self.metrics = MetricCollection({
+                'mse': self.mse,
+                'r2': self.r2
+            })
+        
+    def _classification_metrics(
+        self,
+        y_pred: torch.Tensor,
+        y_true: torch.Tensor,
+        mask_idx: Optional[torch.Tensor] = None
+    ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """Calculate classification metrics."""
+        if mask_idx is not None:
+            y_pred = y_pred[mask_idx]
+            y_true = y_true[mask_idx]
+            
+        loss = self.loss(y_pred, y_true)
+        metrics = self.metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
+        metrics['loss'] = loss
+        
+        return loss, metrics
+        
+    def _regression_metrics(
+            self,
+            y_pred: torch.Tensor,
+            y_true: torch.Tensor,
+            mask_idx: Optional[torch.Tensor] = None
+        ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        
+        """Calculate regression metrics."""
+        if mask_idx is not None:
+            y_pred = y_pred[mask_idx]
+            y_true = y_true[mask_idx]
+            
+        loss = self.loss(y_pred, y_true)
+        metrics = self.metrics(y_pred, y_true)
+        metrics['loss'] = loss
+        
+        return loss, metrics
+        
+        
+    def _register_local_component(self,
+                                  local_component_name: str,
+                                  ) -> LocalComponent:
+        """Register local component based on name.
+        Instance must be defined in InterScale.module.local_components."""
+        
+        if local_component_name == 'GCN':
+            return GCN(n_input = self.n_input,
+                       n_output = self.n_output)
+        else:
+            raise ValueError(f"Local component {local_component_name} not found.")
+    
+    def _register_global_component(self,
+                                  global_component_name: str) -> GlobalComponent:
+        pass

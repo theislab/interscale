@@ -5,8 +5,8 @@ class LocalComponent(BaseModule):
     def __init__(self):
         super().__init__()
         
-        self.local_component = True
-        self.global_component = False
+        self.registered_local_component = True
+        self.registered_global_component = False
         
     @abstractmethod
     def forward(self, x, edge_index):
@@ -19,8 +19,8 @@ class GlobalComponent(BaseModule):
     def __init__(self):
         super().__init__()
         
-        self.local_component = False
-        self.global_component = True
+        self.registered_local_component = False
+        self.registered_global_component = True
         
     @abstractmethod
     def forward(self, x, edge_index):
