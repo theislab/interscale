@@ -2,8 +2,10 @@ from InterScale.module.base._base_module import BaseModule
 from abc import abstractmethod
 
 class LocalComponent(BaseModule):
-    def __init__(self):
-        super().__init__()
+    def __init__(self,
+                 **base_module_kwargs):
+        
+        super().__init__(**base_module_kwargs)
         
         self.registered_local_component = True
         self.registered_global_component = False

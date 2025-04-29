@@ -13,24 +13,35 @@ from InterScale.module.base import LocalComponent
 
 class GCN(LocalComponent):
     def __init__(self,
-        n_layers: int = 2,
-        hidden_dim: int = 16,
-        **kwargs):
-        super().__init__()      
+                 n_input: int,
+                 n_output: int,
+                 n_embed: int = 32,
+                 dropout: float = 0.0,
+                 n_layers: int = 2,
+                 hidden_dim: int = 16,
+                 **kwargs):
+        super().__init__(n_input=n_input, 
+                        n_output=n_output, 
+                        n_embed=n_embed, 
+                        dropout=dropout,
+                        **kwargs)      
         
+        self.module_name = 'GCN'
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim
 
         layers = []
+        in_dim = self.n_input
+        hidden_dim = self.hidden_dim
         for l_idx in range(n_layers - 1):
             layers += [
-                GCNConv(in_channels=self.n_input, out_channels=self.hidden_dim),
+                GCNConv(in_channels=in_dim, out_channels=hidden_dim),
                 nn.ReLU(inplace=True),
                 nn.Dropout(self.dropout)
             ]
-            in_dim = self.n_input
+            in_dim = hidden_dim
         
-        layers += [GCNConv(in_channels=self.n_input, out_channels=self.embed_dim)]
+        layers += [GCNConv(in_channels=in_dim, out_channels=self.n_embed)]
         self.layers = nn.ModuleList(layers)
             
     def forward(self, x, edge_index):

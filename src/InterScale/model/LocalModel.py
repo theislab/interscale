@@ -1,42 +1,48 @@
-from InterScale.model.base._base_model import BaseModel
-from InterScale.module.local_components.GCN import GCN
+from InterScale.model.base._base_model import BaseModelClass
+from InterScale.train._training import NodeMaskingTrainingPlan
+from InterScale.module.base import LocalComponent
 from anndata import AnnData
 from yacs.config import CfgNode as CN
 
-class LocalModel(BaseModel):
-    def __init__(self, 
-                 adata: AnnData,    
-                 cfg: CN,
-                 local_component_name: str = 'GCN'):
-        super().__init__(adata, cfg)
-        
-        if local_component_name == 'GCN':
-            self.local_component = self._register_local_component(local_component_name)
 
+class LocalModel(NodeMaskingTrainingPlan,
+                 BaseModelClass):
     
+    def __init__(self, 
+                 adata: AnnData,
+                 prediction_task: str,
+                 cfg: CN,):
+        super().__init__(adata, prediction_task, cfg)
+        
+        self.local_component = self._register_local_component()
+        
     def _common_step(self,
                      batch):
-        """Shared step between train, val and test."""
+        """Shared step between train, val and test.
+        
+        Returns:
+            local_embedding: torch.Tensor
+            global_embedding: torch.Tensor
+            y_pred: torch.Tensor
+        """
         mask_idx = None
         
-        local_embedding = self.local_component.forward(batch)
-        
-        y_true = batch.x
+        local_embedding = self.local_component.forward(batch.x, batch.edge_index)
+        y_pred = self.decoder.forward(local_embedding)
         
         if 'classification' in self.prediction_task:
-            loss, metrics = self._classification_metrics(local_embedding, y_true, mask_idx)
+            y_true = batch.y
+            assert y_true.shape == y_pred.shape
+            return local_embedding, None, y_pred, y_true
             
         if 'regression' in self.prediction_task:
-            loss, metrics = self._regression_metrics(local_embedding, y_true, mask_idx)
+            y_true = batch.x
+            assert y_true.shape == y_pred.shape
+            return local_embedding, None, y_pred, y_true
             
-    def train(self):
-        pass
+        assert False, "Prediction task not supported"
+            
     
-    def validation(self):
-        pass
-    
-    def test(self):
-        pass
         
         
         

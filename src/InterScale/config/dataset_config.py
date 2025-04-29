@@ -16,11 +16,11 @@ def get_dataset_cfg(cfg):
     cfg.dataset.description = ""
     cfg.dataset.prediction_task = "" 
     cfg.dataset.prediction_obs = "" 
-    cfg.dataset.library_key = []
-    cfg.dataset.fine_tuning = []
-    cfg.dataset.subset_dict = CN()
+    cfg.dataset.prediction_level = ""
+    cfg.dataset.layer_key = ""
+    cfg.dataset.sample_key = []
+    cfg.dataset.group_label = ""
     cfg.dataset.split_key = "split"
-    cfg.dataset.obs_split = ""
 
     cfg.dataset.spatial_neigbors_kwargs = CN()
     cfg.dataset.spatial_neigbors_kwargs.radius = 50
@@ -35,9 +35,7 @@ def get_dataset_cfg(cfg):
     cfg.dataset.num_features = -1
     cfg.dataset.num_classes = -1
 
-    cfg.dataset.k_folds = 0
     cfg.dataset.stratify_group = None
-    
     cfg.dataset.pct_mask_nodes = 0.2
 
     return cfg

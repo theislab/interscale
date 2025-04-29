@@ -18,7 +18,6 @@ from typing import List, Optional, Literal, Dict, Any
 
 import torch
 import torch.nn as nn
-import torchmetrics
 from torchmetrics import MetricCollection
 
 from InterScale.nn import LinearDecoder, NonLinearDecoder
@@ -97,6 +96,9 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         self.local_component = None
         self.global_component = None
+        
+        # Initialize loss
+        self._setup_loss(self._cfg.model.loss)
         
         decoder_type = self._cfg.model.decoder.type
         if decoder_type == 'linear':
@@ -237,12 +239,68 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
     @abstractmethod
     def _common_step(self,
               batch):
-        """Shared step between train, val and test.
-        Returns:
-            local_embedding: torch.Tensor
-            global_embedding: torch.Tensor
-            y_pred: torch.Tensor
-        """
+        """Shared step between train, val and test."""
+        
+    def _setup_loss(self, 
+                    loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"] = None):
+        """Setup loss function based on prediction task and configuration."""
+        
+        loss = loss if self._cfg is None else self._cfg.optim.loss
+        
+        if 'classification' in self.prediction_task:
+            assert loss == 'CrossEntropy' or loss == 'WeightedCE', "Classification must be run with CrossEntropy or WeightedCE loss."
+            if loss == 'CrossEntropy':
+                self.loss = nn.CrossEntropyLoss()
+            elif loss == 'WeightedCE':
+                assert self.class_weights is not None, "Class weights must be provided for WeightedCE loss."
+                self.loss = nn.CrossEntropyLoss(torch.from_numpy(self.class_weights))
+        elif 'regression' in self.prediction_task:
+            assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1', "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
+            if loss == 'MSELoss':
+                self.loss = nn.MSELoss()
+            elif loss == 'GaussianNLL':
+                self.loss = nn.GaussianNLLLoss()
+            elif loss == 'SmoothL1':
+                self.loss = nn.SmoothL1Loss()
+            else:
+                raise ValueError("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")
+        else:
+            raise ValueError("Prediction task must define 'classification' or 'regression'.")
+        
+    def _classification_metrics(
+        self,
+        y_pred: torch.Tensor,
+        y_true: torch.Tensor,
+        mask_idx: Optional[torch.Tensor] = None
+    ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        """Calculate classification metrics."""
+        if mask_idx is not None:
+            y_pred = y_pred[mask_idx]
+            y_true = y_true[mask_idx]
+            
+        loss = self.loss(y_pred, y_true)
+        metrics = self.metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
+        metrics['loss'] = loss
+        
+        return loss, metrics
+        
+    def _regression_metrics(
+            self,
+            y_pred: torch.Tensor,
+            y_true: torch.Tensor,
+            mask_idx: Optional[torch.Tensor] = None
+        ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        
+        """Calculate regression metrics."""
+        if mask_idx is not None:
+            y_pred = y_pred[mask_idx]
+            y_true = y_true[mask_idx]
+            
+        loss = self.loss(y_pred, y_true)
+        metrics = self.metrics(y_pred, y_true)
+        metrics['loss'] = loss
+        
+        return loss, metrics
     
     def _register_local_component(self) -> LocalComponent:
         """Register local component based on name.

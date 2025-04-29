@@ -22,10 +22,10 @@ def get_cfg_defaults():
 
     # Load configurations
     cfg = get_wandb_cfg(cfg)
-    cfg = get_model_cfg(cfg)
+    cfg = get_gnn_cfg(cfg)
     cfg = get_optim_cfg(cfg)
     cfg = get_dataset_cfg(cfg)
-    cfg = get_gnn_cfg(cfg)
+    cfg = get_model_cfg(cfg)
     cfg = get_transformer_cfg(cfg)
 
     return cfg

@@ -3,8 +3,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Literal, List
 
-import pytorch_lightning as pl
-from lightning.pytorch import LightningDataModule
+import lightning.pytorch as pl
 from torch_geometric.data import Data
 from torch_geometric.data.data import BaseData
 from torch_geometric.loader import DataLoader, DataListLoader
