@@ -1,7 +1,67 @@
 from geome import transforms, ann2data, iterables
 import numpy as np
+from yacs.config import CfgNode as CN
 
-def prepare_geome_dataset(adata, cfg, split_key: str = 'split'):
+def prepare_a2d_dataset(cfg: CN):
+    """
+    """
+    adj_matrix_loc = "adj_matrix"
+    
+    category_to_iterate_list = cfg.dataset.sample_key
+    prediction_obs = cfg.dataset.prediction_obs
+    layer_key = cfg.dataset.layer_key
+    
+    for category_to_iterate in category_to_iterate_list:
+        cfg.dataset.spatial_neigbors_kwargs.merge_from_list(['library_key', category_to_iterate])
+        spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
+        print(spatial_neigbors_kwargs)
+
+        one_hot_encode_list = [prediction_obs]
+        
+        X_key = f"layers/{layer_key}" if layer_key is not None else "X"
+
+        if 'classification' in cfg.dataset.prediction_task:
+            fields = {
+                "x": [X_key],
+                "y": [f"obs/{prediction_obs}"],
+                "edge_index": ["uns/edge_index"],
+                "obs_names": ["obs_names"],
+                "sample_key": [f"obs/{category_to_iterate}"],
+            }
+
+            preprocess = transforms.Compose(
+                [
+                    transforms.SaveOneHotEncodeLabels(keys = one_hot_encode_list, axis = 'obs', key_added = 'one_hot')
+                ]
+            )
+        elif 'regression' in cfg.dataset.prediction_task:
+            fields = {
+                "x": [X_key],
+                "edge_index": ["uns/edge_index"],
+                "obs_names": ["obs_names"],
+                "sample_key": [f"obs/{category_to_iterate}"],
+            }
+            
+            preprocess = None
+
+
+        transform = transforms.Compose(
+            [
+                transforms.AddEdgeIndex(edge_index_key="edge_index", func_args=spatial_neigbors_kwargs, spatial_key="spatial", key_added=adj_matrix_loc),
+            ]
+        )
+
+        return ann2data.Ann2DataBasic(
+            fields=fields,
+            adata2iter=iterables.ToCategoryIterator(category_to_iterate, axis="obs", preserve_categories = [prediction_obs]),
+            preprocess=preprocess,
+            transform=transform,
+            save_preprocessed_adata = True,
+        )
+
+def prepare_geome_dataset(adata, 
+                          cfg, 
+                          split_key: str = 'split'):
     """
     Loads, preprocesses and transforms the defined .h5ad data to a list of PyG data according to cfg file.
     """

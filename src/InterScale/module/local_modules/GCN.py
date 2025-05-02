@@ -1,6 +1,5 @@
 # PyTorch
 from torch import nn
-from torch.nn import Linear
 from torch_geometric.nn import GCNConv, MessagePassing
 import torch.nn.functional as F
 
@@ -9,9 +8,9 @@ import typing as List
 # PyTorch Lightning
 import pytorch_lightning as L
 
-from InterScale.module.base import LocalComponent
+from InterScale.module.base import LocalModuleClass
 
-class GCN(LocalComponent):
+class GCN(LocalModuleClass):
     def __init__(self,
                  n_input: int,
                  n_output: int,

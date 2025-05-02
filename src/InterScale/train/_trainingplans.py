@@ -63,16 +63,16 @@ class TrainingPlan(pl.LightningModule):
                     loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"] = None):
         """Setup loss function based on prediction task and configuration."""
         
-        loss = loss if self._cfg is None else self._cfg.optim.loss
+        loss = loss if self.model._cfg is None else self.model._cfg.optim.loss
         
-        if 'classification' in self.prediction_task:
+        if 'classification' in self.model.prediction_task:
             assert loss == 'CrossEntropy' or loss == 'WeightedCE', "Classification must be run with CrossEntropy or WeightedCE loss."
             if loss == 'CrossEntropy':
                 self.loss = nn.CrossEntropyLoss()
             elif loss == 'WeightedCE':
                 assert self.class_weights is not None, "Class weights must be provided for WeightedCE loss."
                 self.loss = nn.CrossEntropyLoss(torch.from_numpy(self.class_weights))
-        elif 'regression' in self.prediction_task:
+        elif 'regression' in self.model.prediction_task:
             assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1', "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
             if loss == 'MSELoss':
                 self.loss = nn.MSELoss()
@@ -86,14 +86,14 @@ class TrainingPlan(pl.LightningModule):
             raise ValueError("Prediction task must define 'classification' or 'regression'.")
         
     def _setup_metrics(self, num_outputs: int):
-        if 'classification' in self.prediction_task:
+        if 'classification' in self.model.prediction_task:
             self.metrics = MetricCollection({
                 "accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=num_outputs),
                 "f1_micro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="micro"),
                 "f1_macro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="macro"),
                 "f1_per_class": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average=None)
             })
-        elif 'regression' in self.prediction_task:
+        elif 'regression' in self.model.prediction_task:
             self.metrics = MetricCollection({
                 "mse": torchmetrics.MeanSquaredError(),
                 "r2_raw": torchmetrics.R2Score(num_outputs=num_outputs, multioutput='raw_values'),
@@ -169,7 +169,7 @@ class TrainingPlan(pl.LightningModule):
                 f'{mode}_f1_micro/avg': metrics['f1_micro'],
                 f'{mode}_f1_macro/avg': metrics['f1_macro'],
             }
-            for class_idx in range(self.model.n_input):
+            for class_idx in range(self.model.n_output):
                 log_dict[f'{mode}_f1/class_{class_idx}'] = metrics['f1_per_class'][class_idx]
         elif 'regression' in self.model.prediction_task:
             loss, metrics = self._regression_metrics(y_pred, y_true)

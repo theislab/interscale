@@ -6,6 +6,7 @@ import numpy as np
 import torch
 
 from InterScale.train._trainingplans import TrainingPlan
+from InterScale.train._utils import MetricsHistory
 from lightning.pytorch.callbacks import LearningRateMonitor, EarlyStopping
 from lightning.pytorch.trainer import Trainer
 from lightning.pytorch.strategies.ddp import DDPStrategy
@@ -125,6 +126,7 @@ class NodeMaskingTrainingPlan:
         #steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
         steps_per_epoch = 10
         lr_monitor = LearningRateMonitor(logging_interval='epoch')
+        self.history_ = MetricsHistory()
         if early_stopping:
             if 'classification' in self.prediction_task:
                 early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
@@ -138,7 +140,7 @@ class NodeMaskingTrainingPlan:
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(max_epochs),
                          enable_progress_bar=False,
-                         callbacks=[lr_monitor, early_stop_callback],
+                         callbacks=[lr_monitor, early_stop_callback, self.history_],
                          log_every_n_steps=1,
                          )
         
@@ -146,6 +148,8 @@ class NodeMaskingTrainingPlan:
         trainer.validate(training_plan, datamodule)
         if train_size + validation_size < 1:
             trainer.test(training_plan, datamodule)
+            
+        self.is_trained = True
     
 
 # adjusted from scvi-tools

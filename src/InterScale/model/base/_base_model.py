@@ -2,19 +2,18 @@ from anndata import AnnData
 import scvi
 from scvi.data import AnnDataManager, fields
 from scvi.data._constants import (
-    _ADATA_MINIFY_TYPE_UNS_KEY,
-    _MODEL_NAME_KEY,
     _SCVI_UUID_KEY,
-    _SETUP_ARGS_KEY,
-    _SETUP_METHOD_NAME,
-    ADATA_MINIFY_TYPE,
 )
+from scvi.data._utils import _check_if_view, _assign_adata_uuid
 from abc import ABC, ABCMeta, abstractmethod
 from yacs.config import CfgNode as CN
 from uuid import uuid4
 
+import numpy as np
+import logging
+import os   
 
-from typing import List, Optional, Literal, Dict, Any
+from typing import List, Optional, Literal, Dict, Any, Sequence
 
 import torch
 import torch.nn as nn
@@ -22,8 +21,25 @@ import torchmetrics
 from torchmetrics import MetricCollection
 
 from InterScale.nn import LinearDecoder, NonLinearDecoder
-from InterScale.module.base._base_component import LocalComponent, GlobalComponent  
-from InterScale.module.local_components.GCN import GCN
+from InterScale.module.base._base_component import LocalModuleClass, GlobalModuleClass  
+from InterScale.module.local_modules.GCN import GCN
+from InterScale.tl.geome_utils import prepare_a2d_dataset
+
+logger = logging.getLogger(__name__)
+
+from typing import NamedTuple
+
+
+class _SAVE_KEYS_NT(NamedTuple):
+    ADATA_FNAME: str = "adata.h5ad"
+    MODEL_FNAME: str = "model.pt"
+    MODEL_STATE_DICT_KEY: str = "model_state_dict"
+    VAR_NAMES_KEY: str = "var_names"
+    ATTR_DICT_KEY: str = "attr_dict"
+
+
+SAVE_KEYS = _SAVE_KEYS_NT()
+
 # adjusted from scvi-tools
 # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
 # accessed on 22.April 2025
@@ -98,15 +114,15 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         self.local_component = None
         self.global_component = None
         
-        decoder_type = self._cfg.model.decoder.type
-        if decoder_type == 'linear':
+        self.decoder_type = self._cfg.model.decoder.type
+        if self.decoder_type == 'linear':
             self.decoder = LinearDecoder(n_input = self.n_embed,
                                         n_output = self.n_output)
-        elif decoder_type == 'nonlinear':
+        elif self.decoder_type == 'nonlinear':
             self.decoder = NonLinearDecoder(n_input = self.n_embed,
                                            n_output = self.n_output)
         else:
-            raise ValueError(f"Decoder {decoder_type} not found.")
+            raise ValueError(f"Decoder {self.decoder_type} not found.")
         
     @classmethod
     def _setup_anndata(cls,
@@ -162,6 +178,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         if _SCVI_UUID_KEY not in adata.uns:
             adata.uns[_SCVI_UUID_KEY] = str(id(adata))
         cls._setup_adata_manager_store[adata.uns[_SCVI_UUID_KEY]] = manager
+        cls.sample_key = sample_key
         
     # adjusted from scvi-tools
     # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
@@ -225,9 +242,88 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         adata_id = adata_manager.adata_uuid
         instance_manager_store = self._per_instance_manager_store[self.id]
         instance_manager_store[adata_id] = adata_manager
+        
+    # adjusted from scvi-tools
+    # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
+    # accessed on 22.April 2025
+    def get_anndata_manager(
+        self, adata: AnnData, required: bool = False
+    ) -> AnnDataManager | None:
+        """Retrieves the :class:`~scvi.data.AnnDataManager` for a given AnnData object.
+
+        Requires ``self.id`` has been set. Checks for an :class:`~scvi.data.AnnDataManager`
+        specific to this model instance.
+
+        Parameters
+        ----------
+        adata
+            AnnData object to find manager instance for.
+        required
+            If True, errors on missing manager. Otherwise, returns None when manager is missing.
+        """
+        cls = self.__class__
+        if _SCVI_UUID_KEY not in adata.uns:
+            if required:
+                raise ValueError(
+                    f"Please set up your AnnData with {cls.__name__}.setup_anndata'"
+                    "or {cls.__name__}.setup_mudata first."
+                )
+            return None
+
+        adata_id = adata.uns[_SCVI_UUID_KEY]
+        if self.id not in cls._per_instance_manager_store:
+            if required:
+                raise AssertionError(
+                    "Unable to find instance specific manager store. "
+                    "The model has likely not been initialized with an AnnData object."
+                )
+            return None
+        elif adata_id not in cls._per_instance_manager_store[self.id]:
+            if required:
+                raise AssertionError(
+                    "Please call ``self._validate_anndata`` on this AnnData or MuData object."
+                )
+            return None
+
+        adata_manager = cls._per_instance_manager_store[self.id][adata_id]
+        if adata_manager.adata is not adata:
+            logger.info("AnnData object appears to be a copy. Attempting to transfer setup.")
+            _assign_adata_uuid(adata, overwrite=True)
+            adata_manager = self._adata_manager.transfer_fields(adata)
+            self._register_manager_for_instance(adata_manager)
+
+        return adata_manager
+
+        
+    # adjusted from scvi-tools
+    # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
+    # accessed on 22.April 2025
+    def _validate_anndata(
+        self, adata: AnnData | None = None, 
+        copy_if_view: bool = True
+    ) -> AnnData:
+        """Validate anndata has been properly registered, transfer if necessary."""
+        if adata is None:
+            adata = self._adata
+
+        _check_if_view(adata, copy_if_view=copy_if_view)
+
+        adata_manager = self.get_anndata_manager(adata)
+        if adata_manager is None:
+            logger.info(
+                "Input AnnData not setup with scvi-tools. "
+                + "attempting to transfer AnnData setup"
+            )
+            self._register_manager_for_instance(self._adata_manager.transfer_fields(adata))
+        else:
+            # Case where correct AnnDataManager is found, replay registration as necessary.
+            adata_manager.validate()
+
+        return adata
 
     
     def _make_dataloader(self):
+        
         return None
     
     @abstractmethod
@@ -244,7 +340,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             y_pred: torch.Tensor
         """
     
-    def _register_local_component(self) -> LocalComponent:
+    def _register_local_component(self) -> LocalModuleClass:
         """Register local component based on name.
         Instance must be defined in InterScale.module.local_components."""
         
@@ -264,3 +360,100 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
                        hidden_dim = self._cfg.model.local_component.parameters.hidden_dim)
         else:
             raise ValueError(f"Local component {self._cfg.local_component.name} not found.")
+        
+    def predict_nodewise(self,
+                adata: AnnData | None = None,
+                indices: Sequence[int] | None = None,
+                batch_size: int | None = None,):
+        """Return cell label predictions.
+        
+        Parameters
+        ----------
+        adata
+            AnnData object that has been registered via corresponding setup
+            method in model class.
+        indices
+            Indices of the data to predict. If None, all data is predicted.
+        """
+        
+        if self.prediction_task == 'regression':
+            raise ValueError("Prediction task is regression. Cannot predict nodewise labels.")
+        elif self.prediction_task == 'classification' and self.prediction_level == 'graph':
+            raise ValueError("Prediction level is graph. Cannot predict nodewise labels.")
+        
+        if indices is None:
+            indices = np.arange(adata.n_obs)
+            
+        scdl = self._make_data_loader(
+            adata=adata,
+            indices=indices,
+            batch_size=batch_size,
+        )
+        
+        return None
+        
+    # adjusted from scvi-tools
+    # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
+    # accessed on 02.May 2025
+    def save(
+        self,
+        dir_path: str | None = None,
+        prefix: str | None = None,
+        overwrite: bool = False,
+        save_anndata: bool = False,
+        save_kwargs: dict | None = None,
+        legacy_mudata_format: bool = False,
+        **anndata_write_kwargs,
+    ):
+        """Save the state of the model.
+
+        Parameters
+        ----------
+        dir_path
+            Path to a directory or cfg.model.save_path
+        prefix
+            Prefix to prepend to saved file names.
+        overwrite
+            Overwrite existing data or not. If `False` and directory
+            already exists at `dir_path`, error will be raised.
+        save_kwargs
+            Keyword arguments passed into :func:`~torch.save`.
+        anndata_write_kwargs
+            Kwargs for :meth:`~anndata.AnnData.write`
+        """
+        from scvi.model.base._save_load import _get_var_names
+
+        if dir_path is None:
+            dir_path = self._cfg.model.save
+
+        if not os.path.exists(dir_path) or overwrite:
+            os.makedirs(dir_path, exist_ok=overwrite)
+        else:
+            raise ValueError(
+                f"{dir_path} already exists. Please provide another directory for saving."
+            )
+
+        file_name_prefix = prefix or ""
+        save_kwargs = save_kwargs or {}
+
+        model_save_path = os.path.join(dir_path, f"{file_name_prefix}{SAVE_KEYS.MODEL_FNAME}")
+
+        # save the model state dict and the trainer state dict only
+        model_state_dict = self.module.state_dict()
+        
+        var_names = _get_var_names(self.adata, legacy_mudata_format=legacy_mudata_format)
+
+        # get all the user attributes
+        user_attributes = self._get_user_attributes()
+        # only save the public attributes with _ at the very end
+        user_attributes = {a[0]: a[1] for a in user_attributes if a[0][-1] == "_"}
+
+        torch.save(
+            {
+                SAVE_KEYS.MODEL_STATE_DICT_KEY: model_state_dict,
+                SAVE_KEYS.VAR_NAMES_KEY: var_names,
+                SAVE_KEYS.ATTR_DICT_KEY: user_attributes,
+            },
+            model_save_path,
+            **save_kwargs,
+        )

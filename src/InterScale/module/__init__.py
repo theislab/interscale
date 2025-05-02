@@ -1,5 +1,5 @@
 from .base._base_module import BaseModule
-from .local_components import GCN
+from .local_modules import GCN
 
 __all__ = [
     "BaseModule",
