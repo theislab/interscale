@@ -201,3 +201,30 @@ class GraphAnnDataModule(pl.LightningDataModule):
             #collate_fn=collate_fn,
             **kwargs,
         )    
+        
+    # def _spatial_node_loader(self, 
+    #                          data_list: List[BaseData], 
+    #                          shuffle: bool = False, 
+    #                          **kwargs) -> DataListLoader:
+    #     smallest_length = self.smallest_data_batch_length(data_list)
+    #     num_nodes_to_mask = int(smallest_length * self.pct_mask_nodes)
+    #     if num_nodes_to_mask == 0: # must mask at least one node
+    #         num_nodes_to_mask = 1
+
+    #     dl = DataLoader(
+    #         dataset=data_list,
+    #         shuffle=shuffle,
+    #         batch_size=self.batch_size,
+    #         num_workers=self.num_workers,
+    #         **kwargs,
+    #     )
+
+    #     def masked_wrapper(dataloader):
+    #         for data in dataloader:
+    #             # add mask
+    #             mask_indices = random.sample(range(data.num_nodes), num_nodes_to_mask)
+    #             data.train_mask = torch.zeros(data.num_nodes, dtype=torch.bool)
+    #             data.train_mask[mask_indices] = True
+    #             yield data
+
+    #     return masked_wrapper(dl)

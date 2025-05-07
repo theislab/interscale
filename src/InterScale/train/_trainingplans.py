@@ -7,6 +7,7 @@ from typing import List, Optional, Literal, Dict, Any
 
 from InterScale.tl.scheduler import CosineWarmupScheduler
 from InterScale.model.base._base_model import BaseModelClass
+from InterScale.module.base._base_module import BaseModuleClass
 
 import torchmetrics
 from torchmetrics import MetricCollection
@@ -38,7 +39,10 @@ class TrainingPlan(pl.LightningModule):
 
     def __init__(
         self,
-        model: BaseModelClass,
+        module: BaseModuleClass,
+        prediction_task: str,
+        loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"],
+        batch_size: int,
         *,
         use_lr_scheduler: bool = True,
         weight_decay: float = 1e-6,
@@ -48,31 +52,31 @@ class TrainingPlan(pl.LightningModule):
         **kwargs,
     ):
         super().__init__()
-        self.model = model
-
+        self.module = module
+        self.prediction_task = prediction_task
+        self.loss = loss
+        self.batch_size = batch_size
         self.weight_decay = weight_decay
         self.use_lr_scheduler = use_lr_scheduler
         self.lr_warmup = lr_warmup
         self.lr_max_epochs = lr_max_epochs
         self.lr = lr
 
-        self._setup_loss()
-        self._setup_metrics(self.model.n_input)
+        self._setup_loss(self.loss)
+        self._setup_metrics(self.module.n_input)
 
     def _setup_loss(self, 
                     loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"] = None):
         """Setup loss function based on prediction task and configuration."""
-        
-        loss = loss if self.model._cfg is None else self.model._cfg.optim.loss
-        
-        if 'classification' in self.model.prediction_task:
+                
+        if 'classification' in self.prediction_task:
             assert loss == 'CrossEntropy' or loss == 'WeightedCE', "Classification must be run with CrossEntropy or WeightedCE loss."
             if loss == 'CrossEntropy':
                 self.loss = nn.CrossEntropyLoss()
             elif loss == 'WeightedCE':
                 assert self.class_weights is not None, "Class weights must be provided for WeightedCE loss."
                 self.loss = nn.CrossEntropyLoss(torch.from_numpy(self.class_weights))
-        elif 'regression' in self.model.prediction_task:
+        elif 'regression' in self.prediction_task:
             assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1', "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
             if loss == 'MSELoss':
                 self.loss = nn.MSELoss()
@@ -86,7 +90,7 @@ class TrainingPlan(pl.LightningModule):
             raise ValueError("Prediction task must define 'classification' or 'regression'.")
         
     def _setup_metrics(self, num_outputs: int):
-        if 'classification' in self.model.prediction_task:
+        if 'classification' in self.prediction_task:
             self.metrics = MetricCollection({
                 "accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=num_outputs),
                 "f1_micro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="micro"),
@@ -140,7 +144,7 @@ class TrainingPlan(pl.LightningModule):
 
     def forward(self, *args, **kwargs):
         """Passthrough to the module's forward method."""
-        return self.model(
+        return self.module(
             *args,
             **kwargs,
             get_inference_input_kwargs={"full_forward_pass": not self.update_only_decoder},
@@ -161,7 +165,7 @@ class TrainingPlan(pl.LightningModule):
         mode
             One of 'train', 'val', or 'test'
         """
-        if 'classification' in self.model.prediction_task:
+        if 'classification' in self.prediction_task:
             loss, metrics = self._classification_metrics(y_pred, y_true)
             log_dict = {
                 f'{mode}_loss': loss,
@@ -169,9 +173,9 @@ class TrainingPlan(pl.LightningModule):
                 f'{mode}_f1_micro/avg': metrics['f1_micro'],
                 f'{mode}_f1_macro/avg': metrics['f1_macro'],
             }
-            for class_idx in range(self.model.n_output):
+            for class_idx in range(self.module.n_output):
                 log_dict[f'{mode}_f1/class_{class_idx}'] = metrics['f1_per_class'][class_idx]
-        elif 'regression' in self.model.prediction_task:
+        elif 'regression' in self.prediction_task:
             loss, metrics = self._regression_metrics(y_pred, y_true)
             log_dict = {
                 f'{mode}_loss': loss,
@@ -184,7 +188,7 @@ class TrainingPlan(pl.LightningModule):
         # Set sync_dist=True only for test mode
         sync_dist = (mode == 'test')
         self.log_dict(log_dict, 
-                     batch_size=int(self.model._cfg.dataset.batch_size), 
+                     batch_size=int(self.batch_size), 
                      on_step=False, 
                      on_epoch=True,
                      sync_dist=sync_dist)
@@ -192,25 +196,26 @@ class TrainingPlan(pl.LightningModule):
 
     def training_step(self, batch):
         """Training step for the model."""
-        local_embedding, global_embedding, y_pred, y_true = self.model._common_step(batch)
+        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task)
         return self._compute_and_log_metrics(y_pred, y_true, 'train')
 
     def validation_step(self, batch):
         """Validation step for the model."""
-        local_embedding, global_embedding, y_pred, y_true = self.model._common_step(batch)
+        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task)
         return self._compute_and_log_metrics(y_pred, y_true, 'val')
     
     def test_step(self, batch):
         """Test step for the model."""
-        local_embedding, global_embedding, y_pred, y_true = self.model._common_step(batch)
+        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task)
         return self._compute_and_log_metrics(y_pred, y_true, 'test')
 
     def configure_optimizers(self):
         params = []
-        if self.model.local_component is not None:
-            params.extend(filter(lambda p: p.requires_grad, self.model.local_component.parameters()))
-        if self.model.global_component is not None:
-            params.extend(filter(lambda p: p.requires_grad, self.model.global_component.parameters()))
+        params.extend(filter(lambda p: p.requires_grad, self.module.parameters()))
+        # if self.model.local_component is not None:
+        #     params.extend(filter(lambda p: p.requires_grad, self.module.local_component.parameters()))
+        # if self.model.global_component is not None:
+        #     params.extend(filter(lambda p: p.requires_grad, self.model.global_component.parameters()))
         optimizer = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
         if self.use_lr_scheduler:
             lr_scheduler = CosineWarmupScheduler(optimizer,

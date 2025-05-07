@@ -115,7 +115,10 @@ class NodeMaskingTrainingPlan:
             
         # defines optimizers, training step, val step, logged metrics
         training_plan = self._training_plan_cls(
-            self,
+            self.module,
+            self.prediction_task,
+            self._cfg.optim.loss,
+            self._cfg.dataset.batch_size,
             **plan_kwargs,
             lr = self._cfg.optim.lr,
             lr_warmup = self._cfg.optim.lr_warmup,
@@ -148,7 +151,10 @@ class NodeMaskingTrainingPlan:
         trainer.validate(training_plan, datamodule)
         if train_size + validation_size < 1:
             trainer.test(training_plan, datamodule)
-            
+        
+        if self._cfg.model.save is not None:
+            trainer.save_checkpoint(self._cfg.model.save)
+                    
         self.is_trained = True
     
 

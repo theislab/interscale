@@ -111,18 +111,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         self.validation_indices_ = None
         self.history_ = None
         
-        self.local_component = None
-        self.global_component = None
-        
-        self.decoder_type = self._cfg.model.decoder.type
-        if self.decoder_type == 'linear':
-            self.decoder = LinearDecoder(n_input = self.n_embed,
-                                        n_output = self.n_output)
-        elif self.decoder_type == 'nonlinear':
-            self.decoder = NonLinearDecoder(n_input = self.n_embed,
-                                           n_output = self.n_output)
-        else:
-            raise ValueError(f"Decoder {self.decoder_type} not found.")
+        self.local_component = False
+        self.global_component = False
         
     @classmethod
     def _setup_anndata(cls,
@@ -329,16 +319,6 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
     @abstractmethod
     def train(self):
         """Trains the model.""" 
-        
-    @abstractmethod
-    def _common_step(self,
-              batch):
-        """Shared step between train, val and test.
-        Returns:
-            local_embedding: torch.Tensor
-            global_embedding: torch.Tensor
-            y_pred: torch.Tensor
-        """
     
     def _register_local_component(self) -> LocalModuleClass:
         """Register local component based on name.
@@ -346,16 +326,17 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         if self._cfg.model.local_component.name == 'GCN':
             self._model_summary_string = (
-                f"Local compnent {self._cfg.model.local_component.name}: "
+                f"Local component {self._cfg.model.local_component.name}: "
                 f"n_layers: {self._cfg.model.local_component.parameters.num_layers},"
                 f"n_hidden: {self._cfg.model.local_component.parameters.hidden_dim},"
-                f"n_embed: {self._cfg.model.n_embed}, "
+                f"n_embed: {self.n_embed}, "
                 f"dropout_rate: {self._cfg.model.local_component.parameters.dropout}"
             )
             return GCN(n_input = self.n_input,
                        n_output = self.n_output,
-                       n_embed = self._cfg.model.n_embed,
+                       n_embed = self.n_embed,
                        dropout = self._cfg.model.local_component.parameters.dropout,
+                       decoder_type = self._cfg.model.decoder.type,
                        n_layers = self._cfg.model.local_component.parameters.num_layers,
                        hidden_dim = self._cfg.model.local_component.parameters.hidden_dim)
         else:
@@ -400,10 +381,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         dir_path: str | None = None,
         prefix: str | None = None,
         overwrite: bool = False,
-        save_anndata: bool = False,
         save_kwargs: dict | None = None,
-        legacy_mudata_format: bool = False,
-        **anndata_write_kwargs,
     ):
         """Save the state of the model.
 
@@ -436,23 +414,14 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         file_name_prefix = prefix or ""
         save_kwargs = save_kwargs or {}
 
-        model_save_path = os.path.join(dir_path, f"{file_name_prefix}{SAVE_KEYS.MODEL_FNAME}")
+        model_save_path = os.path.join(dir_path, f"{file_name_prefix}_{SAVE_KEYS.MODEL_FNAME}")
 
         # save the model state dict and the trainer state dict only
         model_state_dict = self.module.state_dict()
-        
-        var_names = _get_var_names(self.adata, legacy_mudata_format=legacy_mudata_format)
-
-        # get all the user attributes
-        user_attributes = self._get_user_attributes()
-        # only save the public attributes with _ at the very end
-        user_attributes = {a[0]: a[1] for a in user_attributes if a[0][-1] == "_"}
 
         torch.save(
             {
                 SAVE_KEYS.MODEL_STATE_DICT_KEY: model_state_dict,
-                SAVE_KEYS.VAR_NAMES_KEY: var_names,
-                SAVE_KEYS.ATTR_DICT_KEY: user_attributes,
             },
             model_save_path,
             **save_kwargs,

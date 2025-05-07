@@ -11,39 +11,20 @@ import torch
 class LocalModel(NodeMaskingTrainingPlan,
                  BaseModelClass):
     
+    _module_cls = LocalModuleClass
+    
     def __init__(self, 
                  adata: AnnData,
                  prediction_task: str,
                  cfg: CN,):
         super().__init__(adata, prediction_task, cfg)
         
-        self.local_component = self._register_local_component()
+        self._module_kwargs = self._cfg.model.local_component.parameters
         
-    def _common_step(self,
-                     batch):
-        """Shared step between train, val and test.
-        
-        Returns:
-            local_embedding: torch.Tensor
-            global_embedding: torch.Tensor
-            y_pred: torch.Tensor
-        """
-        mask_idx = None
-        
-        local_embedding = self.local_component.forward(batch.x, batch.edge_index)
-        y_pred = self.decoder.forward(local_embedding)
-        
-        if 'classification' in self.prediction_task:
-            y_true = batch.y
-            assert y_true.shape == y_pred.shape
-            return local_embedding, None, y_pred, y_true
-            
-        if 'regression' in self.prediction_task:
-            y_true = batch.x
-            assert y_true.shape == y_pred.shape
-            return local_embedding, None, y_pred, y_true
-            
-        assert False, "Prediction task not supported"
+        self.local_component = True
+        self.global_component = False
+
+        self.module = self._register_local_component()
             
     @torch.inference_mode()
     def get_model_output(self,
@@ -75,14 +56,14 @@ class LocalModel(NodeMaskingTrainingPlan,
         )
         
         for batch in pyg:
-            local_embedding = self.local_component.forward(batch.x, batch.edge_index)
+            local_embedding = self.module.forward(batch.x, batch.edge_index)
             # Get indices for this sample
             sample_mask = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
             # Fill embeddings directly into the DataFrame
             local_embeddings_df.loc[sample_mask] = local_embedding.detach().cpu().numpy()
             
-            if self.decoder_type == 'linear':
-                W = self.decoder.decoder.weight
+            if self.module.decoder_type == 'linear':
+                W = self.module.decoder.decoder.weight
                 contribution = torch.matmul(local_embedding, torch.transpose(W, 0, 1))
                 decoder_weight_df.loc[sample_mask] = contribution.detach().cpu().numpy()
                     

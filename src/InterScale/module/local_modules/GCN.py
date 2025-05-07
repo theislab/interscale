@@ -3,7 +3,7 @@ from torch import nn
 from torch_geometric.nn import GCNConv, MessagePassing
 import torch.nn.functional as F
 
-import typing as List
+from typing import Literal
 
 # PyTorch Lightning
 import pytorch_lightning as L
@@ -12,18 +12,12 @@ from InterScale.module.base import LocalModuleClass
 
 class GCN(LocalModuleClass):
     def __init__(self,
-                 n_input: int,
-                 n_output: int,
-                 n_embed: int = 32,
-                 dropout: float = 0.0,
+                 *base_module_kwargs, #TODO difference between *args and **kwargs
                  n_layers: int = 2,
                  hidden_dim: int = 16,
                  **kwargs):
-        super().__init__(n_input=n_input, 
-                        n_output=n_output, 
-                        n_embed=n_embed, 
-                        dropout=dropout,
-                        **kwargs)      
+        
+        super().__init__(*base_module_kwargs)      
         
         self.module_name = 'GCN'
         self.n_layers = n_layers
