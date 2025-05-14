@@ -20,7 +20,7 @@ class NonLinearDecoder(nn.Module):
         self,
         n_input: int,
         n_output: int,
-        hidden_dims: List[int],
+        hidden_dims: List[int] = [128, 128],
         dropout: float = 0.1,
     ):
         super().__init__()

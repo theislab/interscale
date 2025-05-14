@@ -17,13 +17,10 @@ from typing import List, Optional, Literal, Dict, Any, Sequence
 
 import torch
 import torch.nn as nn
-import torchmetrics
-from torchmetrics import MetricCollection
 
-from InterScale.nn import LinearDecoder, NonLinearDecoder
-from InterScale.module.base._base_component import LocalModuleClass, GlobalModuleClass  
-from InterScale.module.local_modules.GCN import GCN
-from InterScale.tl.geome_utils import prepare_a2d_dataset
+from InterScale.module.base import LocalModuleClass, GlobalModuleClass  
+from InterScale.module.local_modules import GCN
+from InterScale.module.global_modules import TransformerNodeEncoderHook
 
 logger = logging.getLogger(__name__)
 
@@ -84,14 +81,15 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
     
     def __init__(self, 
                  adata: AnnData,
-                 prediction_task: str,
                  cfg: CN,
                  ):    
         self.id = str(uuid4())  # Used for cls._manager_store keys.
         self._cfg = cfg
         
-        assert prediction_task in ['classification', 'regression'], "Prediction task must be either 'classification' or 'regression'."
-        self.prediction_task = prediction_task
+        self.prediction_task = cfg.dataset.prediction_task
+        self.prediction_level = cfg.dataset.prediction_level
+        assert self.prediction_task in ['classification', 'regression'], "Prediction task must be either 'classification' or 'regression'."
+        assert self.prediction_level in ['node', 'graph'], "Prediction level must be either 'node' or 'graph'."
         
         # scvi-tools like data handling
         self._adata = adata
@@ -100,12 +98,14 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         # Suffix registry instance variable with _ to include it when saving the model.
         self.registry_ = self._adata_manager.registry
         self.summary_stats = self._adata_manager.summary_stats
+        # TODO: check that anndata is set up in coherence with the cfg file
+        
         self.n_input = self.summary_stats['n_x']
         self.n_embed = self._cfg.model.n_embed
         self.n_output = self.summary_stats['n_prediction_obs'] if self.prediction_task == 'classification' else self.summary_stats['n_x']
         
         self.is_trained_ = False
-        self._model_summary_string = ""
+        self._model_summary_string = f"{self.prediction_task} model for {self.prediction_level} prediction. \n"
         self.train_indices_ = None
         self.test_indices_ = None
         self.validation_indices_ = None
@@ -121,7 +121,6 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
                        layer_key: str,
                        sample_key: str,
                        prediction_obs: str = None,
-                       labels_key: str | None = None,
                        group_key: str | None = None):
         
         """
@@ -139,8 +138,6 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             Key in `adata.obs` that contains the prediction information.
         sample_key  
             Key in `adata.obs` that contains the sample information. For example, if the data is split by FOV or sliding windows.
-        labels_key
-            Only required for classification. Key in `adata.obs` that contains the labels.
         group_key
             Only required if split should stratify groups of group_key, usually this should be condition. Otherwise random split.
             
@@ -151,11 +148,10 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         """  
         
         anndata_fields = [fields.LayerField("x", layer = layer_key),
-                          fields.CategoricalObsField(registry_key = 'prediction_obs', attr_key = prediction_obs),
                           fields.CategoricalObsField(registry_key = 'sample_key', attr_key = sample_key)]
         
-        if labels_key is not None:
-            anndata_fields.append(fields.CategoricalObsField(registry_key = 'labels_key', attr_key = labels_key))
+        if prediction_task == 'classification':
+            anndata_fields.append(fields.CategoricalObsField(registry_key = 'prediction_obs', attr_key = prediction_obs))
         
         if group_key is not None:
             anndata_fields.append(fields.CategoricalObsField(registry_key = 'group_key', attr_key = group_key))    
@@ -325,23 +321,57 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         Instance must be defined in InterScale.module.local_components."""
         
         if self._cfg.model.local_component.name == 'GCN':
-            self._model_summary_string = (
+            self._model_summary_string = self._model_summary_string + (
                 f"Local component {self._cfg.model.local_component.name}: "
                 f"n_layers: {self._cfg.model.local_component.parameters.num_layers},"
                 f"n_hidden: {self._cfg.model.local_component.parameters.hidden_dim},"
                 f"n_embed: {self.n_embed}, "
-                f"dropout_rate: {self._cfg.model.local_component.parameters.dropout}"
+                f"dropout_local: {self._cfg.model.local_component.parameters.dropout_local}"
             )
             return GCN(n_input = self.n_input,
                        n_output = self.n_output,
                        n_embed = self.n_embed,
-                       dropout = self._cfg.model.local_component.parameters.dropout,
                        decoder_type = self._cfg.model.decoder.type,
+                       dropout_decoder = self._cfg.model.decoder.dropout_decoder,
+                       pct_mask_nodes = self._cfg.dataset.pct_mask_nodes,
                        n_layers = self._cfg.model.local_component.parameters.num_layers,
-                       hidden_dim = self._cfg.model.local_component.parameters.hidden_dim)
+                       hidden_dim = self._cfg.model.local_component.parameters.hidden_dim,
+                       dropout_local = self._cfg.model.local_component.parameters.dropout_local,)
         else:
             raise ValueError(f"Local component {self._cfg.local_component.name} not found.")
         
+        
+    def _register_global_component(self) -> GlobalModuleClass:
+        """Register global component based on name.
+        Instance must be defined in InterScale.module.global_components."""
+        
+        if self._cfg.model.global_component.name == 'self-attn-transformer':
+            self._model_summary_string = self._model_summary_string + (
+                f"Global component {self._cfg.model.global_component.name}: "
+                f"max_seq_len: {self._cfg.model.global_component.parameters.max_seq_len},"
+                f"n_heads: {self._cfg.model.global_component.parameters.n_heads},"
+                f"dropout_global: {self._cfg.model.global_component.parameters.dropout_global},"
+                f"act_func: {self._cfg.model.global_component.parameters.activation_func},"
+                f"num_layers: {self._cfg.model.global_component.parameters.num_layers},"
+                f"dim_feedforward: {self._cfg.model.global_component.parameters.dim_feedforward},"
+                f"enforce long-range attention: {self._cfg.model.global_component.parameters.long_range_attention}"
+            )
+            return TransformerNodeEncoderHook(n_input = self.n_input,
+                                            n_output = self.n_output,
+                                            n_embed = self.n_embed,
+                                            decoder_type = self._cfg.model.decoder.type,
+                                            dropout_decoder = self._cfg.model.decoder.dropout_decoder,
+                                            pct_mask_nodes = self._cfg.dataset.pct_mask_nodes,
+                                            max_seq_len = self._cfg.model.global_component.parameters.max_seq_len,
+                                            n_heads = self._cfg.model.global_component.parameters.n_heads,
+                                            dropout_global = self._cfg.model.global_component.parameters.dropout_global,
+                                            act_func = self._cfg.model.global_component.parameters.activation_func,
+                                            num_layers = self._cfg.model.global_component.parameters.num_layers,
+                                            dim_feedforward = self._cfg.model.global_component.parameters.dim_feedforward,
+                                            long_range_attention = self._cfg.model.global_component.parameters.long_range_attention)
+        else:
+            raise ValueError(f"Global component {self._cfg.model.global_component.name} not found.")
+
     def predict_nodewise(self,
                 adata: AnnData | None = None,
                 indices: Sequence[int] | None = None,

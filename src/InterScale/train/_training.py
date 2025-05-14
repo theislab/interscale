@@ -117,7 +117,9 @@ class NodeMaskingTrainingPlan:
         training_plan = self._training_plan_cls(
             self.module,
             self.prediction_task,
+            self.prediction_level,
             self._cfg.optim.loss,
+            self._cfg.optim.cross_corr,
             self._cfg.dataset.batch_size,
             **plan_kwargs,
             lr = self._cfg.optim.lr,

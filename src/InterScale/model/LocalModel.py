@@ -15,9 +15,8 @@ class LocalModel(NodeMaskingTrainingPlan,
     
     def __init__(self, 
                  adata: AnnData,
-                 prediction_task: str,
                  cfg: CN,):
-        super().__init__(adata, prediction_task, cfg)
+        super().__init__(adata, cfg)
         
         self._module_kwargs = self._cfg.model.local_component.parameters
         

@@ -12,17 +12,18 @@ from InterScale.module.base import LocalModuleClass
 
 class GCN(LocalModuleClass):
     def __init__(self,
-                 *base_module_kwargs, #TODO difference between *args and **kwargs
                  n_layers: int = 2,
                  hidden_dim: int = 16,
-                 **kwargs):
+                 dropout_local: float = 0.1,
+                 **base_module_kwargs):
         
-        super().__init__(*base_module_kwargs)      
+        super().__init__(**base_module_kwargs)      
         
         self.module_name = 'GCN'
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim
-
+        self.dropout_local = dropout_local
+        
         layers = []
         in_dim = self.n_input
         hidden_dim = self.hidden_dim
@@ -30,7 +31,7 @@ class GCN(LocalModuleClass):
             layers += [
                 GCNConv(in_channels=in_dim, out_channels=hidden_dim),
                 nn.ReLU(inplace=True),
-                nn.Dropout(self.dropout)
+                nn.Dropout(self.dropout_local)
             ]
             in_dim = hidden_dim
         

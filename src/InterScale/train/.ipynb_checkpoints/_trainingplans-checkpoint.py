@@ -4,11 +4,10 @@ import lightning.pytorch as pl
 import torch
 import torch.nn as nn
 from typing import List, Optional, Literal, Dict, Any
-import numpy as np
+
 from InterScale.tl import CosineWarmupScheduler, compute_dynamic_variance
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.module.base._base_module import BaseModuleClass
-from scipy.stats import pearsonr
 
 
 import torchmetrics
@@ -43,7 +42,6 @@ class TrainingPlan(pl.LightningModule):
         self,
         module: BaseModuleClass,
         prediction_task: str,
-        prediction_level: Literal["node", "graph"],
         loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"],
         cross_corr: Literal["gene", "cell"],
         batch_size: int,
@@ -58,7 +56,6 @@ class TrainingPlan(pl.LightningModule):
         super().__init__()
         self.module = module
         self.prediction_task = prediction_task
-        self.prediction_level = prediction_level
         self.loss_type = loss
         self.cross_corr = cross_corr
         self.batch_size = batch_size
@@ -106,14 +103,20 @@ class TrainingPlan(pl.LightningModule):
             })
         elif 'regression' in self.prediction_task:
             if self.cross_corr == 'gene':
+                print('cross-gene per cellcorrelation metrics')
                 self.AXIS = 1 # selecting rows / cells
+                return None
             elif self.cross_corr == 'cell':
                 self.AXIS = 0 # selecting columns / genes
-            return MetricCollection({
-                "mse": torchmetrics.MeanSquaredError(),
-                "r2": torchmetrics.R2Score(num_outputs=num_outputs, multioutput='uniform_average'),
-                # "r2_single": torchmetrics.R2Score()
-            })
+                print('cross-cell per gene correlation metrics')
+                return MetricCollection({
+                    "mse": torchmetrics.MeanSquaredError(),
+                    "r2_raw": torchmetrics.R2Score(num_outputs=num_outputs, multioutput='raw_values'),
+                    "r2": torchmetrics.R2Score(num_outputs=num_outputs, multioutput='uniform_average'),
+                    "r2_single": torchmetrics.R2Score()
+                })
+            else:
+                raise Exception("Cross-correlation must be run with 'gene' or 'cell'.")
             
         else:
             raise ValueError("Prediction task must define 'classification' or 'regression'.")
@@ -147,6 +150,9 @@ class TrainingPlan(pl.LightningModule):
             y_pred = y_pred[mask_idx]
             y_true = y_true[mask_idx]
             
+        print('y_pred:', y_pred.shape)
+        print('y_true:', y_true.shape)
+            
         if self.loss_type == 'GaussianNLL':
             y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
             loss = self.loss(y_pred, y_true, y_var)
@@ -166,25 +172,8 @@ class TrainingPlan(pl.LightningModule):
             assert y_pred.shape[1] == self.module.n_input
        
         metrics = self.metrics(y_pred, y_true)
-        
-        # Check if arrays are constant before calculating correlation
-        y_pred_np = y_pred.detach().cpu().numpy()
-        y_true_np = y_true.detach().cpu().numpy()
-        
-        if np.std(y_pred_np) == 0 or np.std(y_true_np) == 0:
-            print('constant array')
-            print(y_pred_np[:5], y_true_np[:5])
-            pearson_corr = torch.tensor(1.0 if np.allclose(y_pred_np, y_true_np) else float('nan'), 
-                                      dtype=torch.float32, 
-                                      device=y_pred.device)
-        else:
-            pearson_corr_raw = pearsonr(y_pred_np, y_true_np)
-            pearson_corr = torch.tensor(np.nanmean(pearson_corr_raw[0]), 
-                                      dtype=torch.float32, 
-                                      device=y_pred.device)
-        
         metrics['loss'] = loss
-        metrics['pearson_corr'] = pearson_corr
+        
         return loss, metrics
 
     def forward(self, *args, **kwargs):
@@ -226,7 +215,8 @@ class TrainingPlan(pl.LightningModule):
                 f'{mode}_loss': loss,
                 f'{mode}_mse': metrics['mse'],
                 f'{mode}_r2': metrics['r2'],
-                f'{mode}_pearson_corr': metrics['pearson_corr'],
+                f'{mode}_r2_raw': metrics['r2_raw'],
+                f'{mode}_r2_single': metrics['r2_single'],
             }
         
         # Set sync_dist=True only for test mode
@@ -240,17 +230,17 @@ class TrainingPlan(pl.LightningModule):
 
     def training_step(self, batch):
         """Training step for the model."""
-        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
+        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task)
         return self._compute_and_log_metrics(y_pred, y_true, 'train')
 
     def validation_step(self, batch):
         """Validation step for the model."""
-        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
+        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task)
         return self._compute_and_log_metrics(y_pred, y_true, 'val')
     
     def test_step(self, batch):
         """Test step for the model."""
-        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
+        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task)
         return self._compute_and_log_metrics(y_pred, y_true, 'test')
 
     def configure_optimizers(self):

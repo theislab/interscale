@@ -1,0 +1,92 @@
+from anndata import AnnData
+from yacs.config import CfgNode as CN
+
+import numpy as np
+import pandas as pd
+import torch
+
+from InterScale.tl import prepare_a2d_dataset, SelfAttentionRelevance
+from InterScale.model.base._base_model import BaseModelClass
+from InterScale.train._training import NodeMaskingTrainingPlan
+from InterScale.module.base import GlobalModuleClass
+
+class GlobalModel(NodeMaskingTrainingPlan,
+                 BaseModelClass):
+    
+    _module_cls = GlobalModuleClass
+    
+    def __init__(self, 
+                 adata: AnnData,
+                 cfg: CN,):
+        super().__init__(adata, cfg)
+        
+        self._module_kwargs = self._cfg.model.global_component.parameters
+        
+        self.local_component = False
+        self.global_component = True
+
+        self.module = self._register_global_component()
+        
+    #@torch.inference_mode() Not possible because of pytorch hook for self attention relevance
+    def get_model_output(self,
+                         adata: AnnData | None = None):
+        """Save the embeddings, predictions and attentionsin the adata object.
+
+        Parameters
+        ----------
+        adata
+            AnnData object to run the model on. If `None`, the model's AnnData object is used.
+        """
+        
+        if not self.is_trained:
+            raise RuntimeError("Please train the model first.")
+        
+        adata = self._validate_anndata(adata)
+        
+        a2d = prepare_a2d_dataset(self._cfg)
+        pyg, _ = list(a2d(adata))
+        
+        # Create empty DataFrame with correct shape
+        global_embeddings_df = pd.DataFrame(
+            index=adata.obs_names,
+            columns=range(self.n_embed)
+        )
+        attention_matrix_df = pd.DataFrame(
+            index=adata.obs_names,
+            columns=range(self._cfg.model.global_component.parameters.max_seq_len)
+        )
+
+        decoder_weight_df = pd.DataFrame(
+            index=adata.obs_names,
+            columns=range(self.n_output)
+        )
+        
+        cls = np.full(len(adata.obs_names), np.nan)
+                
+        for batch in pyg:
+            embedding = self.module.create_gex_embedding(batch.x, type="PCA")
+            embedding = torch.tensor(embedding, dtype=torch.float32, device=batch.x.device)
+            transformer_in, global_embedding, src_padding_mask, index_nodes, I = self.module.evaluate(batch, embedding)
+            batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[index_nodes[0]]
+            sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
+            global_embeddings_df.loc[sample_mask] = global_embedding[:-1].squeeze(1).detach().cpu().numpy()
+            cls[sample_mask] = I[:1, 1:].squeeze().cpu().detach().numpy() 
+            attn_matrix = I[1:, 1:].cpu().detach().numpy()
+            # Pad attention matrix to match max_seq_len with NaN
+            padded_attn = np.full((attn_matrix.shape[0], self._cfg.model.global_component.parameters.max_seq_len), np.nan)
+            padded_attn[:, :attn_matrix.shape[1]] = attn_matrix
+            attention_matrix_df.loc[sample_mask] = padded_attn
+
+            if self.module.decoder_type == 'linear':
+                W = self.module.decoder.decoder.weight
+                contribution = torch.matmul(global_embedding[:-1].squeeze(1), torch.transpose(W, 0, 1))
+                print('contribution ', contribution.shape)
+                decoder_weight_df.loc[sample_mask] = contribution.detach().numpy()
+                    
+        # Save embeddings in adata.obsm
+        adata.obsm['global_emb'] = global_embeddings_df.values
+        adata.obsm['attn_matrix'] = attention_matrix_df.values
+        adata.obsm['decoder_weight'] = decoder_weight_df.values
+        adata.obs['cls'] = cls
+        
+        return adata

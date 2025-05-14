@@ -3,7 +3,7 @@ from torch import nn
 
 from InterScale.module.base import GlobalModuleClass
 from InterScale.module.global_modules.transformer_encoder_layer import CustomTransformerEncoderLayer
-from InterScale.tl import pad_batch, create_transformer_attention_mask_from_edges, SelfAttentionRelevance
+from InterScale.tl import pad_batch, create_transformer_attention_mask_from_edges
 
 class TransformerNodeEncoderHook(GlobalModuleClass):
     """
@@ -17,10 +17,9 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                  num_layers: int = 3,
                  dim_feedforward: int = 2048,
                  dropout_global: float = 0.1,
-                 long_range_attention: bool = True,
                  **base_module_kwargs):
         
-        super().__init__(**base_module_kwargs) 
+        super().__init__(*base_module_kwargs) 
         # Save model parameters
         self.model_type = 'TransformerEncoder'
         self.max_seq_len = max_seq_len
@@ -29,7 +28,6 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         self.num_layers = num_layers
         self.dim_feedforward = dim_feedforward
         self.dropout_global = dropout_global
-        self.long_range_attention = long_range_attention
         
         # Create Transformer Encoder
         encoder_layer = CustomTransformerEncoderLayer(
@@ -40,14 +38,8 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
 
         self.norm_input = nn.LayerNorm(self.n_embed)
         self.cls_embedding = nn.Parameter(torch.randn([1, 1, self.n_embed], requires_grad=True))
-        
-        # Register self-attention relevance hook
-        self.self_attn_relevance = SelfAttentionRelevance(self.transformer_encoder)
 
-    def common_step_local_to_global(self, 
-                                    batched_data, 
-                                    emb,
-                                    eval: bool = False):
+    def common_step_local_to_global(self, batched_data, emb):
         """
         Convert local node embeddings [N, E] to padded local node embeddings [max_seq_len, E] 
         with N being the number of nodes in the graph and E being the embedding dimension.
@@ -56,8 +48,6 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
             batched_data: Pytorch geometric object 
             emb: torch.Tensor [N, E]
                 Embedding of the local model or user-provided embeddings.
-            eval: bool
-                Whether to evaluate the transformer encoder. If True, the transformer encoder will not be masked.
         
         Returns:
             padded_emb: torch.Tensor [max_seq_len, E]
@@ -72,7 +62,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         # Layer normalization
         emb = self.norm_input(emb)
         
-        if self.masked_nodes and not eval:
+        if self.masked_nodes:
             keep_indices = batched_data.mask
         else:
             keep_indices = None
@@ -81,18 +71,18 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         padded_emb, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
             emb, 
             batched_data.batch, 
-            self.max_seq_len, 
+            self.transformer_encoder.max_seq_len, 
             get_mask=self.masked_nodes,
             keep_indices=keep_indices  # Add parameter to ensure masked nodes are kept
         )
         
-        if self.long_range_attention:
+        if self._cfg.transformer.long_range_attention:
             attention_mask = create_transformer_attention_mask_from_edges(
                 batched_data.edge_index, 
                 len(batched_data.obs_names), 
                 batched_data.batch, 
                 index_nodes, 
-                self.n_heads
+                self.transformer_encoder.n_heads
             )
             # Convert attention_mask to same dtype as src_padding_mask
             attention_mask = attention_mask.to(dtype=src_padding_mask.dtype)
@@ -101,10 +91,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
             
         return padded_emb, src_padding_mask, index_nodes, attention_mask
 
-    def forward(self, padded_h_node, 
-                src_padding_mask, 
-                mask = None, 
-                register_hook: bool = False):
+    def forward(self, padded_h_node, src_padding_mask, mask = None, register_hook: bool = False):
         """
         Input: 
             padded_h_node: [n_b x B X h_d] with n_b: dimension of batch, B: batch size, h_d: dimension of transformer
@@ -131,24 +118,3 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                 encoder.register_hook = False
 
         return transformer_out, src_padding_mask
-    
-    def evaluate(self, batched_data, embedding):
-        """Evaluates transformer encoder on a batch of data without masking and registering hook.
-
-        Args:
-            batched_data (_type_): _description_
-
-        Returns:
-            I: torch.Tensor [N+1, N+1]
-                Self-attention relevance matrix with CLS token.
-        """
-        # evaluation on single graph
-        batched_data.batch = torch.Tensor(len(batched_data.obs_names)*[0])
-        transformer_in, src_padding_mask, index_nodes, _ = self.common_step_local_to_global(batched_data, embedding, eval=True)
-        
-        transformer_out, src_padding_mask = self.forward(transformer_in, src_padding_mask, register_hook=True)
-        I = self.self_attn_relevance.generate_relevance(transformer_out)
-
-        src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
-
-        return transformer_in, transformer_out, src_padding_mask, index_nodes, I

@@ -8,15 +8,7 @@ from InterScale.nn import LinearDecoder, NonLinearDecoder
 class BaseModuleClass(L.LightningModule, ABC):
     """Abstract base class for all models defining the common training interface.
     
-    Parameters
-    ----------
-    n_input: int
-        Number of input features.
-    n_classes: int
-        If classification, number of output features / classes.
-        For example, number of cell types.
-    n_embed: int
-        Number of embedding features.
+    
     """
     
     def __init__(
@@ -24,9 +16,30 @@ class BaseModuleClass(L.LightningModule, ABC):
         n_input: int,
         n_output: int,
         n_embed: int = 16,
-        dropout: float = 0.2,
         decoder_type: Literal["linear", "nonlinear"] = "linear",
+        dropout_decoder: float = 0.2,
+        decoder_hidden_dims: List[int] = [128, 128],
+        pct_mask_nodes: float = 0.0,
     ):
+        """
+        Parameters
+        ----------
+        n_input: int
+            Number of input features.
+        n_classes: int
+            If classification, number of output features / classes.
+            For example, number of cell types.
+        n_embed: int
+            Number of embedding dimensions.
+        decoder_type: Literal["linear", "nonlinear"]
+            Type of decoder to use.
+        dropout_decoder: float
+            Dropout rate for the decoder only if decoder_type is "nonlinear".
+        decoder_hidden_dims: List[int]
+            Hidden dimensions for the decoder only if decoder_type is "nonlinear".
+        mask_nodes: bool
+            Whether to mask nodes.
+        """
         super().__init__()
         
         self.module_name = None
@@ -34,9 +47,10 @@ class BaseModuleClass(L.LightningModule, ABC):
         self.n_input = n_input
         self.n_embed = n_embed
         self.n_output = n_output
-        self.dropout = dropout
+        self.dropout_decoder = dropout_decoder
         self.decoder_type = decoder_type
-        
+        self.decoder_hidden_dims = decoder_hidden_dims
+        self.pct_mask_nodes = pct_mask_nodes
         # Define components 
         self.local_component = None
         self.global_component = None
@@ -46,7 +60,9 @@ class BaseModuleClass(L.LightningModule, ABC):
                                         n_output = self.n_output)
         elif self.decoder_type == 'nonlinear':
             self.decoder = NonLinearDecoder(n_input = self.n_embed,
-                                           n_output = self.n_output)
+                                           n_output = self.n_output,
+                                           hidden_dims = self.decoder_hidden_dims,
+                                           dropout = self.dropout_decoder)
         elif self.decoder_type == 'None': # If Local + Global model sequential and no decoder needed
             self.decoder = None
         else:
