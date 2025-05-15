@@ -3,6 +3,8 @@ from abc import abstractmethod
 from typing import Literal
 from InterScale.tl import apply_mask
 
+import torch
+
 class LocalModuleClass(BaseModuleClass):
     def __init__(self,
                  **base_module_kwargs):
@@ -35,24 +37,22 @@ class LocalModuleClass(BaseModuleClass):
         """
         # Mask nodes 
         if self.pct_mask_nodes > 0:
-            input_data_masked, mask_idx = apply_mask(batch)
+            batch_masked, mask_idx = apply_mask(batch)
         else:
-            mask_idx = None
-            
-        if mask_idx is None or len(mask_idx) == 0:
-            print('No mask_idx provided, using all data')
-            input_data_masked = batch
+            mask_idx = torch.ones(batch.x.shape[0], dtype=torch.bool, device=batch.x.device)
+            batch_masked = batch
         
-        local_embedding = self.forward(batch.x, batch.edge_index)
+        local_embedding = self.forward(batch_masked.x, batch_masked.edge_index)
         y_pred = self.decoder.forward(local_embedding)
+        y_pred = y_pred[mask_idx]
         
         if 'classification' in prediction_task:
-            y_true = batch.y
+            y_true = batch.y[mask_idx] # batch without mask because constant otherwise
             assert y_true.shape == y_pred.shape
             return local_embedding, None, y_pred, y_true
             
         if 'regression' in prediction_task:
-            y_true = batch.x
+            y_true = batch.x[mask_idx] # batch without mask because constant otherwise
             assert y_true.shape == y_pred.shape
             return local_embedding, None, y_pred, y_true
             

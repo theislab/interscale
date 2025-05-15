@@ -21,6 +21,7 @@ import torch.nn as nn
 from InterScale.module.base import LocalModuleClass, GlobalModuleClass  
 from InterScale.module.local_modules import GCN
 from InterScale.module.global_modules import TransformerNodeEncoderHook
+from InterScale.tl.utils import get_model_filename_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -409,42 +410,46 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
     def save(
         self,
         dir_path: str | None = None,
-        prefix: str | None = None,
         overwrite: bool = False,
         save_kwargs: dict | None = None,
     ):
         """Save the state of the model.
+        File is saved as <dataset_name>_<prediction_task[:4]>_<prediction_level>_<local_component_name>_<global_component_name>_<model_state_dict>.pt
 
         Parameters
         ----------
         dir_path
             Path to a directory or cfg.model.save_path
-        prefix
-            Prefix to prepend to saved file names.
         overwrite
             Overwrite existing data or not. If `False` and directory
             already exists at `dir_path`, error will be raised.
         save_kwargs
             Keyword arguments passed into :func:`~torch.save`.
-        anndata_write_kwargs
-            Kwargs for :meth:`~anndata.AnnData.write`
         """
         from scvi.model.base._save_load import _get_var_names
+        import warnings
 
         if dir_path is None:
             dir_path = self._cfg.model.save
 
-        if not os.path.exists(dir_path) or overwrite:
-            os.makedirs(dir_path, exist_ok=overwrite)
-        else:
-            raise ValueError(
-                f"{dir_path} already exists. Please provide another directory for saving."
-            )
+        # Create directory if it doesn't exist
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path, exist_ok=True)
 
-        file_name_prefix = prefix or ""
+        file_name_prefix = get_model_filename_prefix(self._cfg)
+        
         save_kwargs = save_kwargs or {}
 
         model_save_path = os.path.join(dir_path, f"{file_name_prefix}_{SAVE_KEYS.MODEL_FNAME}")
+
+        # Check if file exists and warn if it does
+        if os.path.exists(model_save_path) and not overwrite:
+            warnings.warn(
+                f"File {model_save_path} already exists. Set overwrite=True to overwrite.",
+                UserWarning,
+                stacklevel=2,
+            )
+            return
 
         # save the model state dict and the trainer state dict only
         model_state_dict = self.module.state_dict()
@@ -456,3 +461,41 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             model_save_path,
             **save_kwargs,
         )
+
+    @classmethod
+    def load(
+        cls,
+        dir_path: str,
+        adata: AnnData,
+        cfg: CN,
+    ):
+        """Load a saved model.
+
+        Parameters
+        ----------
+        dir_path
+            Path to saved model directory.
+        adata
+            AnnData object to load the model with.
+        cfg
+            Configuration object.
+
+        Returns
+        -------
+        model
+            Loaded model.
+        """
+        file_name_prefix = get_model_filename_prefix(cfg)
+        
+        model_save_path = os.path.join(dir_path, f"{file_name_prefix}_{SAVE_KEYS.MODEL_FNAME}")
+        
+        # Initialize model
+        model = cls(adata, cfg)
+        
+        # Load state dict
+        state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+        model.module.load_state_dict(state_dict)
+        
+        model.is_trained_ = True
+        
+        return model

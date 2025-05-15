@@ -14,7 +14,6 @@ def prepare_a2d_dataset(cfg: CN):
     for category_to_iterate in category_to_iterate_list:
         cfg.dataset.spatial_neigbors_kwargs.merge_from_list(['library_key', category_to_iterate])
         spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
-        print(spatial_neigbors_kwargs)
 
         one_hot_encode_list = [prediction_obs]
         
@@ -91,10 +90,11 @@ def prepare_geome_dataset(adata,
         print(spatial_neigbors_kwargs)
 
         one_hot_encode_list = [prediction_obs]
+        X_key = f"layers/{layer_key}" if layer_key is not None else "X"
 
         if 'classification' in cfg.dataset.prediction_task:
             fields = {
-                "x": ["X"],
+                "x": [X_key],
                 "y": [f"obs/{prediction_obs}"],
                 "edge_index": ["uns/edge_index"],
                 "obs_names": ["obs_names"],
@@ -109,7 +109,7 @@ def prepare_geome_dataset(adata,
             )
         elif 'regression' in cfg.dataset.prediction_task:
             fields = {
-                "x": ["X"],
+                "x": [X_key],
                 "edge_index": ["uns/edge_index"],
                 "obs_names": ["obs_names"],
             }

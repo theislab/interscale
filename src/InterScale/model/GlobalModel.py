@@ -38,7 +38,7 @@ class GlobalModel(NodeMaskingTrainingPlan,
             AnnData object to run the model on. If `None`, the model's AnnData object is used.
         """
         
-        if not self.is_trained:
+        if not self.is_trained_:
             raise RuntimeError("Please train the model first.")
         
         adata = self._validate_anndata(adata)
@@ -80,7 +80,6 @@ class GlobalModel(NodeMaskingTrainingPlan,
             if self.module.decoder_type == 'linear':
                 W = self.module.decoder.decoder.weight
                 contribution = torch.matmul(global_embedding[:-1].squeeze(1), torch.transpose(W, 0, 1))
-                print('contribution ', contribution.shape)
                 decoder_weight_df.loc[sample_mask] = contribution.detach().numpy()
                     
         # Save embeddings in adata.obsm

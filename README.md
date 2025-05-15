@@ -62,7 +62,13 @@ Example config file: [example.yaml](src/config_files/example.yaml)
 
 ## Workflow
 
-1. Data preperation
+There are three stages for InterScale:
+
+1. Data preparation: 
+2. Model set-up and training
+3. Evaluation
+
+### 1. Data preperation
 
 We recommend using sliding patterns for the training to detect interaction patterns. 
 
@@ -81,6 +87,12 @@ The necessary configuration to define in the `.yaml` file are:
 | `dataset.spatial_neigbors_kwargs` | Keyword arguments for the spatial neighbors calculation. `radius` should be set such that number of average neighbors is 30. |
 TODO: Complete!
 
+
+### 2. Model set-up and training
+
+| Config                 | Description                                                               |
+|------------------------|---------------------------------------------------------------------------|
+| `model.save`    | Path to `.h5ad` data.                                                       |
 
 ## Release notes
 

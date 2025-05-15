@@ -7,7 +7,8 @@ import torch
 
 from InterScale.train._trainingplans import TrainingPlan
 from InterScale.train._utils import MetricsHistory
-from lightning.pytorch.callbacks import LearningRateMonitor, EarlyStopping
+from InterScale.tl.utils import get_model_filename_prefix
+from lightning.pytorch.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.trainer import Trainer
 from lightning.pytorch.strategies.ddp import DDPStrategy
 import lightning as L
@@ -132,6 +133,9 @@ class NodeMaskingTrainingPlan:
         steps_per_epoch = 10
         lr_monitor = LearningRateMonitor(logging_interval='epoch')
         self.history_ = MetricsHistory()
+        checkpoint_callback = None
+        early_stop_callback = None
+        
         if early_stopping:
             if 'classification' in self.prediction_task:
                 early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
@@ -139,13 +143,26 @@ class NodeMaskingTrainingPlan:
                 early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
             else:
                 raise Exception("Training must be classification or regression based.")
-        else:
-            early_stop_callback = None
-        
+            
+        if self._cfg.model.save is not None:
+            run_name = get_model_filename_prefix(self._cfg)
+            if 'classification' in self._cfg.dataset.prediction_task:
+                checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_acc", mode="max", ) # save model if validation accuracy increases
+            elif 'regression' in self._cfg.dataset.prediction_task:
+                if self._cfg.optim.loss == 'MSELoss':
+                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_mse", mode="min", ) 
+                elif self._cfg.optim.loss == 'GaussianNLL' or self._cfg.optim.loss == 'SmoothL1':
+                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_r2", mode="max", ) 
+                else:
+                    raise Exception("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")            
+            
+        # Create list of callbacks and filter out None values
+        callbacks = [callback for callback in [lr_monitor, early_stop_callback, self.history_, checkpoint_callback] if callback is not None]
+            
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(max_epochs),
                          enable_progress_bar=False,
-                         callbacks=[lr_monitor, early_stop_callback, self.history_],
+                         callbacks=callbacks,
                          log_every_n_steps=1,
                          )
         
@@ -155,9 +172,10 @@ class NodeMaskingTrainingPlan:
             trainer.test(training_plan, datamodule)
         
         if self._cfg.model.save is not None:
-            trainer.save_checkpoint(self._cfg.model.save)
+            print('Model checkpoint will be saved in: ', self._cfg.model.save + run_name + ".pt")
+            trainer.save_checkpoint(self._cfg.model.save + run_name +  ".pt")
                     
-        self.is_trained = True
+        self.is_trained_ = True
     
 
 # adjusted from scvi-tools

@@ -36,7 +36,7 @@ class LocalModel(NodeMaskingTrainingPlan,
             AnnData object to run the model on. If `None`, the model's AnnData object is used.
         """
         
-        if not self.is_trained:
+        if not self.is_trained_:
             raise RuntimeError("Please train the model first.")
         
         adata = self._validate_anndata(adata)
