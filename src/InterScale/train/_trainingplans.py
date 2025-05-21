@@ -67,6 +67,13 @@ class TrainingPlan(pl.LightningModule):
         self.lr_warmup = lr_warmup
         self.lr_max_epochs = lr_max_epochs
         self.lr = lr
+        if self.prediction_task == 'regression':
+            if self.cross_corr == 'gene':
+                print('cross-gene per cell correlation metrics')
+                self.AXIS = 1 # selecting rows / cells
+            elif self.cross_corr == 'cell':
+                print('cross-cell per gene correlation metrics')
+                self.AXIS = 0 # selecting columns / genes
 
         self.metrics = self._setup_metrics(self.module.n_input)
         self._setup_loss(self.loss_type)
@@ -83,7 +90,6 @@ class TrainingPlan(pl.LightningModule):
                 assert self.class_weights is not None, "Class weights must be provided for WeightedCE loss."
                 self.loss = nn.CrossEntropyLoss(torch.from_numpy(self.class_weights))
         elif 'regression' in self.prediction_task:
-            print('loss:', loss)
             assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1', "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
             if loss == 'MSELoss':
                 self.loss = nn.MSELoss()
@@ -105,10 +111,6 @@ class TrainingPlan(pl.LightningModule):
                 "f1_per_class": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average=None)
             })
         elif 'regression' in self.prediction_task:
-            if self.cross_corr == 'gene':
-                self.AXIS = 1 # selecting rows / cells
-            elif self.cross_corr == 'cell':
-                self.AXIS = 0 # selecting columns / genes
             return MetricCollection({
                 "mse": torchmetrics.MeanSquaredError(),
                 "r2": torchmetrics.R2Score(num_outputs=num_outputs, multioutput='uniform_average'),
@@ -149,20 +151,24 @@ class TrainingPlan(pl.LightningModule):
             
         if self.loss_type == 'GaussianNLL':
             y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
-            loss = self.loss(y_pred, y_true, y_var)
-        else:
-            loss = self.loss(y_pred, y_true)
             
         nr_cells = y_true.shape[0]
         
         if self.cross_corr == 'gene':
             # score per cell, cell numbers dependent on sliding windows / spatial slide
             self.metrics = self._setup_metrics(nr_cells) 
+            if self.loss_type == 'GaussianNLL':
+                loss = self.loss(y_pred, y_true, y_var)
+            else:
+                loss = self.loss(y_pred, y_true)
             y_pred = y_pred.T.contiguous()
             y_true = y_true.T.contiguous()
             assert y_pred.shape[0] == self.module.n_input
         elif self.cross_corr == 'cell':
-            loss = self.loss(y_pred.T.contiguous(), y_true.T.contiguous(), y_var) # loss calculated over [N,:]
+            if self.loss_type == 'GaussianNLL':
+                loss = self.loss(y_pred.T.contiguous(), y_true.T.contiguous(), y_var) # loss calculated over [N,:]
+            else:
+                loss = self.loss(y_pred.T.contiguous(), y_true.T.contiguous()) # loss calculated over [N,:]
             assert y_pred.shape[1] == self.module.n_input
        
         metrics = self.metrics(y_pred, y_true)
@@ -170,7 +176,7 @@ class TrainingPlan(pl.LightningModule):
         # Check if arrays are constant before calculating correlation
         y_pred_np = y_pred.detach().cpu().numpy()
         y_true_np = y_true.detach().cpu().numpy()
-        
+                                
         if np.std(y_pred_np) == 0 or np.std(y_true_np) == 0:
             print('constant array')
             print(y_pred_np[:5], y_true_np[:5])
@@ -179,6 +185,7 @@ class TrainingPlan(pl.LightningModule):
                                       device=y_pred.device)
         else:
             pearson_corr_raw = pearsonr(y_pred_np, y_true_np)
+            # np.nanmean because pearsonr returns nan if all values are constant
             pearson_corr = torch.tensor(np.nanmean(pearson_corr_raw[0]), 
                                       dtype=torch.float32, 
                                       device=y_pred.device)

@@ -14,6 +14,16 @@ def apply_mask(batched_data: Batch):
             Batch only containing nodes that were not masked
         mask_idx (torch.Tensor):
             Indices of masked nodes
+            
+    Example: 
+        Data object:
+        x = torch.tensor([[1., 2.], [3., 4.], [5., 6.], [7., 8.]])
+        edge_index = torch.tensor([[0, 1, 2], [1, 2, 3]])
+        mask = torch.tensor([1, 0, 1, 0], dtype=torch.bool)
+        data = Data(x=x, edge_index=edge_index, mask=mask)
+        ----
+        mask_idx = torch.tensor([1, 3])
+        masked_values = torch.tensor([[0., 0.], [3., 4.], [0., 0.], [7., 8.]])
     """
     if batched_data.mask is None:
         print("No mask found in batched_data")

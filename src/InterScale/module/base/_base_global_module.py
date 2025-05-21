@@ -19,7 +19,7 @@ class GlobalModuleClass(BaseModuleClass):
         self.registered_global_component = True
         
         self.pca = PCA(n_components=self.n_embed)
-        
+    
     @abstractmethod
     def forward(self, embeddings: torch.Tensor):
         """
@@ -118,7 +118,6 @@ class GlobalModuleClass(BaseModuleClass):
     
         y_pred_masked = y_pred[adjusted_mask_idx]
         y_true_masked = y_true[adjusted_mask_idx]
-        print('y_pred_masked', y_pred_masked.shape, y_pred_masked[:2], 'y_true_masked', y_true_masked.shape, y_true_masked[:2])
         assert len(y_pred_masked) == len(y_true_masked), "y_pred and y_true are not consistent"
         return None, global_embedding, y_pred_masked, y_true_masked
 

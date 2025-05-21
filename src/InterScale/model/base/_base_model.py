@@ -411,6 +411,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         self,
         dir_path: str | None = None,
         overwrite: bool = False,
+        postfix: str | None = None,
         save_kwargs: dict | None = None,
     ):
         """Save the state of the model.
@@ -438,6 +439,9 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
 
         file_name_prefix = get_model_filename_prefix(self._cfg)
         
+        if postfix is not None:
+            file_name_prefix = file_name_prefix + f"_{postfix}"
+            
         save_kwargs = save_kwargs or {}
 
         model_save_path = os.path.join(dir_path, f"{file_name_prefix}_{SAVE_KEYS.MODEL_FNAME}")

@@ -62,11 +62,13 @@ class GlobalModel(NodeMaskingTrainingPlan,
         )
         
         cls = np.full(len(adata.obs_names), np.nan)
+        self_attention_relevance = SelfAttentionRelevance(self.module)
                 
         for batch in pyg:
             embedding = self.module.create_gex_embedding(batch.x, type="PCA")
             embedding = torch.tensor(embedding, dtype=torch.float32, device=batch.x.device)
             transformer_in, global_embedding, src_padding_mask, index_nodes, I = self.module.evaluate(batch, embedding)
+            #I = self_attention_relevance.generate_relevance(transformer_in, src_padding_mask)
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[index_nodes[0]]
             sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
             global_embeddings_df.loc[sample_mask] = global_embedding[:-1].squeeze(1).detach().cpu().numpy()

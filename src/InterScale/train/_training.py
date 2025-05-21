@@ -4,6 +4,8 @@ from math import ceil, floor
 import lightning.pytorch as pl
 import numpy as np
 import torch
+import wandb
+from lightning.pytorch.loggers import WandbLogger
 
 from InterScale.train._trainingplans import TrainingPlan
 from InterScale.train._utils import MetricsHistory
@@ -159,12 +161,33 @@ class NodeMaskingTrainingPlan:
         # Create list of callbacks and filter out None values
         callbacks = [callback for callback in [lr_monitor, early_stop_callback, self.history_, checkpoint_callback] if callback is not None]
             
-        trainer = pl.Trainer(min_epochs=1, 
-                         max_epochs=int(max_epochs),
-                         enable_progress_bar=False,
-                         callbacks=callbacks,
-                         log_every_n_steps=1,
-                         )
+        # Set up WandB logger if requested
+        logger = None
+        if self._cfg.wandb.use:
+            print('Wandb initialize...')
+            run_name = get_model_filename_prefix(self._cfg)
+            if self._cfg.wandb.project_name is None:
+                raise ValueError("wandb_project must be specified when use_wandb is True")
+            run = wandb.init(project=self._cfg.wandb.project_name, config=self._cfg, name=run_name, job_type = 'model_training')
+            wandb_logger = WandbLogger(name = run_name, log_model=True)
+            total_params = sum(p.numel() for p in self.module.parameters())
+            trainable_params = sum(p.numel() for p in self.module.parameters() if p.requires_grad)
+            wandb.log({
+                "total_parameters": total_params,
+                "trainable_parameters": trainable_params
+            })
+            print(f"Total parameters: {total_params:,}")
+            print(f"Trainable parameters: {trainable_params:,}")
+            
+        trainer = pl.Trainer(
+            min_epochs=1, 
+            max_epochs=int(max_epochs),
+            enable_progress_bar=False,
+            callbacks=callbacks,
+            log_every_n_steps=1,
+            logger=logger,
+            **trainer_kwargs
+        )
         
         trainer.fit(training_plan, datamodule)
         trainer.validate(training_plan, datamodule)
@@ -174,6 +197,10 @@ class NodeMaskingTrainingPlan:
         if self._cfg.model.save is not None:
             print('Model checkpoint will be saved in: ', self._cfg.model.save + run_name + ".pt")
             trainer.save_checkpoint(self._cfg.model.save + run_name +  ".pt")
+        
+        # Close WandB logger if it was used
+        if self._cfg.wandb.use and logger is not None:
+            logger.finalize("success")
                     
         self.is_trained_ = True
     

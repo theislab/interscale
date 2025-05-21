@@ -39,11 +39,16 @@ class LocalModuleClass(BaseModuleClass):
         if self.pct_mask_nodes > 0:
             batch_masked, mask_idx = apply_mask(batch)
         else:
-            mask_idx = torch.ones(batch.x.shape[0], dtype=torch.bool, device=batch.x.device)
+            # pretend as if all nodes are masked
+            mask_idx = torch.arange(batch.x.shape[0])
             batch_masked = batch
         
         local_embedding = self.forward(batch_masked.x, batch_masked.edge_index)
         y_pred = self.decoder.forward(local_embedding)
+        
+        assert y_pred.shape[0] == len(batch.obs_names), f"Mismatch: y_pred.shape: {y_pred.shape[0]}, batch.obs_names: {len(batch.obs_names)}"
+        assert y_pred.shape[1] == self.n_output, f"Mismatch: y_pred.shape: {y_pred.shape[1]}, self.n_output: {self.n_output}"
+        
         y_pred = y_pred[mask_idx]
         
         if 'classification' in prediction_task:
