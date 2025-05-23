@@ -124,15 +124,19 @@ class NodeMaskingTrainingPlan:
             self._cfg.optim.loss,
             self._cfg.optim.cross_corr,
             self._cfg.dataset.batch_size,
+            self.class_weights,
             **plan_kwargs,
+            use_lr_scheduler = self._cfg.optim.use_lr_scheduler,
+            weight_decay = self._cfg.optim.wd,
             lr = self._cfg.optim.lr,
             lr_warmup = self._cfg.optim.lr_warmup,
-            weight_decay = self._cfg.optim.wd,
+            lr_max_epochs = self._cfg.optim.n_epochs,
         )
         
         #TODO: change steps per epoch to be based on datamodule
         #steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
-        steps_per_epoch = 10
+        steps_per_epoch = math.ceil(len(datamodule.train_data) / self._cfg.dataset.batch_size)
+        print('Steps per epoch', steps_per_epoch)
         lr_monitor = LearningRateMonitor(logging_interval='epoch')
         self.history_ = MetricsHistory()
         checkpoint_callback = None
@@ -140,9 +144,9 @@ class NodeMaskingTrainingPlan:
         
         if early_stopping:
             if 'classification' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
+                early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=5*steps_per_epoch, verbose=False, mode="max")
             elif 'regression' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
+                early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=5*steps_per_epoch, verbose=False, mode="max")
             else:
                 raise Exception("Training must be classification or regression based.")
             
@@ -169,7 +173,7 @@ class NodeMaskingTrainingPlan:
             if self._cfg.wandb.project_name is None:
                 raise ValueError("wandb_project must be specified when use_wandb is True")
             run = wandb.init(project=self._cfg.wandb.project_name, config=self._cfg, name=run_name, job_type = 'model_training')
-            wandb_logger = WandbLogger(name = run_name, log_model=True)
+            logger = WandbLogger(name = run_name, log_model=True)
             total_params = sum(p.numel() for p in self.module.parameters())
             trainable_params = sum(p.numel() for p in self.module.parameters() if p.requires_grad)
             wandb.log({

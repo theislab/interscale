@@ -57,3 +57,18 @@ class GCN(LocalModuleClass):
         h = F.relu(x)
         return h
     
+    def get_model_summary(self) -> str:
+        """Returns a string containing the model's parameters summary.
+
+        Returns:
+            str: Summary string with model parameters
+        """
+        summary = (
+            f"GCN Local Component: \n"
+            f"n_layers: {self.n_layers}, \n"
+            f"n_hidden: {self.hidden_dim}, \n"
+            f"n_embed: {self.n_embed}, \n"
+            f"dropout_local: {self.dropout_local}"
+        )
+        return summary
+    

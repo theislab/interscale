@@ -11,9 +11,11 @@ def get_optim_cfg(cfg):
   """
   cfg.optim = CN()
 
-  cfg.optim.lr = 0.005 
-  cfg.optim.wd = 0.0
-  cfg.optim.lr_warmup = 40
+  cfg.optim.lr = 0.001 
+  cfg.optim.use_lr_scheduler = True
+  cfg.optim.lr_warmup = 20
+  cfg.optim.lr_max_epochs = 100
+  cfg.optim.wd = 1e-4
   cfg.optim.loss = "CrossEntropy" 
   cfg.optim.seed = 40
   cfg.optim.cross_corr = 'gene' # cross-gene or cross-cell correlation

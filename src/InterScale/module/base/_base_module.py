@@ -16,7 +16,7 @@ class BaseModuleClass(L.LightningModule, ABC):
         n_input: int,
         n_output: int,
         n_embed: int = 16,
-        decoder_type: Literal["linear", "nonlinear"] = "linear",
+        decoder_type: None |Literal["linear", "nonlinear"] = "linear",
         dropout_decoder: float = 0.2,
         decoder_hidden_dims: List[int] = [128, 128],
         pct_mask_nodes: float = 0.0,
@@ -32,7 +32,7 @@ class BaseModuleClass(L.LightningModule, ABC):
         n_embed: int
             Number of embedding dimensions.
         decoder_type: Literal["linear", "nonlinear"]
-            Type of decoder to use.
+            Type of decoder to use. For combined module the submodules will potentially not have their own decoder (set to None).
         dropout_decoder: float
             Dropout rate for the decoder only if decoder_type is "nonlinear".
         decoder_hidden_dims: List[int]
@@ -63,7 +63,7 @@ class BaseModuleClass(L.LightningModule, ABC):
                                            n_output = self.n_output,
                                            hidden_dims = self.decoder_hidden_dims,
                                            dropout = self.dropout_decoder)
-        elif self.decoder_type == 'None': # If Local + Global model sequential and no decoder needed
+        elif self.decoder_type == None: # If Local + Global model sequential and no decoder needed
             self.decoder = None
         else:
             raise ValueError(f"Decoder {self.decoder_type} not found.")

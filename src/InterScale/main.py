@@ -18,7 +18,7 @@ def main(cfg_path):
     interscale.model.LocalModel._setup_anndata(adata = adata,
                                                prediction_task = cfg.dataset.prediction_task, 
                                                layer_key = cfg.dataset.layer_key, 
-                                               sample_key = cfg.dataset.sample_key, 
+                                               sample_key_list = cfg.dataset.sample_key, 
                                                prediction_obs = cfg.dataset.prediction_obs, 
                                                group_key = cfg.dataset.group_label)
     

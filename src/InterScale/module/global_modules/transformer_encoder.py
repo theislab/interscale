@@ -152,3 +152,18 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
 
         return transformer_in, transformer_out, src_padding_mask, index_nodes, I
+    
+    def get_model_summary(self) -> str:
+        """Returns a string containing the model's parameters summary.
+
+        Returns:
+            str: Summary string with model parameters
+        """
+        summary = (
+            f"Transformer Encoder Global Component: \n"
+            f"max_seq_len: {self.max_seq_len}, \n"
+            f"n_heads: {self.n_heads}, \n"
+            f"act_func: {self.act_func}, \n"
+            f"num_layers: {self.num_layers}, \n"
+        )
+        return summary

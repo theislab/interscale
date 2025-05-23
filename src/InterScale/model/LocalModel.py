@@ -1,6 +1,7 @@
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.train._training import NodeMaskingTrainingPlan
 from InterScale.module.base import LocalModuleClass
+from InterScale.module.local_modules import GCN
 from anndata import AnnData
 from yacs.config import CfgNode as CN
 from InterScale.tl.geome_utils import prepare_a2d_dataset
@@ -18,12 +19,19 @@ class LocalModel(NodeMaskingTrainingPlan,
                  cfg: CN,):
         super().__init__(adata, cfg)
         
-        self._module_kwargs = self._cfg.model.local_component.parameters
-        
         self.local_component = True
         self.global_component = False
 
-        self.module = self._register_local_component()
+        self.module = LocalModuleClass.from_config(
+            cfg,
+            n_input=self.n_input,
+            n_output=self.n_output,
+            n_embed=self.n_embed,
+            decoder_type=self._cfg.model.decoder.type,
+            dropout_decoder=self._cfg.model.decoder.dropout_decoder,
+            decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
+            pct_mask_nodes=self._cfg.dataset.pct_mask_nodes
+        )
             
     @torch.inference_mode()
     def get_model_output(self,

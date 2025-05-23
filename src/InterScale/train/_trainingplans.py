@@ -47,6 +47,7 @@ class TrainingPlan(pl.LightningModule):
         loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"],
         cross_corr: Literal["gene", "cell"],
         batch_size: int,
+        class_weights: np.ndarray | None = None,
         *,
         use_lr_scheduler: bool = True,
         weight_decay: float = 1e-6,
@@ -62,6 +63,7 @@ class TrainingPlan(pl.LightningModule):
         self.loss_type = loss
         self.cross_corr = cross_corr
         self.batch_size = batch_size
+        self.class_weights = class_weights
         self.weight_decay = weight_decay
         self.use_lr_scheduler = use_lr_scheduler
         self.lr_warmup = lr_warmup
@@ -81,6 +83,9 @@ class TrainingPlan(pl.LightningModule):
     def _setup_loss(self, 
                     loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"]):
         """Setup loss function based on prediction task and configuration."""
+        
+        print(self.prediction_task)
+        print(loss)
                 
         if 'classification' in self.prediction_task:
             assert loss == 'CrossEntropy' or loss == 'WeightedCE', "Classification must be run with CrossEntropy or WeightedCE loss."
@@ -90,6 +95,7 @@ class TrainingPlan(pl.LightningModule):
                 assert self.class_weights is not None, "Class weights must be provided for WeightedCE loss."
                 self.loss = nn.CrossEntropyLoss(torch.from_numpy(self.class_weights))
         elif 'regression' in self.prediction_task:
+            print('Regression')
             assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1', "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
             if loss == 'MSELoss':
                 self.loss = nn.MSELoss()
@@ -199,7 +205,6 @@ class TrainingPlan(pl.LightningModule):
         return self.module(
             *args,
             **kwargs,
-            get_inference_input_kwargs={"full_forward_pass": not self.update_only_decoder},
         )
 
     def _compute_and_log_metrics(self, 

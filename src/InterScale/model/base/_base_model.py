@@ -17,6 +17,7 @@ from typing import List, Optional, Literal, Dict, Any, Sequence
 
 import torch
 import torch.nn as nn
+from sklearn.utils.class_weight import compute_class_weight
 
 from InterScale.module.base import LocalModuleClass, GlobalModuleClass  
 from InterScale.module.local_modules import GCN
@@ -115,12 +116,17 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         self.local_component = False
         self.global_component = False
         
+        self.class_weights = None
+        if self._cfg.optim.loss == 'WeightedCE':
+            self.class_weights = compute_class_weight("balanced", classes = np.unique(self._adata.obs[self._cfg.dataset.prediction_obs]), y=self._adata.obs[self._cfg.dataset.prediction_obs])
+            print('Class weights', self.class_weights)
+        
     @classmethod
     def _setup_anndata(cls,
                        adata: AnnData,
                        prediction_task: str,
                        layer_key: str,
-                       sample_key: str,
+                       sample_key_list: List[str],
                        prediction_obs: str = None,
                        group_key: str | None = None):
         
@@ -148,8 +154,10 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             AnnDataManager object that contains the data.
         """  
         
-        anndata_fields = [fields.LayerField("x", layer = layer_key),
-                          fields.CategoricalObsField(registry_key = 'sample_key', attr_key = sample_key)]
+        anndata_fields = [fields.LayerField("x", layer = layer_key)]
+        
+        for i, sample_key in enumerate(sample_key_list):
+            anndata_fields.append(fields.CategoricalObsField(registry_key = f'sample_key_{i}', attr_key = sample_key))
         
         if prediction_task == 'classification':
             anndata_fields.append(fields.CategoricalObsField(registry_key = 'prediction_obs', attr_key = prediction_obs))

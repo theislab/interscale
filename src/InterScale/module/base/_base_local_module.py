@@ -65,3 +65,19 @@ class LocalModuleClass(BaseModuleClass):
     
     def get_local_embeddings(self, x, edge_index):
         return self.forward(x, edge_index)
+
+    # acts as a factory method to create a module from a config
+    @staticmethod
+    def from_config(cfg, **kwargs):
+        module_name = cfg.model.local_component.name
+        params = cfg.model.local_component.parameters.copy()  # Make a copy to avoid modifying the original
+            
+        if module_name == 'GCN':
+            from InterScale.module.local_modules import GCN
+            return GCN(n_layers = params['num_layers'],
+                       hidden_dim = params['hidden_dim'],
+                       dropout_local = params['dropout_local'],
+                       **kwargs)
+        # Add more elifs for other modules
+        else:
+            raise ValueError(f"Unknown local module name: {module_name}")

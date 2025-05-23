@@ -38,37 +38,30 @@ class GlobalModuleClass(BaseModuleClass):
         #     return scvi.model.SCVI(embeddings)
         else:
             raise ValueError(f"Invalid embedding type: {type}")
-    
-    def _common_step(self,
-                     batch,
-                     prediction_task: str, 
-                     prediction_level: Literal["node", "graph"]):
-        """Shared step between train, val and test.
         
+    def _process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx):
+        """Process batch to extract y_true and adjusted_mask_idx for metrics calculation.
+        
+        Parameters
+        ----------
+        batch
+            Input batch
+        prediction_task
+            Type of prediction task ('classification' or 'regression')
+        prediction_level
+            Level of prediction ('node' or 'graph')
+        pad_index_nodes
+            List of padded node indices
+        mask_idx
+            Indices of masked nodes
+            
         Returns
         -------
-        local_embedding: torch.Tensor 
-            Size: [N, E]
-        global_embedding: torch.Tensor 
-            Size: [N, E] with SEQ_LEN_MASK for padding nodes.
-        y_pred: torch.Tensor 
-            Size: [N, C] (classification) or [N, F] (regression) with SEQ_LEN_MASK for padding nodes.
-        y_true: torch.Tensor 
-            Size: [N, C] (classification) or [N, F] (regression) with SEQ_LEN_MASK for padding nodes.
+        y_true: torch.Tensor
+            Ground truth values
+        adjusted_mask_idx: torch.Tensor
+            Adjusted indices for masked nodes
         """
-        # Mask nodes  - before GEX embedding because otherwise embedding contains information about masked nodes
-        if self.pct_mask_nodes > 0:
-            batch_masked, mask_idx = apply_mask(batch)
-        else:
-            mask_idx = torch.ones(batch.x.shape[0], dtype=torch.bool, device=batch.x.device)
-            batch_masked = batch
-        
-        embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type="PCA")
-        embedding = torch.tensor(embedding, dtype=torch.float32, device=batch_masked.x.device)
-        
-        padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
-        global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
-        
         y_true = []
         adjusted_mask_idx = []  # Track new positions of masked nodes
         current_offset = 0
@@ -102,6 +95,40 @@ class GlobalModuleClass(BaseModuleClass):
         y_true = torch.stack(y_true)
         adjusted_mask_idx = torch.tensor(adjusted_mask_idx, device=y_true.device)
         
+        return y_true, adjusted_mask_idx
+    
+    def _common_step(self,
+                     batch,
+                     prediction_task: str, 
+                     prediction_level: Literal["node", "graph"]):
+        """Shared step between train, val and test.
+        
+        Returns
+        -------
+        local_embedding: torch.Tensor 
+            Size: [N, E]
+        global_embedding: torch.Tensor 
+            Size: [N, E] with SEQ_LEN_MASK for padding nodes.
+        y_pred: torch.Tensor 
+            Size: [N, C] (classification) or [N, F] (regression) with SEQ_LEN_MASK for padding nodes.
+        y_true: torch.Tensor 
+            Size: [N, C] (classification) or [N, F] (regression) with SEQ_LEN_MASK for padding nodes.
+        """
+        # Mask nodes  - before GEX embedding because otherwise embedding contains information about masked nodes
+        if self.pct_mask_nodes > 0:
+            batch_masked, mask_idx = apply_mask(batch)
+        else:
+            mask_idx = torch.ones(batch.x.shape[0], dtype=torch.bool, device=batch.x.device)
+            batch_masked = batch
+        
+        embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type="PCA")
+        embedding = torch.tensor(embedding, dtype=torch.float32, device=batch_masked.x.device)
+        
+        padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
+        global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
+        
+        y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
+        
         ## Graph-level prediction: get cls
         if 'graph' in prediction_level:
             cls = global_embedding[-1,:, :] # [B, E]
@@ -118,9 +145,30 @@ class GlobalModuleClass(BaseModuleClass):
     
         y_pred_masked = y_pred[adjusted_mask_idx]
         y_true_masked = y_true[adjusted_mask_idx]
+        
         assert len(y_pred_masked) == len(y_true_masked), "y_pred and y_true are not consistent"
         return None, global_embedding, y_pred_masked, y_true_masked
 
     def get_global_embeddings(self, x, edge_index):
         return self.forward(x, edge_index)
+    
+    # acts as a factory method to create a module from a config
+    @staticmethod
+    def from_config(cfg, **kwargs):
+        module_name = cfg.model.global_component.name
+        params = cfg.model.global_component.parameters.copy()  # Make a copy to avoid modifying the original
+            
+        if module_name == 'self-attn-transformer':
+            from InterScale.module.global_modules import TransformerNodeEncoderHook
+            return TransformerNodeEncoderHook(max_seq_len = params['max_seq_len'],
+                                        n_heads = params['n_heads'],
+                                        dropout_global = params['dropout_global'],
+                                        act_func = params['activation_func'],
+                                        num_layers = params['num_layers'],
+                                        dim_feedforward = params['dim_feedforward'],
+                                        long_range_attention = params['long_range_attention'],
+                                        **kwargs)
+        # Add more elifs for other modules
+        else:
+            raise ValueError(f"Unknown local module name: {module_name}")
         
