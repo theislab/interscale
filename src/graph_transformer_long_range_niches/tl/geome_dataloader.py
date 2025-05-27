@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from typing import Literal, List
 
 import pytorch_lightning as pl
+from lightning.pytorch import LightningDataModule
 from torch_geometric.data import Data
 from torch_geometric.data.data import BaseData
 from torch_geometric.loader import DataLoader, DataListLoader
@@ -181,8 +182,9 @@ class GraphAnnDataModule(pl.LightningDataModule):
         """
         smallest_length = self.smallest_data_batch_length(data_list)
         num_nodes_to_mask = int(smallest_length * self.pct_mask_nodes)
-        # num_nodes = int(self.smallest_data_batch_length(data) * self.pct_mask_nodes)
-
+        if num_nodes_to_mask == 0: # must mask at least one node
+            num_nodes_to_mask = 1
+        
         for data in data_list:
             if data.num_nodes < num_nodes_to_mask:
                 raise ValueError("Cannot sample more nodes than available in any graph.")
@@ -191,10 +193,6 @@ class GraphAnnDataModule(pl.LightningDataModule):
             mask_indices = random.sample(range(data.num_nodes), num_nodes_to_mask)
             data.mask = torch.zeros(data.num_nodes, dtype=torch.bool)
             data.mask[mask_indices] = True
-
-        # def collate_fn(batch: List['BaseData']):
-        #     """Custom collate function to combine BaseData objects into a batch."""
-        #     return batch  # Keeping it as a simple list for now
 
         return DataLoader(
             dataset=data_list,

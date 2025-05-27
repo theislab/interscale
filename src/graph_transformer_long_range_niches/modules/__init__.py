@@ -11,5 +11,5 @@ __all__ = [
     "CustomTransformerEncoderLayer",
     "BaseModule", 
     "LitGCN",
-    "LitGCNMasked",
+    "LitGCNMasked"
 ]

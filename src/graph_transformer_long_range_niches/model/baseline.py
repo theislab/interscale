@@ -26,7 +26,6 @@ class Baseline():
         self._cfg = cfg
         super().__init__(cfg)
 
-        
         # Load data
         self.adata = sc.read_h5ad(cfg.dataset.h5ad_data)
         

@@ -10,8 +10,10 @@ def apply_mask(batched_data: Batch):
         batched_data (Batch): _description_
 
     Returns:
-        batched_data (Batch): 
+        batched_data_w_mask (Batch): 
             Batch only containing nodes that were not masked
+        mask_idx (torch.Tensor):
+            Indices of masked nodes
     """
     if batched_data.mask is None:
         print("No mask found in batched_data")

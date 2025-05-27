@@ -13,7 +13,8 @@ from scipy.stats import pearsonr
 import numpy as np
 
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
-from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics, compute_dynamic_variance
+from graph_transformer_long_range_niches.tl.masking import apply_mask
+from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics, compute_dynamic_variance, create_transformer_attention_mask_from_edges, pad_batch
 
 class BaseModule(L.LightningModule):
     """Base class for all models (Local, Global, Local+Global)"""
@@ -32,6 +33,11 @@ class BaseModule(L.LightningModule):
         self.num_classes = cfg.dataset.num_classes
         self.num_features = cfg.dataset.num_features
         self.max_seq_len = cfg.transformer.max_seq_len
+        
+        if cfg.dataset.pct_mask_nodes > 0:
+            self.masked_nodes = True
+        else:
+            self.masked_nodes = False
 
         #define loss
         self.loss = define_loss(cfg, class_weights)
@@ -67,7 +73,7 @@ class BaseModule(L.LightningModule):
             self.graph_pred_linear = nn.Sequential(
                     *[nn.Sequential(
                         nn.Linear(n_in, n_out),
-                        nn.BatchNorm1d(n_out, momentum=0.01, eps=0.001),
+                        nn.LayerNorm(n_out),
                         nn.ReLU(),
                         nn.Dropout(p=self._cfg.model.decoder.dropout)
                     ) for n_in, n_out in zip(layers_dim[:-1], layers_dim[1:-1])],
@@ -83,8 +89,69 @@ class BaseModule(L.LightningModule):
                                              max_epochs=100000)
 
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
+    
+    def _common_step(self, batch):
+        raise NotImplementedError("Subclasses must implement the _common_step method.")
+    
+    def common_step_local(self, batch):
+        raise NotImplementedError("Subclasses must implement the _common_step method.")
+    
+    # def common_step_local_to_global(self, batched_data, emb):
+    #     """
+    #     Convert local node embeddings [N, E] to padded local node embeddings [max_seq_len, E] 
+    #     with N being the number of nodes in the graph and E being the embedding dimension.
+        
+    #     Parameters:
+    #         batched_data: Pytorch geometric object 
+    #         emb: torch.Tensor [N, E]
+    #             Embedding of the local nodes
+        
+    #     Returns:
+    #         padded_emb: torch.Tensor [max_seq_len, E]
+    #             Padded local node embeddings
+    #         src_padding_mask: torch.Tensor [max_seq_len]
+    #             Mask indicating padding nodes
+    #         index_nodes: torch.Tensor [N]
+    #             Indices of the nodes in the original graph
+    #     """
+        
+    #     # Layer normalization
+    #     emb = self.norm_input(emb)
+        
+    #     if self.masked_nodes:
+    #         keep_indices = batched_data.mask
+    #     else:
+    #         keep_indices = None
 
-    def common_training_step(self, batch, batch_idx):
+    #     # Ensure masked nodes are included in padding
+    #     padded_emb, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
+    #         emb, 
+    #         batched_data.batch, 
+    #         self.transformer_encoder.max_seq_len, 
+    #         get_mask=self.masked_nodes,
+    #         keep_indices=keep_indices  # Add parameter to ensure masked nodes are kept
+    #     )
+        
+    #     if self._cfg.transformer.long_range_attention:
+    #         attention_mask = create_transformer_attention_mask_from_edges(
+    #             batched_data.edge_index, 
+    #             len(batched_data.obs_names), 
+    #             batched_data.batch, 
+    #             index_nodes, 
+    #             self.transformer_encoder.n_heads
+    #         )
+    #         # Convert attention_mask to same dtype as src_padding_mask
+    #         attention_mask = attention_mask.to(dtype=src_padding_mask.dtype)
+    #     else:
+    #         attention_mask = None
+            
+    #     return padded_emb, src_padding_mask, index_nodes, attention_mask
+    
+    
+    def common_step_global(self, batch):
+        raise NotImplementedError("Subclasses must implement the _common_step method.")
+    
+    def common_training_step(self, batch):
         loss, metric_list = self._common_step(batch)
         if 'classification' in self.prediction_task:
             acc, f1_score_micro, f1_score_macro, f1_score_per_class = metric_list
@@ -106,11 +173,8 @@ class BaseModule(L.LightningModule):
             }
             self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
         return loss
-    
-    def _common_step(self, batch):
-        raise NotImplementedError("Subclasses must implement the _common_step method.")
 
-    def common_validation_step(self, batch, batch_idx):
+    def common_validation_step(self, batch):
         loss, metric_list = self._common_step(batch)
         if 'classification' in self.prediction_task:
             acc, f1_score_micro, f1_score_macro, f1_score_per_class = metric_list
@@ -145,7 +209,7 @@ class BaseModule(L.LightningModule):
             }
             for class_idx in range(self.num_classes):
                 log_dict[f'test_f1/class_{class_idx}'] = f1_score_per_class[class_idx]
-            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
+            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True, sync_dist=True)
         elif 'regression' in self.prediction_task:
             mse, r2, pearson_corr = metric_list
             log_dict = {
@@ -153,7 +217,8 @@ class BaseModule(L.LightningModule):
                 'test_r2': r2,
                 'test_pearson_corr': pearson_corr,
             }
-            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True)
+            self.log_dict(log_dict, batch_size=int(self._cfg.dataset.batch_size), on_step=False, on_epoch=True, sync_dist=True)
+            print(f"Test step (regression) - Loss: {loss:.4f}, MSE: {mse:.4f}, R2: {r2:.4f}")
         return loss
     
     def _common_step_classification_metrics(self, y_pred, y_true, mask_idx=None):

@@ -15,9 +15,14 @@ import numpy as np
 # PyTorch Lightning
 import pytorch_lightning as L
 from pytorch_lightning.callbacks import Timer, Callback
+from graph_transformer_long_range_niches.tl.masking import apply_mask
+from graph_transformer_long_range_niches.tl.utils import (
+    define_loss,
+    define_classification_metrics,
+    define_regression_metrics,
+    compute_dynamic_variance
+)
 from graph_transformer_long_range_niches.tl.scheduler import CosineWarmupScheduler
-from graph_transformer_long_range_niches.tl import apply_mask
-from graph_transformer_long_range_niches.tl.utils import define_loss, define_classification_metrics, define_regression_metrics, compute_dynamic_variance
 
 class LitGCNMasked(L.LightningModule):
     def __init__(self,
@@ -35,6 +40,11 @@ class LitGCNMasked(L.LightningModule):
         self.prediction_task = cfg.dataset.prediction_task
         self.num_classes = cfg.dataset.num_classes
         self.num_features = cfg.dataset.num_features
+        
+        if cfg.dataset.pct_mask_nodes > 0:
+            self.masked_nodes = True
+        else:
+            self.masked_nodes = False
 
         #define loss
         self.loss = define_loss(cfg, class_weights)
@@ -69,6 +79,28 @@ class LitGCNMasked(L.LightningModule):
             self.out = Linear(embed_dim, self.num_classes)
         elif 'regression' in self.prediction_task:
             self.out = Linear(embed_dim, self.num_features)
+            
+    def _common_step_classification_metrics(self, y_pred, y_true):
+        """Calculate classification metrics fir=
+        
+        Input:
+            y_pred: List[torch.Tensor] [N, C]
+                Predicted values
+            y_true: List[torch.Tensor] [N, C]
+                True values
+            mask_idx: List[torch.Tensor]
+                Indices of masked nodes to calculate metrics on. Default is None, i.e. graph-level prediction.
+        Output:
+            loss: torch.Tensor[int]
+            
+        """
+        loss = self.loss(y_pred, y_true)
+        acc = self.accurary(y_pred.argmax(dim=1), y_true.argmax(dim=1))
+        f1_score_micro = self.f1_score_micro(y_pred.argmax(dim=1), y_true.argmax(dim=1))
+        f1_score_macro = self.f1_score_macro(y_pred.argmax(dim=1), y_true.argmax(dim=1))
+        f1_score_per_class = self.f1_score_per_class(y_pred.argmax(dim=1), y_true.argmax(dim=1))
+
+        return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
 
     def forward(self, x, edge_index):
         """
@@ -169,19 +201,29 @@ class LitGCNMasked(L.LightningModule):
         """Shared step between train, val and test.
         """
         # Mask nodes 
-        input_data_masked, mask_idx = apply_mask(batch)
-        
+        if self.masked_nodes:
+            input_data_masked, mask_idx = apply_mask(batch)
+        else:
+            mask_idx = None
+            
+        if mask_idx is None or len(mask_idx) == 0:
+            print('No mask_idx provided, using all data')
+            input_data_masked = batch
+            
         # Forward pass
-        gnn_x, gnn_z = self.forward(input_data_masked.x, input_data_masked.edge_index) # [B, C] with C being the number of tasks to predict, e.i.     
-         
-        
+        _, gnn_z = self.forward(input_data_masked.x, input_data_masked.edge_index) # [B, C] with C being the number of tasks to predict, e.i.     
+            
         if 'classification' in self.prediction_task:
-            loss = self.loss(gnn_z[mask_idx, :], batch.y[mask_idx, :]  )
-            acc = self.accurary(gnn_z.argmax(dim=1)[mask_idx], batch.y.argmax(dim=1)[mask_idx])
-            f1_score_micro = self.f1_score_micro(gnn_z.argmax(dim=1)[mask_idx], batch.y.argmax(dim=1)[mask_idx])
-            f1_score_macro = self.f1_score_macro(gnn_z.argmax(dim=1)[mask_idx], batch.y.argmax(dim=1)[mask_idx])
-            f1_score_per_class = self.f1_score_per_class(gnn_z.argmax(dim=1)[mask_idx], batch.y.argmax(dim=1)[mask_idx])
-            return loss, [acc, f1_score_micro, f1_score_macro, f1_score_per_class]
+            y_pred = gnn_z[mask_idx]
+            y_true = batch.y[mask_idx]
+            
+            if y_true.shape != y_pred.shape:
+                print(y_pred.shape, y_true.shape)
+                
+            if 'node' in self.prediction_task:
+                return self._common_step_classification_metrics(y_pred, y_true)
+            elif 'graph' in self.prediction_task:
+                return self._common_step_classification_metrics(y_pred, y_true)
 
         if 'regression' in self.prediction_task: 
             y_pred = gnn_z[mask_idx]

@@ -71,8 +71,8 @@ class LitGCN(L.LightningModule):
     def forward(self, x, edge_index):
         """
         Input:
-            x: Adjacency matrix (n x obs)
-            edge_index: gene expressiong (var x obs)
+            x: GEX matrix (n x var)
+            edge_index: adjacency matrix (n x n) - sparse tensor
         """
         for layer in self.layers:
             if isinstance(layer, MessagePassing):

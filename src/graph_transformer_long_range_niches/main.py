@@ -34,13 +34,17 @@ def main(cfg_path):
 
     # Split data into train, val (and test)
     train_size, val_size, test_size = float(cfg.dataset.train_size), float(cfg.dataset.val_size), float(cfg.dataset.test_size)
-    if 'graph' in cfg.dataset.prediction_task:
-        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, stratify_groups = cfg.dataset.prediction_obs)
-    elif cfg.dataset.stratify_group is not None:
-        print('Stratifying by group: ', cfg.dataset.stratify_group)
-        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, stratify_groups = cfg.dataset.stratify_group)
+    
+    if cfg.dataset.split_key in adata.obs.columns:
+        print('Split already exists in adata.obs')
     else:
-        split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed)
+        if 'graph' in cfg.dataset.prediction_task:
+            split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, split_key = cfg.dataset.split_key, stratify_groups = cfg.dataset.prediction_obs)
+        elif cfg.dataset.stratify_group is not None:
+            print('Stratifying by group: ', cfg.dataset.stratify_group)
+            split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, split_key = cfg.dataset.split_key, stratify_groups = cfg.dataset.stratify_group)
+        else:
+            split_adata(adata, split_obs=cfg.dataset.obs_split, val_size=val_size, test_size=test_size, seed = cfg.optim.seed, split_key = cfg.dataset.split_key)
 
     if cfg.optim.loss == 'WeightedCE':
         class_weigths = compute_class_weight("balanced", classes = np.unique(adata.obs[cfg.dataset.prediction_obs]), y=adata.obs[cfg.dataset.prediction_obs])
@@ -122,17 +126,11 @@ def main(cfg_path):
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     if 'classification' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
-<<<<<<< HEAD
     elif 'regression' in cfg.dataset.prediction_task:
         early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
     else:
         raise Exception("Training must be classification or regression based.")
     
-=======
-    if 'regression' in cfg.dataset.prediction_task:
-        early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=10*steps_per_epoch, verbose=False, mode="max")
-
->>>>>>> masking
     data_name = f"{cfg.dataset.name}_{cfg.dataset.prediction_obs}_{cfg.dataset.library_key[-1]}_{len(cfg.dataset.library_key)}_{cfg.optim.seed}"
     run_name = f"{data_name}_{cfg.model.model_type}"
 
@@ -144,7 +142,6 @@ def main(cfg_path):
         wandb_logger = WandbLogger(name = run_name, log_model=True) #save at the end of the training
         if 'classification' in cfg.dataset.prediction_task:
             checkpoint_callback = ModelCheckpoint(monitor="val_acc", mode="max", filename=run_name) # save model if validation accuracy increases
-<<<<<<< HEAD
         elif 'regression' in cfg.dataset.prediction_task:
             if cfg.optim.loss == 'MSELoss':
                 checkpoint_callback = ModelCheckpoint(monitor="val_mse", mode="min", filename=run_name) 
@@ -155,18 +152,23 @@ def main(cfg_path):
         else:
             raise Exception("Training must be classification or regression based.")
         
+        # Log total number of parameters
+        total_params = sum(p.numel() for p in model.parameters())
+        trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        wandb.log({
+            "total_parameters": total_params,
+            "trainable_parameters": trainable_params
+        })
+        print(f"Total parameters: {total_params:,}")
+        print(f"Trainable parameters: {trainable_params:,}")
+        
         print('Training Wandb...')
-=======
-        if 'regression' in cfg.dataset.prediction_task:
-            checkpoint_callback = ModelCheckpoint(monitor="val_r2", mode="max", filename=run_name) 
-        print('Training...')
->>>>>>> masking
         trainer = pl.Trainer(min_epochs=1, 
                          max_epochs=int(cfg.model.n_epochs), 
                          logger=wandb_logger, 
                          enable_progress_bar=False, 
                          callbacks=[lr_monitor, checkpoint_callback, early_stop_callback],
-                         log_every_n_steps=steps_per_epoch,
+                         log_every_n_steps=1,
                          # Sanity checks: Debugging model
                          #overfit_batches=1,
                          )
@@ -176,7 +178,7 @@ def main(cfg_path):
                          max_epochs=int(cfg.model.n_epochs),
                          enable_progress_bar=False,
                          callbacks=[lr_monitor, early_stop_callback],
-                         log_every_n_steps=steps_per_epoch,
+                         log_every_n_steps=1,
                          # Sanity checks: Debugging model
                          #overfit_batches=1,
                          )

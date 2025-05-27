@@ -80,11 +80,11 @@ class LitGNNTransformer(BaseModule):
     def configure_optimizers(self):
         return self.common_configure_optimizers()
 
-    def training_step(self, batch, batch_idx):
-        return self.common_training_step(batch, batch_idx)
+    def training_step(self, batch):
+        return self.common_training_step(batch)
 
-    def validation_step(self, batch, batch_idx):
-        return self.common_validation_step(batch, batch_idx)
+    def validation_step(self, batch):
+        return self.common_validation_step(batch)
 
     def test_step(self, batch):
         return self.common_test_step(batch)

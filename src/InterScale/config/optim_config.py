@@ -1,0 +1,23 @@
+from yacs.config import CfgNode as CN
+
+def get_optim_cfg(cfg):
+  """ Defines model training optimization parameters:
+
+    lr: float = Learning rate 
+    wd: float = Weight decay
+    warm_up: int = Warm up epochs
+    losss: str = Loss function, either CrossEntropy or WeightedCE
+    seed: int
+  """
+  cfg.optim = CN()
+
+  cfg.optim.lr = 0.001 
+  cfg.optim.use_lr_scheduler = True
+  cfg.optim.lr_warmup = 20
+  cfg.optim.lr_max_epochs = 100
+  cfg.optim.wd = 1e-4
+  cfg.optim.loss = "CrossEntropy" 
+  cfg.optim.seed = 40
+  cfg.optim.cross_corr = 'gene' # cross-gene or cross-cell correlation
+  cfg.optim.n_epochs = 100
+  return cfg
