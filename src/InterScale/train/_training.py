@@ -11,7 +11,7 @@ from InterScale.train._trainingplans import TrainingPlan
 from InterScale.train._utils import MetricsHistory
 from InterScale.tl.utils import get_model_filename_prefix
 from lightning.pytorch.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
-from lightning.pytorch.trainer import Trainer
+from lightning.pytorch.trainer import Trainer, seed_everything
 from lightning.pytorch.strategies.ddp import DDPStrategy
 import lightning as L
 
@@ -115,6 +115,8 @@ class NodeMaskingTrainingPlan:
         #     )
         
         plan_kwargs = plan_kwargs or {}
+        
+        seed_everything(self._cfg.optim.seed, workers=True)
             
         # defines optimizers, training step, val step, logged metrics
         training_plan = self._training_plan_cls(
@@ -144,9 +146,9 @@ class NodeMaskingTrainingPlan:
         
         if early_stopping:
             if 'classification' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_acc", min_delta=0.05, patience=5*steps_per_epoch, verbose=False, mode="max")
+                early_stop_callback = EarlyStopping(monitor="val_f1_macro/avg", min_delta=0.05, patience=3*steps_per_epoch, verbose=False, mode="max")
             elif 'regression' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=5*steps_per_epoch, verbose=False, mode="max")
+                early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=steps_per_epoch, verbose=False, mode="max")
             else:
                 raise Exception("Training must be classification or regression based.")
             
@@ -190,6 +192,7 @@ class NodeMaskingTrainingPlan:
             callbacks=callbacks,
             log_every_n_steps=1,
             logger=logger,
+            deterministic=True, # ensure reproducibility
             **trainer_kwargs
         )
         
@@ -197,6 +200,12 @@ class NodeMaskingTrainingPlan:
         trainer.validate(training_plan, datamodule)
         if train_size + validation_size < 1:
             trainer.test(training_plan, datamodule)
+        
+        # Print early stopping information if it was used
+        if early_stopping and early_stop_callback is not None:
+            if early_stop_callback.stopped_epoch > 0:
+                print(f"\nEarly stopping triggered at epoch {early_stop_callback.stopped_epoch}")
+                print(f"Best {early_stop_callback.monitor}: {early_stop_callback.best_score:.4f}")
         
         if self._cfg.model.save is not None:
             print('Model checkpoint will be saved in: ', self._cfg.model.save + run_name + ".pt")
