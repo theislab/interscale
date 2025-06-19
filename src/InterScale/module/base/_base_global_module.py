@@ -97,6 +97,33 @@ class GlobalModuleClass(BaseModuleClass):
         
         return y_true, adjusted_mask_idx
     
+    def predict(self,
+                global_embedding,
+                src_padding_mask,
+                prediction_level):
+        """Predict with the decoder.
+        
+        Parameters
+        ----------
+        global_embedding: torch.Tensor
+            Size: [N, E]
+        prediction_level: Literal["node", "graph"]
+            Level of prediction
+        """
+        ## Graph-level prediction: get cls
+        if 'graph' in prediction_level:
+            cls = global_embedding[-1,:, :] # [B, E]
+            return self.decoder(cls)
+        ## Node-level prediction: remove cls
+        elif 'node' in prediction_level: 
+            h_graph = global_embedding[:-1] # [E, B, C]
+            h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
+            src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
+            masked_output = h_graph[~ src_padding_mask] # [N, E]
+            return self.decoder(masked_output)
+        else:
+            raise Exception('Choose a valid prediction tasks (graph or node).')
+            
     def _common_step(self,
                      batch,
                      prediction_task: str, 
@@ -129,19 +156,7 @@ class GlobalModuleClass(BaseModuleClass):
         
         y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
         
-        ## Graph-level prediction: get cls
-        if 'graph' in prediction_level:
-            cls = global_embedding[-1,:, :] # [B, E]
-            y_pred = self.decoder(cls)
-        ## Node-level prediction: remove cls
-        elif 'node' in prediction_level: 
-            h_graph = global_embedding[:-1] # [E, B, C]
-            h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
-            src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
-            masked_output = h_graph[~ src_padding_mask] # [N, E]
-            y_pred = self.decoder(masked_output)
-        else:
-            raise Exception('Choose a valid prediction tasks (graph or node).')
+        y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
     
         y_pred_masked = y_pred[adjusted_mask_idx]
         y_true_masked = y_true[adjusted_mask_idx]

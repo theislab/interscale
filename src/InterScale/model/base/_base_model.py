@@ -128,7 +128,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
                        layer_key: str,
                        sample_key_list: List[str],
                        prediction_obs: str = None,
-                       group_key: str | None = None):
+                       group_key: str | None = None,
+                       view_registry: bool = True):
         
         """
         Sets up the AnnDataManager for the model.
@@ -167,7 +168,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             
         manager = scvi.data.AnnDataManager(anndata_fields)
         manager.register_fields(adata)
-        manager.view_registry()
+        if view_registry:
+            manager.view_registry()
         
         # Store the manager in the class's store
         if _SCVI_UUID_KEY not in adata.uns:
@@ -445,10 +447,10 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         if not os.path.exists(dir_path):
             os.makedirs(dir_path, exist_ok=True)
 
-        file_name_prefix = get_model_filename_prefix(self._cfg)
+        file_name_prefix = get_model_filename_prefix(self._cfg, self.local_component, self.global_component)
         
         if postfix is not None:
-            file_name_prefix = file_name_prefix + f"_{postfix}"
+            file_name_prefix = file_name_prefix + f"{postfix}"
             
         save_kwargs = save_kwargs or {}
 
@@ -480,6 +482,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         dir_path: str,
         adata: AnnData,
         cfg: CN,
+        local_component: bool = False,
+        global_component: bool = False,
     ):
         """Load a saved model.
 
@@ -497,7 +501,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         model
             Loaded model.
         """
-        file_name_prefix = get_model_filename_prefix(cfg)
+        file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
         
         model_save_path = os.path.join(dir_path, f"{file_name_prefix}_{SAVE_KEYS.MODEL_FNAME}")
         

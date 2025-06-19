@@ -182,7 +182,7 @@ def pad_batch(h_node, batch, max_seq_len: int, get_mask=False, keep_indices=None
         return padded_h_node, src_padding_mask, index_nodes, num_nodes, masks, max_num_nodes
     return padded_h_node, src_padding_mask, index_nodes, num_nodes, None, max_num_nodes
 
-def get_model_filename_prefix(cfg):
+def get_model_filename_prefix(cfg, local_component: bool, global_component: bool):
     """Generate the filename prefix for saving model files.
     
     Parameters
@@ -197,9 +197,9 @@ def get_model_filename_prefix(cfg):
     """
     file_name_prefix = f"{cfg.dataset.name}_{cfg.dataset.prediction_task[:4]}_{cfg.dataset.prediction_level}_"
     
-    if cfg.model.local_component.name:
+    if local_component and cfg.model.local_component.name:  
         file_name_prefix = file_name_prefix + f"{cfg.model.local_component.name}_"
-    if cfg.model.global_component.name:
+    if global_component and cfg.model.global_component.name:
         file_name_prefix = file_name_prefix + f"{cfg.model.global_component.name}_"
         
-    return file_name_prefix + "model"
+    return file_name_prefix

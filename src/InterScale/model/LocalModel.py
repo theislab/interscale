@@ -35,13 +35,16 @@ class LocalModel(NodeMaskingTrainingPlan,
             
     @torch.inference_mode()
     def get_model_output(self,
-                         adata: AnnData | None = None):
+                         adata: AnnData | None = None,
+                         prefix: str = ""):
         """Save the embeddings, predictions and attentionsin the adata object.
 
         Parameters
         ----------
         adata
             AnnData object to run the model on. If `None`, the model's AnnData object is used.
+        prefix
+            Prefix for the output columns.
         """
         
         if not self.is_trained_:
@@ -61,6 +64,10 @@ class LocalModel(NodeMaskingTrainingPlan,
             index=adata.obs_names,
             columns=range(self.n_output)
         )
+        y_pred_df = pd.DataFrame(
+            index=adata.obs_names,
+            columns=range(self.n_output)
+        )
         
         for batch in pyg:
             local_embedding = self.module.forward(batch.x, batch.edge_index)
@@ -73,10 +80,14 @@ class LocalModel(NodeMaskingTrainingPlan,
                 W = self.module.decoder.decoder.weight
                 contribution = torch.matmul(local_embedding, torch.transpose(W, 0, 1))
                 decoder_weight_df.loc[sample_mask] = contribution.detach().cpu().numpy()
-                    
+            
+            y_pred = self.module.predict(local_embedding, self.prediction_level)
+            y_pred_df.loc[sample_mask] = y_pred.detach().cpu().numpy()
+
         # Save embeddings in adata.obsm
-        adata.obsm['local_emb'] = local_embeddings_df.values
-        adata.obsm['decoder_weight'] = decoder_weight_df.values
+        adata.obsm[f'{prefix}_local_emb'] = local_embeddings_df.values
+        adata.obsm[f'{prefix}_decoder_weight'] = decoder_weight_df.values
+        adata.layers[f'{prefix}_y_pred'] = y_pred_df.values
         
         return adata
     
