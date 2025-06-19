@@ -33,10 +33,15 @@ class CombinedModuleClass(BaseModuleClass):
                                                            n_input=self.n_input,
                                                            n_output=self.n_output,
                                                            n_embed=self.n_embed,
-                                                           decoder_type=None,
-                                                           dropout_decoder=0,
-                                                           decoder_hidden_dims=[],
+                                                           decoder_type="linear",
                                                            pct_mask_nodes=self.pct_mask_nodes)
+        
+    def predict(self,
+                global_embedding,
+                src_padding_mask,
+                prediction_level):
+        """Predict with the decoder."""
+        return self.global_module.predict(global_embedding, src_padding_mask, prediction_level)
         
     def _common_step(self,
                     batch, 
@@ -60,19 +65,7 @@ class CombinedModuleClass(BaseModuleClass):
                                                                     pad_index_nodes, 
                                                                     mask_idx)
         
-        ## Graph-level prediction: get cls
-        if 'graph' in prediction_level:
-            cls = global_embedding[-1,:, :] # [B, E]
-            y_pred = self.decoder(cls)
-        ## Node-level prediction: remove cls
-        elif 'node' in prediction_level: 
-            h_graph = global_embedding[:-1] # [E, B, C]
-            h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
-            src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
-            masked_output = h_graph[~ src_padding_mask] # [N, E]
-            y_pred = self.decoder(masked_output)
-        else:
-            raise Exception('Choose a valid prediction tasks (graph or node).')
+        y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
     
         y_pred_masked = y_pred[adjusted_mask_idx]
         y_true_masked = y_true[adjusted_mask_idx]

@@ -149,7 +149,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         transformer_out, src_padding_mask = self.forward(transformer_in, src_padding_mask, register_hook=True)
         I = self.self_attn_relevance.generate_relevance(transformer_out)
 
-        src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
+        #src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
 
         return transformer_in, transformer_out, src_padding_mask, index_nodes, I
     

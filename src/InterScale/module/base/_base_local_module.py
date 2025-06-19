@@ -17,6 +17,19 @@ class LocalModuleClass(BaseModuleClass):
     @abstractmethod
     def forward(self):
         """Forward pass."""
+            
+    def predict(self,
+                local_embedding,
+                prediction_level: Literal["node", "graph"]):
+        """Predict with the decoder.
+        
+        Parameters
+        ----------
+        local_embedding: torch.Tensor
+            Size: [N, E]
+        prediction_level: Literal["node", "graph"]
+        """ 
+        return self.decoder.forward(local_embedding)
         
     def _common_step(self,
                      batch,

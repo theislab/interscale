@@ -153,7 +153,7 @@ class NodeMaskingTrainingPlan:
                 raise Exception("Training must be classification or regression based.")
             
         if self._cfg.model.save is not None:
-            run_name = get_model_filename_prefix(self._cfg)
+            run_name = get_model_filename_prefix(self._cfg, self.local_component, self.global_component)
             if 'classification' in self._cfg.dataset.prediction_task:
                 checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_acc", mode="max", ) # save model if validation accuracy increases
             elif 'regression' in self._cfg.dataset.prediction_task:
@@ -171,7 +171,7 @@ class NodeMaskingTrainingPlan:
         logger = None
         if self._cfg.wandb.use:
             print('Wandb initialize...')
-            run_name = get_model_filename_prefix(self._cfg)
+            run_name = get_model_filename_prefix(self._cfg, self.local_component, self.global_component)
             if self._cfg.wandb.project_name is None:
                 raise ValueError("wandb_project must be specified when use_wandb is True")
             run = wandb.init(project=self._cfg.wandb.project_name, config=self._cfg, name=run_name, job_type = 'model_training')
