@@ -1,4 +1,4 @@
-# graph-transformer-long-range-niches
+# InterScale
 
 [![Tests][badge-tests]][link-tests]
 [![Documentation][badge-docs]][link-docs]
