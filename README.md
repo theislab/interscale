@@ -94,6 +94,14 @@ TODO: Complete!
 |------------------------|---------------------------------------------------------------------------|
 | `model.save`    | Path to `.h5ad` data.                                                       |
 
+### 3. Evaluation
+
+| Evaluation level | Function name | Description |
+| ---------------- | ------------- | ----------- |
+| Tissue level       | | | 
+| Cell level       | | | 
+| Gene level | `gene_ranke_analysis` | Requires training on regression task, gene prediction. Ranks which genes from the local vs global model are well predicted. | 
+
 ## Release notes
 
 See the [changelog][changelog].
