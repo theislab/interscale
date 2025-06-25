@@ -157,12 +157,15 @@ class GlobalModuleClass(BaseModuleClass):
         y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
         
         y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
-    
-        y_pred_masked = y_pred[adjusted_mask_idx]
-        y_true_masked = y_true[adjusted_mask_idx]
         
-        assert len(y_pred_masked) == len(y_true_masked), "y_pred and y_true are not consistent"
-        return None, global_embedding, y_pred_masked, y_true_masked
+        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
+        
+        if prediction_level == "node":
+            y_pred = y_pred[adjusted_mask_idx]
+            y_true = y_true[adjusted_mask_idx]
+        
+        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
+        return None, global_embedding, y_pred, y_true
 
     def get_global_embeddings(self, x, edge_index):
         return self.forward(x, edge_index)

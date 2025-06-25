@@ -146,7 +146,7 @@ class NodeMaskingTrainingPlan:
         
         if early_stopping:
             if 'classification' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_f1_macro/avg", min_delta=0.05, patience=3*steps_per_epoch, verbose=False, mode="max")
+                early_stop_callback = EarlyStopping(monitor="val_f1_macro/avg", min_delta=0.05, patience=10, verbose=False, mode="max")
             elif 'regression' in self.prediction_task:
                 early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=steps_per_epoch, verbose=False, mode="max")
             else:
@@ -208,9 +208,10 @@ class NodeMaskingTrainingPlan:
                 print(f"Best {early_stop_callback.monitor}: {early_stop_callback.best_score:.4f}")
         
         if self._cfg.model.save is not None:
-            print('Model checkpoint will be saved in: ', self._cfg.model.save + run_name + ".pt")
-            trainer.save_checkpoint(self._cfg.model.save + run_name +  ".pt")
-        
+            print('Model checkpoint will be saved in: ', self._cfg.model.save + run_name + ".ckpt")
+            trainer.save_checkpoint(self._cfg.model.save + run_name +  "model.ckpt")
+            self.save(self._cfg.model.save)
+
         # Close WandB logger if it was used
         if self._cfg.wandb.use and logger is not None:
             logger.finalize("success")

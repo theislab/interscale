@@ -58,25 +58,31 @@ class GlobalModel(NodeMaskingTrainingPlan,
         
         adata = self._validate_anndata(adata)
         
+        # Check for duplicate observation names
+        adata.obs_names = [str(i) for i in range(1, len(adata.obs_names) + 1)] # ensure that no duplicate observation names are present
+        assert len(adata.obs_names) == len(adata.obs_names.unique()), f"Duplicate observation names found. Expected {len(adata.obs_names)} unique names but found {len(adata.obs_names.unique())}"
+        
         a2d = prepare_a2d_dataset(self._cfg)
         pyg, _ = list(a2d(adata))
         
+        obs_names_str = adata.obs_names.astype(int).astype(str)
+        
         # Create empty DataFrame with correct shape
         global_embeddings_df = pd.DataFrame(
-            index=adata.obs_names,
+            index=obs_names_str,
             columns=range(self.n_embed)
         )
         attention_matrix_df = pd.DataFrame(
-            index=adata.obs_names,
+            index=obs_names_str,
             columns=range(self._cfg.model.global_component.parameters.max_seq_len)
         )
 
         decoder_weight_df = pd.DataFrame(
-            index=adata.obs_names,
+            index=obs_names_str,
             columns=range(self.n_output)
         )
         y_pred_df = pd.DataFrame(
-            index=adata.obs_names,
+            index=obs_names_str,
             columns=range(self.n_output)
         )
         

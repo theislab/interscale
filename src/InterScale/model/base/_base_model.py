@@ -32,7 +32,7 @@ from typing import NamedTuple
 class _SAVE_KEYS_NT(NamedTuple):
     ADATA_FNAME: str = "adata.h5ad"
     MODEL_FNAME: str = "model.pt"
-    MODEL_STATE_DICT_KEY: str = "model_state_dict"
+    MODEL_STATE_DICT_KEY: str = "state_dict"
     VAR_NAMES_KEY: str = "var_names"
     ATTR_DICT_KEY: str = "attr_dict"
 
@@ -484,6 +484,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         cfg: CN,
         local_component: bool = False,
         global_component: bool = False,
+        wandb_save: bool = False,
+        enable_remapping: bool = True,
     ):
         """Load a saved model.
 
@@ -495,6 +497,14 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             AnnData object to load the model with.
         cfg
             Configuration object.
+        local_component
+            Whether this is a local component model.
+        global_component
+            Whether this is a global component model.
+        wandb_save
+            Whether this was saved via wandb.
+        enable_remapping
+            Whether to enable automatic state dict key remapping.
 
         Returns
         -------
@@ -503,14 +513,38 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         """
         file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
         
-        model_save_path = os.path.join(dir_path, f"{file_name_prefix}_{SAVE_KEYS.MODEL_FNAME}")
+        model_save_path = os.path.join(dir_path, f"{file_name_prefix}{SAVE_KEYS.MODEL_FNAME}")
         
         # Initialize model
         model = cls(adata, cfg)
         
         # Load state dict
         state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
-        model.module.load_state_dict(state_dict)
+        
+        # Apply remapping if enabled
+        if enable_remapping:
+            try:
+                from InterScale.tl.utils import detect_and_remap_state_dict_keys
+                state_dict, source = detect_and_remap_state_dict_keys(state_dict)
+                print(f"State dict remapping applied. Source detected: {source}")
+            except ImportError:
+                print("Warning: Could not import remapping functions. Loading without remapping.")
+        
+        # Legacy wandb remapping (kept for backward compatibility)
+        if wandb_save:
+            new_state_dict = {}
+            for k, v in state_dict.items():
+                new_key = k.replace('module.', '', 1)  # only remove the first 'module.'
+                new_state_dict[new_key] = v
+            state_dict = new_state_dict
+        
+        # Load the state dict
+        missing_keys, unexpected_keys = model.module.load_state_dict(state_dict, strict=False)
+        
+        if missing_keys:
+            print(f"Warning: Missing keys when loading state dict: {missing_keys}")
+        if unexpected_keys:
+            print(f"Warning: Unexpected keys when loading state dict: {unexpected_keys}")
         
         model.is_trained_ = True
         

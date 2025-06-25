@@ -6,26 +6,49 @@ from InterScale.config import load_config
 import argparse
 import scanpy as sc
 
-def main(cfg_path):
+def main(cfg_path, model_type):
 
     cfg = load_config(cfg_path)
     print(cfg)
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
     print(adata)
     
-    # TODO: Make _set_up_anndata work with multiple sample_keys
-    
-    interscale.model.LocalModel._setup_anndata(adata = adata,
-                                               prediction_task = cfg.dataset.prediction_task, 
-                                               layer_key = cfg.dataset.layer_key, 
-                                               sample_key_list = cfg.dataset.sample_key, 
-                                               prediction_obs = cfg.dataset.prediction_obs, 
-                                               group_key = cfg.dataset.group_label)
-    
-    model = interscale.model.LocalModel(
-        adata,
-        cfg = cfg
-    )
+    if model_type == "LocalModel":
+        interscale.model.LocalModel._setup_anndata(adata = adata,
+                                                prediction_task = cfg.dataset.prediction_task, 
+                                                layer_key = cfg.dataset.layer_key, 
+                                                sample_key_list = cfg.dataset.sample_key, 
+                                                prediction_obs = cfg.dataset.prediction_obs, 
+                                                group_key = cfg.dataset.group_label)
+        
+        model = interscale.model.LocalModel(
+            adata,
+            cfg = cfg
+        )
+    elif model_type == "GlobalModel":
+        interscale.model.GlobalModel._setup_anndata(adata = adata,
+                                                prediction_task = cfg.dataset.prediction_task, 
+                                                layer_key = cfg.dataset.layer_key, 
+                                                sample_key_list = cfg.dataset.sample_key, 
+                                                prediction_obs = cfg.dataset.prediction_obs, 
+                                                group_key = cfg.dataset.group_label)
+        
+        model = interscale.model.GlobalModel(
+            adata,
+            cfg = cfg
+        )
+    elif model_type == "CombinedModel":
+        interscale.model.CombinedModel._setup_anndata(adata = adata,
+                                                prediction_task = cfg.dataset.prediction_task, 
+                                                layer_key = cfg.dataset.layer_key, 
+                                                sample_key_list = cfg.dataset.sample_key, 
+                                                prediction_obs = cfg.dataset.prediction_obs, 
+                                                group_key = cfg.dataset.group_label)
+        
+        model = interscale.model.CombinedModel(
+            adata,
+            cfg = cfg
+        )
 
     pyg_data_list, _ = prepare_geome_dataset(adata, cfg)
     dm = GraphAnnDataModule(datas=pyg_data_list, 
@@ -42,6 +65,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GTLongRange')
 
     parser.add_argument('--cfg', dest='cfg', type=str, required=True, help='The configuration file path.')
+    parser.add_argument('--model_type', dest='model_type', type=str, required=True, help='The model type: LocalModel, GlobalModel or CombinedModel.')
     args = parser.parse_args()
 
-    main(args.cfg)
+    main(args.cfg, args.model_type)

@@ -70,6 +70,15 @@ def prepare_geome_dataset(adata,
     assert isinstance(cfg.dataset.sample_key, list)
     assert len(cfg.dataset.sample_key) >= 0
     assert all(item in adata.obs for item in cfg.dataset.sample_key), "Not all library_keys are in adata.obs_names"
+    
+    # Check for duplicate observation names
+    adata.obs_names = [str(i) for i in range(1, len(adata.obs_names) + 1)] # ensure that no duplicate observation names are present
+    assert len(adata.obs_names) == len(adata.obs_names.unique()), f"Duplicate observation names found. Expected {len(adata.obs_names)} unique names but found {len(adata.obs_names.unique())}"
+
+    # Convert sample_key columns to categorical type to avoid numpy.dtypes.Int64DType error
+    for key in cfg.dataset.sample_key:
+        if key in adata.obs.columns:
+            adata.obs[key] = adata.obs[key].astype('category')
 
     adj_matrix_loc = "adj_matrix"
     prediction_obs = cfg.dataset.prediction_obs
@@ -87,7 +96,6 @@ def prepare_geome_dataset(adata,
     for category_to_iterate in category_to_iterate_list:
         cfg.dataset.spatial_neigbors_kwargs.merge_from_list(['library_key', category_to_iterate])
         spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
-        print(spatial_neigbors_kwargs)
 
         one_hot_encode_list = [prediction_obs]
         X_key = f"layers/{layer_key}" if layer_key is not None else "X"

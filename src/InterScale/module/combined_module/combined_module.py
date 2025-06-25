@@ -6,6 +6,7 @@ from InterScale.module.base import BaseModuleClass, LocalModuleClass, GlobalModu
 from yacs.config import CfgNode as CN
 
 from InterScale.tl import apply_mask
+from typing import Literal
 
 
 class CombinedModuleClass(BaseModuleClass):
@@ -46,7 +47,7 @@ class CombinedModuleClass(BaseModuleClass):
     def _common_step(self,
                     batch, 
                     prediction_task, 
-                    prediction_level):
+                    prediction_level: Literal["node", "graph"]):
         """Shared step between train, val and test.
         """
         # Mask nodes 
@@ -66,12 +67,13 @@ class CombinedModuleClass(BaseModuleClass):
                                                                     mask_idx)
         
         y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
-    
-        y_pred_masked = y_pred[adjusted_mask_idx]
-        y_true_masked = y_true[adjusted_mask_idx]
+
+        if prediction_level == "node":
+            y_pred = y_pred[adjusted_mask_idx]
+            y_true = y_true[adjusted_mask_idx]
         
-        assert len(y_pred_masked) == len(y_true_masked), "y_pred and y_true are not consistent" 
-        return local_embedding, global_embedding, y_pred_masked, y_true_masked
+        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent" 
+        return local_embedding, global_embedding, y_pred, y_true
         
     def forward(
         self,
