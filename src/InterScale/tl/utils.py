@@ -203,3 +203,74 @@ def get_model_filename_prefix(cfg, local_component: bool, global_component: bool
         file_name_prefix = file_name_prefix + f"{cfg.model.global_component.name}_"
         
     return file_name_prefix
+
+def remap_state_dict_keys(state_dict):
+    """
+    Remap state dictionary keys to handle naming convention changes.
+    
+    This function handles the transition from InterScale key names to graph_transformer_long_range_niches key names:
+    - local_layers.* -> local_module.layers.*
+    - global_* -> global_module.*
+    
+    Parameters:
+    - state_dict: The state dictionary from the checkpoint
+    
+    Returns:
+    - new_state_dict: State dictionary with remapped keys
+    """
+    new_state_dict = {}
+    
+    for key, value in state_dict.items():
+        new_key = key
+        
+        # Handle local module keys (InterScale: local_layers.* -> graph_transformer: local_module.layers.*)
+        if key.startswith('local_layers.'):
+            new_key = key.replace('local_layers.', 'local_module.layers.')
+        
+        # Handle global module keys (InterScale: global_* -> graph_transformer: global_module.*)
+        elif key.startswith('global_'):
+            new_key = key.replace('global_', 'global_module.')
+        
+        new_state_dict[new_key] = value
+    
+    return new_state_dict
+
+def detect_and_remap_state_dict_keys(state_dict):
+    """
+    Automatically detect the source of the state dict and apply appropriate remapping.
+    
+    This function detects whether the state dict is from InterScale or graph_transformer_long_range_niches
+    and applies the appropriate key remapping.
+    
+    Parameters:
+    - state_dict: The state dictionary from the checkpoint
+    
+    Returns:
+    - new_state_dict: State dictionary with remapped keys
+    - source_detected: String indicating the detected source ('InterScale' or 'graph_transformer')
+    """
+    # Check if this is an InterScale checkpoint (has local_layers or global_ keys)
+    has_interscale_keys = any(key.startswith('local_layers.') or key.startswith('global_') 
+                             for key in state_dict.keys())
+    
+    # Check if this is a graph_transformer checkpoint (has local_module or global_module keys)
+    has_graph_transformer_keys = any(key.startswith('local_module.') or key.startswith('global_module.') 
+                                    for key in state_dict.keys())
+    
+    if has_interscale_keys and not has_graph_transformer_keys:
+        # This is an InterScale checkpoint, remap to graph_transformer format
+        new_state_dict = remap_state_dict_keys(state_dict)
+        source_detected = 'InterScale'
+        print(f"Detected InterScale checkpoint format. Remapping keys to graph_transformer format.")
+    elif has_graph_transformer_keys and not has_interscale_keys:
+        # This is already a graph_transformer checkpoint, no remapping needed
+        new_state_dict = state_dict
+        source_detected = 'graph_transformer'
+        print(f"Detected graph_transformer checkpoint format. No remapping needed.")
+    else:
+        # Mixed or unclear format, try remapping anyway
+        new_state_dict = remap_state_dict_keys(state_dict)
+        source_detected = 'unknown'
+        print(f"Unclear checkpoint format. Attempting remapping anyway.")
+    
+    return new_state_dict, source_detected
