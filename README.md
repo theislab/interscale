@@ -85,6 +85,8 @@ The necessary configuration to define in the `.yaml` file are:
 | `dataset.prediction_obs` | Observation to predict. |
 | `dataset.library_key` | Key to use for the library. |
 | `dataset.spatial_neigbors_kwargs` | Keyword arguments for the spatial neighbors calculation. `radius` should be set such that number of average neighbors is 30. |
+| `optim.loss` | Loss function to use. Options: Classification = ['CrossEntropy', 'WeightedCE'], Regression = ['MSELoss', 'GaussianNLL', 'SmoothL1'] |
+
 TODO: Complete!
 
 
