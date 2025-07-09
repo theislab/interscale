@@ -38,6 +38,8 @@ pip install git+https://github.com/theislab/GT-long-range-niches.git@main
 
 ## Environment installation
 
+### Conda/Mamba set up
+
 ```bash
 mamba create -n GT_long_range python=3.11
 mamba activate GT_long_range
@@ -49,6 +51,44 @@ pip install torch-geometric
 pip install -e .
 pip install git+ https://github.com/theislab/geome.git@main
 pip install yacs
+```
+
+### Enroot container set up
+
+Use Nvidia NGC container: [PyG Release 24.09](https://docs.nvidia.com/deeplearning/frameworks/pyg-release-notes/rel-24-09.html#rel-24-09l) with `python=3.10`, `numpy=1.24.4`, `torch=2.5.0.a` and `CUDA=12.6`.
+
+1. Import NVIDIA base container
+
+`enroot import docker://nvcr.io/nvidia/pyg:24.09-py3`
+
+2. Create enroot container and start
+
+`enroot create --name interscale_container `
+
+3. Install all dependencies/packages
+
+```bash
+pip install torch-scatter torch-sparse torch-cluster -f https://data.pyg.org/whl/torch-2.5.0+cu121.html`
+pip install pytorch-lightning wandb torch-geometric yacs
+pip install git+https://github.com/theislab/geome.git@main 
+pip install -e /dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches 
+pip install scvi-tools
+```
+
+Optional: set up CUDA environment variables
+
+```
+echo "NVIDIA_DRIVER_CAPABILITIES=compute,utility,video" >> /etc/environment
+echo "NVIDIA_REQUIRE_CUDA=cuda>=12.1" >> /etc/environment
+echo "NVIDIA_VISIBLE_DEVICES=all" >> /etc/environment
+```
+
+`exit` enroot container
+
+4. Export container for re-use
+
+```
+enroot export --output InterScale.sqsh interscale_container
 ```
 
 ## Guide on Config files
