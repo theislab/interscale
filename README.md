@@ -68,7 +68,7 @@ Use Nvidia NGC container: [PyG Release 24.09](https://docs.nvidia.com/deeplearni
 3. Install all dependencies/packages
 
 ```bash
-pip install torch-scatter torch-sparse torch-cluster -f https://data.pyg.org/whl/torch-2.5.0+cu121.html`
+pip install torch-scatter torch-sparse torch-cluster -f https://data.pyg.org/whl/torch-2.5.0+cu121.html
 pip install pytorch-lightning wandb torch-geometric yacs
 pip install git+https://github.com/theislab/geome.git@main 
 pip install -e /dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches 
