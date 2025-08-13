@@ -63,7 +63,10 @@ Use Nvidia NGC container: [PyG Release 24.09](https://docs.nvidia.com/deeplearni
 
 2. Create enroot container and start
 
-`enroot create --name interscale_container nvidia+pyg+24.09-py3.sqsh`
+```
+enroot create --name interscale_container nvidia+pyg+24.09-py3.sqsh
+enroot start interscale_container
+```
 
 3. Install all dependencies/packages
 
