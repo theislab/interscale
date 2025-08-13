@@ -38,7 +38,9 @@ pip install git+https://github.com/theislab/GT-long-range-niches.git@main
 
 ## Environment installation
 
-### Conda/Mamba set up
+### With GPU support
+
+#### Conda/Mamba set up
 
 ```bash
 mamba create -n GT_long_range python=3.11
@@ -53,7 +55,7 @@ pip install git+ https://github.com/theislab/geome.git@main
 pip install yacs
 ```
 
-### Enroot container set up
+#### Enroot container set up
 
 Use Nvidia NGC container: [PyG Release 24.09](https://docs.nvidia.com/deeplearning/frameworks/pyg-release-notes/rel-24-09.html#rel-24-09l) with `python=3.10`, `numpy=1.24.4`, `torch=2.5.0.a` and `CUDA=12.6`.
 
