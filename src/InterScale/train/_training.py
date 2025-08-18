@@ -208,7 +208,7 @@ class NodeMaskingTrainingPlan:
                 print(f"Best {early_stop_callback.monitor}: {early_stop_callback.best_score:.4f}")
         
         if self._cfg.model.save is not None:
-            print('Model checkpoint will be saved in: ', self._cfg.model.save + run_name + ".ckpt")
+            print('Model checkpoint will be saved in: ', self._cfg.model.save + run_name + "model.ckpt")
             trainer.save_checkpoint(self._cfg.model.save + run_name +  "model.ckpt")
             self.save(self._cfg.model.save)
 
