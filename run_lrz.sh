@@ -24,6 +24,7 @@ DEFAULT_CONFIG_LRZ="/dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches/src
 
 LEGNINI_CONFIG="Legnini_23/legnini23_graph_sample_LocalModel_gnn.yaml"
 SCHUERCH_CONFIG="Schuerch20/schuerch20_graph_sample_GlobalModel.yaml"
+COSMX_PANCREAS_CONFIG=""
 
 echo "Current working directory: $(pwd)"
 ls -l /dss/dssfs03/tumdss/pn36po/pn36po-dss-0002/di93tig/Projects/A3_InterScale/data/schuerch20.h5ad

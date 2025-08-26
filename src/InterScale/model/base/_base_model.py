@@ -454,7 +454,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             
         save_kwargs = save_kwargs or {}
 
-        model_save_path = os.path.join(dir_path, f"{file_name_prefix}_{SAVE_KEYS.MODEL_FNAME}")
+        model_save_path = os.path.join(dir_path, f"{file_name_prefix}{SAVE_KEYS.MODEL_FNAME}")
 
         # Check if file exists and warn if it does
         if os.path.exists(model_save_path) and not overwrite:
