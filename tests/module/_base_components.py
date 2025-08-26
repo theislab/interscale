@@ -6,7 +6,7 @@ from InterScale.nn import LinearLSEDecoder, LinearDecoder, NonLinearDecoder
 
 HERE: Path = Path(__file__).parent
 
-_adata = sc.read(HERE / "_data" / "test_data.h5ad")
+_adata = sc.read_h5ad(HERE / "_data" / "test_data.h5ad")
 _adata.raw = _adata.copy()
 
 @pytest.mark.parametrize("n_input", [10])

@@ -79,6 +79,33 @@ class TrainingPlan(pl.LightningModule):
 
         self.metrics = self._setup_metrics(self.module.n_input)
         self._setup_loss(self.loss_type)
+        # Flag to track if metrics device has been set
+        self._metrics_device_set = False
+    
+    def on_fit_start(self):
+        """Called when fit begins."""
+        super().on_fit_start()
+        # Ensure metrics are on the same device as the model
+        if hasattr(self, 'module') and hasattr(self.module, 'device'):
+            self._ensure_metrics_device(self.module.device)
+    
+    def on_train_start(self):
+        """Called when training begins."""
+        super().on_train_start()
+        # Reset device flag to ensure metrics are moved to correct device
+        self._metrics_device_set = False
+    
+    def on_validation_start(self):
+        """Called when validation begins."""
+        super().on_validation_start()
+        # Reset device flag to ensure metrics are moved to correct device
+        self._metrics_device_set = False
+    
+    def on_test_start(self):
+        """Called when testing begins."""
+        super().on_test_start()
+        # Reset device flag to ensure metrics are moved to correct device
+        self._metrics_device_set = False
 
     def _setup_loss(self, 
                     loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"]):
@@ -125,6 +152,12 @@ class TrainingPlan(pl.LightningModule):
             
         else:
             raise ValueError("Prediction task must define 'classification' or 'regression'.")
+    
+    def _ensure_metrics_device(self, device):
+        """Ensure metrics are on the specified device."""
+        if not hasattr(self, '_metrics_device_set') or self.metrics.device != device:
+            self.metrics = self.metrics.to(device)
+            self._metrics_device_set = True
         
     def _classification_metrics(
         self,
@@ -136,6 +169,9 @@ class TrainingPlan(pl.LightningModule):
         if mask_idx is not None:
             y_pred = y_pred[mask_idx]
             y_true = y_true[mask_idx]
+            
+        # Ensure metrics are on the same device as input tensors
+        self._ensure_metrics_device(y_pred.device)
             
         loss = self.loss(y_pred, y_true)
         metrics = self.metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
@@ -177,6 +213,9 @@ class TrainingPlan(pl.LightningModule):
                 loss = self.loss(y_pred.T.contiguous(), y_true.T.contiguous()) # loss calculated over [N,:]
             assert y_pred.shape[1] == self.module.n_input
        
+        # Ensure metrics are on the same device as input tensors
+        self._ensure_metrics_device(y_pred.device)
+            
         metrics = self.metrics(y_pred, y_true)
         
         # Check if arrays are constant before calculating correlation
