@@ -3,7 +3,7 @@ from typing import List, Optional, Literal, Dict, Any
 import torch
 from torch import nn
 import pytorch_lightning as L
-from InterScale.nn import LinearDecoder, NonLinearDecoder
+from InterScale.nn import LinearDecoder, NonLinearDecoder, LinearLSEDecoder
 
 class BaseModuleClass(L.LightningModule, ABC):
     """Abstract base class for all models defining the common training interface.
@@ -31,7 +31,7 @@ class BaseModuleClass(L.LightningModule, ABC):
             For example, number of cell types.
         n_embed: int
             Number of embedding dimensions.
-        decoder_type: Literal["linear", "nonlinear"]
+        decoder_type: Literal["linear", "nonlinear", linear-lse"]
             Type of decoder to use. For combined module the submodules will potentially not have their own decoder (set to None).
         dropout_decoder: float
             Dropout rate for the decoder only if decoder_type is "nonlinear".
@@ -55,7 +55,10 @@ class BaseModuleClass(L.LightningModule, ABC):
         self.local_component = None
         self.global_component = None
         
-        if self.decoder_type == 'linear':
+        if self.decoder_type == 'linear-lse':
+            self.decoder = LinearLSEDecoder(n_input = self.n_embed,
+                                           n_output = self.n_output)
+        elif self.decoder_type == 'linear':
             self.decoder = LinearDecoder(n_input = self.n_embed,
                                         n_output = self.n_output)
         elif self.decoder_type == 'nonlinear':
