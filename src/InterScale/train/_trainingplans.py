@@ -77,36 +77,12 @@ class TrainingPlan(pl.LightningModule):
                 print('cross-cell per gene correlation metrics')
                 self.AXIS = 0 # selecting columns / genes
 
-        self.metrics = self._setup_metrics(self.module.n_input)
+        metrics = self._setup_metrics(self.module.n_input)
+        self.train_metrics = metrics.clone(prefix='train_')
+        self.valid_metrics = metrics.clone(prefix='val_')
+        self.test_metrics = metrics.clone(prefix='test_')
         self._setup_loss(self.loss_type)
-        # Flag to track if metrics device has been set
-        self._metrics_device_set = False
     
-    def on_fit_start(self):
-        """Called when fit begins."""
-        super().on_fit_start()
-        # Ensure metrics are on the same device as the model
-        if hasattr(self, 'module') and hasattr(self.module, 'device'):
-            self._ensure_metrics_device(self.module.device)
-    
-    def on_train_start(self):
-        """Called when training begins."""
-        super().on_train_start()
-        # Reset device flag to ensure metrics are moved to correct device
-        self._metrics_device_set = False
-    
-    def on_validation_start(self):
-        """Called when validation begins."""
-        super().on_validation_start()
-        # Reset device flag to ensure metrics are moved to correct device
-        self._metrics_device_set = False
-    
-    def on_test_start(self):
-        """Called when testing begins."""
-        super().on_test_start()
-        # Reset device flag to ensure metrics are moved to correct device
-        self._metrics_device_set = False
-
     def _setup_loss(self, 
                     loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"]):
         """Setup loss function based on prediction task and configuration."""
@@ -153,16 +129,12 @@ class TrainingPlan(pl.LightningModule):
         else:
             raise ValueError("Prediction task must define 'classification' or 'regression'.")
     
-    def _ensure_metrics_device(self, device):
-        """Ensure metrics are on the specified device."""
-        if not hasattr(self, '_metrics_device_set') or self.metrics.device != device:
-            self.metrics = self.metrics.to(device)
-            self._metrics_device_set = True
         
     def _classification_metrics(
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        metrics: MetricCollection,
         mask_idx: Optional[torch.Tensor] = None
     ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """Calculate classification metrics."""
@@ -170,11 +142,8 @@ class TrainingPlan(pl.LightningModule):
             y_pred = y_pred[mask_idx]
             y_true = y_true[mask_idx]
             
-        # Ensure metrics are on the same device as input tensors
-        self._ensure_metrics_device(y_pred.device)
-            
         loss = self.loss(y_pred, y_true)
-        metrics = self.metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
+        metrics = metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
         metrics['loss'] = loss
         
         return loss, metrics
@@ -183,6 +152,7 @@ class TrainingPlan(pl.LightningModule):
             self,
             y_pred: torch.Tensor,
             y_true: torch.Tensor,
+            metrics: MetricCollection,
             mask_idx: Optional[torch.Tensor] = None
         ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         
@@ -198,7 +168,7 @@ class TrainingPlan(pl.LightningModule):
         
         if self.cross_corr == 'gene':
             # score per cell, cell numbers dependent on sliding windows / spatial slide
-            self.metrics = self._setup_metrics(nr_cells) 
+            metrics = self._setup_metrics(nr_cells) 
             if self.loss_type == 'GaussianNLL':
                 loss = self.loss(y_pred, y_true, y_var)
             else:
@@ -212,11 +182,8 @@ class TrainingPlan(pl.LightningModule):
             else:
                 loss = self.loss(y_pred.T.contiguous(), y_true.T.contiguous()) # loss calculated over [N,:]
             assert y_pred.shape[1] == self.module.n_input
-       
-        # Ensure metrics are on the same device as input tensors
-        self._ensure_metrics_device(y_pred.device)
             
-        metrics = self.metrics(y_pred, y_true)
+        metrics = metrics(y_pred, y_true)
         
         # Check if arrays are constant before calculating correlation
         y_pred_np = y_pred.detach().cpu().numpy()
@@ -292,17 +259,17 @@ class TrainingPlan(pl.LightningModule):
     def training_step(self, batch):
         """Training step for the model."""
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
-        return self._compute_and_log_metrics(y_pred, y_true, 'train')
+        return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics)
 
     def validation_step(self, batch):
         """Validation step for the model."""
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
-        return self._compute_and_log_metrics(y_pred, y_true, 'val')
+        return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
     
     def test_step(self, batch):
         """Test step for the model."""
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
-        return self._compute_and_log_metrics(y_pred, y_true, 'test')
+        return self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics)
 
     def configure_optimizers(self):
         params = []

@@ -11,7 +11,6 @@ _adata.raw = _adata.copy()
 
 @pytest.mark.parametrize("n_input", [10])
 @pytest.mark.parametrize("n_output", [10])
-@pytest.mark.parametrize("decoder_type", ["linear-lse", "linear", "nonlinear"])
 
 
 class TestBaseComponents:
