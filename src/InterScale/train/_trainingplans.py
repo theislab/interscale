@@ -77,63 +77,64 @@ class TrainingPlan(pl.LightningModule):
                 print('cross-cell per gene correlation metrics')
                 self.AXIS = 0 # selecting columns / genes
 
-        metrics = self._setup_metrics(self.module.n_input)
+        # setup metrics and loss
+        if 'classification' in self.prediction_task:
+            metrics = self._setup_classification_metrics(self.module.n_output)
+            self.loss = self._setup_classification_loss(self.loss_type, self.class_weights)
+        elif 'regression' in self.prediction_task:
+            metrics = self._setup_regression_metrics()
+            self.loss = self._setup_regression_loss(self.loss_type)
+        else:
+            raise ValueError("Prediction task must define 'classification' or 'regression'.")
+        
         self.train_metrics = metrics.clone(prefix='train_')
         self.valid_metrics = metrics.clone(prefix='val_')
         self.test_metrics = metrics.clone(prefix='test_')
-        self._setup_loss(self.loss_type)
     
-    def _setup_loss(self, 
-                    loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"]):
+    @staticmethod
+    def _setup_classification_loss(loss: Literal["CrossEntropy", "WeightedCE"], class_weights: torch.Tensor | None = None):
         """Setup loss function based on prediction task and configuration."""
-        
-        print(self.prediction_task)
-        print(loss)
-                
-        if 'classification' in self.prediction_task:
-            assert loss == 'CrossEntropy' or loss == 'WeightedCE', "Classification must be run with CrossEntropy or WeightedCE loss."
-            if loss == 'CrossEntropy':
-                self.loss = nn.CrossEntropyLoss()
-            elif loss == 'WeightedCE':
-                assert self.class_weights is not None, "Class weights must be provided for WeightedCE loss."
-                self.loss = nn.CrossEntropyLoss(torch.from_numpy(self.class_weights))
-        elif 'regression' in self.prediction_task:
-            print('Regression')
-            assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1', "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
-            if loss == 'MSELoss':
-                self.loss = nn.MSELoss()
-            elif loss == 'GaussianNLL':
-                self.loss = nn.GaussianNLLLoss()
-            elif loss == 'SmoothL1':
-                self.loss = nn.SmoothL1Loss()
-            else:
-                raise ValueError("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")
-        else:
-            raise ValueError("Prediction task must define 'classification' or 'regression'.")
-        
-    def _setup_metrics(self, num_outputs: int):
-        if 'classification' in self.prediction_task:
-            return MetricCollection({
-                "accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=num_outputs),
-                "f1_micro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="micro"),
-                "f1_macro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="macro"),
-                "f1_per_class": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average=None)
-            })
-        elif 'regression' in self.prediction_task:
-            return MetricCollection({
-                "mse": torchmetrics.MeanSquaredError(),
-                "r2": torchmetrics.R2Score(num_outputs=num_outputs, multioutput='uniform_average'),
-                # "r2_single": torchmetrics.R2Score()
-            })
+        assert loss == 'CrossEntropy' or loss == 'WeightedCE', "Classification must be run with CrossEntropy or WeightedCE loss."
+        if loss == 'CrossEntropy':
+            return nn.CrossEntropyLoss()
+        elif loss == 'WeightedCE':
+            assert class_weights is not None, "Class weights must be provided for WeightedCE loss."
+            assert isinstance(class_weights, torch.Tensor), "class_weights must be a torch tensor"
+            return nn.CrossEntropyLoss(class_weights)
             
-        else:
-            raise ValueError("Prediction task must define 'classification' or 'regression'.")
+    @staticmethod
+    def _setup_regression_loss(loss: Literal["MSELoss", "GaussianNLL", "SmoothL1"]):
+        """Setup loss function based on prediction task and configuration."""
+        assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1', "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
+        if loss == 'MSELoss':
+            return nn.MSELoss()
+        elif loss == 'GaussianNLL':
+            return nn.GaussianNLLLoss()
+        elif loss == 'SmoothL1':
+            return nn.SmoothL1Loss()
+        
+    @staticmethod
+    def _setup_classification_metrics(num_outputs: int):
+        return MetricCollection({
+            "accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=num_outputs),
+            "f1_micro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="micro"),
+            "f1_macro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="macro"),
+            "f1_per_class": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average=None)
+        })
     
+    @staticmethod
+    def _setup_regression_metrics():
+        return MetricCollection({
+            "mse": torchmetrics.MeanSquaredError(),
+            "r2": torchmetrics.R2Score(multioutput='uniform_average'),
+            # "r2_single": torchmetrics.R2Score()
+        })
         
     def _classification_metrics(
         self,
         y_pred: torch.Tensor,
         y_true: torch.Tensor,
+        mode: str,
         metrics: MetricCollection,
         mask_idx: Optional[torch.Tensor] = None
     ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -144,14 +145,15 @@ class TrainingPlan(pl.LightningModule):
             
         loss = self.loss(y_pred, y_true)
         metrics = metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
-        metrics['loss'] = loss
+        metrics[f'{mode}_loss'] = loss
         
-        return loss, metrics
+        return metrics
         
     def _regression_metrics(
             self,
             y_pred: torch.Tensor,
             y_true: torch.Tensor,
+            mode: str,
             metrics: MetricCollection,
             mask_idx: Optional[torch.Tensor] = None
         ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
@@ -168,7 +170,6 @@ class TrainingPlan(pl.LightningModule):
         
         if self.cross_corr == 'gene':
             # score per cell, cell numbers dependent on sliding windows / spatial slide
-            metrics = self._setup_metrics(nr_cells) 
             if self.loss_type == 'GaussianNLL':
                 loss = self.loss(y_pred, y_true, y_var)
             else:
@@ -202,9 +203,9 @@ class TrainingPlan(pl.LightningModule):
                                       dtype=torch.float32, 
                                       device=y_pred.device)
         
-        metrics['loss'] = loss
-        metrics['pearson_corr'] = pearson_corr
-        return loss, metrics
+        metrics[f'{mode}_loss'] = loss
+        metrics[f'{mode}_pearson_corr'] = pearson_corr
+        return metrics
 
     def forward(self, *args, **kwargs):
         """Passthrough to the module's forward method."""
@@ -212,11 +213,13 @@ class TrainingPlan(pl.LightningModule):
             *args,
             **kwargs,
         )
-
+        
+    @torch.inference_mode()
     def _compute_and_log_metrics(self, 
                      y_pred: torch.Tensor,
                      y_true: torch.Tensor,
-                     mode: str):
+                     mode: str, 
+                     metrics: MetricCollection):
         """Helper method to log metrics for training, validation, or test steps.
         
         Parameters
@@ -227,34 +230,23 @@ class TrainingPlan(pl.LightningModule):
             List of metrics to log
         mode
             One of 'train', 'val', or 'test'
+        metrics: MetricCollection
+            Metrics to log
         """
         if 'classification' in self.prediction_task:
-            loss, metrics = self._classification_metrics(y_pred, y_true)
-            log_dict = {
-                f'{mode}_loss': loss,
-                f'{mode}_acc': metrics['accuracy'],
-                f'{mode}_f1_micro/avg': metrics['f1_micro'],
-                f'{mode}_f1_macro/avg': metrics['f1_macro'],
-            }
-            for class_idx in range(self.module.n_output):
-                log_dict[f'{mode}_f1/class_{class_idx}'] = metrics['f1_per_class'][class_idx]
+            metrics = self._classification_metrics(y_pred, y_true, mode, metrics)
         elif 'regression' in self.prediction_task:
-            loss, metrics = self._regression_metrics(y_pred, y_true)
-            log_dict = {
-                f'{mode}_loss': loss,
-                f'{mode}_mse': metrics['mse'],
-                f'{mode}_r2': metrics['r2'],
-                f'{mode}_pearson_corr': metrics['pearson_corr'],
-            }
-        
+            metrics = self._regression_metrics(y_pred, y_true, mode, metrics)
+            
         # Set sync_dist=True only for test mode
         sync_dist = (mode == 'test')
-        self.log_dict(log_dict, 
+        self.log_dict(metrics, 
                      batch_size=int(self.batch_size), 
                      on_step=False, 
                      on_epoch=True,
                      sync_dist=sync_dist)
-        return loss
+        
+        return metrics[f'{mode}_loss']
 
     def training_step(self, batch):
         """Training step for the model."""
