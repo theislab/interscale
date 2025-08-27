@@ -10,7 +10,7 @@ setup(
         "torch-geometric>=2.0.0",
         "pytorch-lightning>=1.5.0",
         "torchmetrics>=0.7.0",
-        "numpy>=1.19.0",
+        "numpy>=1.19.0,<2.0.0", # recommended version 1.26.4
         "scipy>=1.7.0",
     ],
     extras_require={
