@@ -174,7 +174,7 @@ class TrainingPlan(pl.LightningModule):
         
         if self.cross_corr == 'gene':
             # score per cell, cell numbers dependent on sliding windows / spatial slide
-            metrics = self._setup_metrics(nr_cells) 
+            #metrics = self._setup_regression_metrics(nr_cells) # does not take nr_cells as input anymore   
             if self.loss_type == 'GaussianNLL':
                 loss = self.loss(y_pred, y_true, y_var)
             else:
@@ -191,9 +191,11 @@ class TrainingPlan(pl.LightningModule):
             
         metrics = metrics(y_pred, y_true)
         
-        # Check if arrays are constant before calculating correlation
-        y_pred_np = y_pred.detach().cpu().numpy()
-        y_true_np = y_true.detach().cpu().numpy()
+        # # Check if arrays are constant before calculating correlation
+        # y_pred_np = y_pred.detach().cpu().numpy()
+        # y_true_np = y_true.detach().cpu().numpy()
+        y_pred_np = y_pred
+        y_true_np = y_true
                                 
         if np.std(y_pred_np) == 0 or np.std(y_true_np) == 0:
             print('constant array')
@@ -240,7 +242,7 @@ class TrainingPlan(pl.LightningModule):
         """
         if 'classification' in self.prediction_task:
             metrics = self._classification_metrics(y_pred, y_true, mode, metrics)
-            for class_idx, class_score in enumerate(metrics['f1_per_class']):
+            for class_idx, class_score in enumerate(metrics[f'{mode}_f1_per_class']):
                 metrics[f'{mode}_f1_{self.class_labels[class_idx]}'] = class_score
         elif 'regression' in self.prediction_task:
             metrics = self._regression_metrics(y_pred, y_true, mode, metrics)

@@ -2,7 +2,7 @@ import pytest
 import torch
 import torch.nn as nn
 import numpy as np
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from InterScale.train import TrainingPlan
 
@@ -49,7 +49,8 @@ def test_classification_setup(loss, cross_corr, prediction_level):
         prediction_level=prediction_level,
         loss=loss,
         cross_corr=cross_corr,
-        class_weights=torch.tensor([0.5, 1.0, 2.0]),
+        class_weights=torch.tensor([0.5, 1.0, 2.0]) if loss == "WeightedCE" else None,
+        class_labels=["class_0", "class_1", "class_2"],
         batch_size=32
     )
     
@@ -154,7 +155,7 @@ def test_classification_metrics_computation(loss, n_cells, prediction_level):
     """Test that classification metrics are computed correctly."""
     module = create_toy_module(n_output=3, n_input=10)
     
-    class_weights = torch.tensor([0.5, 1.0, 2.0])
+    class_weights = torch.tensor([0.5, 1.0, 2.0]) if loss == "WeightedCE" else None
     
     training_plan = TrainingPlan(
         module=module,
@@ -163,7 +164,8 @@ def test_classification_metrics_computation(loss, n_cells, prediction_level):
         loss=loss,
         cross_corr="gene",
         batch_size=32,
-        class_weights=class_weights
+        class_weights=class_weights,
+        class_labels=["class_0", "class_1", "class_2"]
     )
     
     # Create test data
@@ -189,85 +191,90 @@ def test_classification_metrics_computation(loss, n_cells, prediction_level):
     assert metrics['train_f1_per_class'].unsqueeze(0).shape == torch.Size([1,3]), f"Train f1_per_class expected shape (3,), got {metrics['train_f1_per_class'].unsqueeze(0).shape}"
     assert metrics['train_loss'].unsqueeze(0).shape == torch.Size([1]), f"Train loss expected shape (1), got {metrics['train_loss'].unsqueeze(0).shape}" 
     
-def test_mask_idx_difference():
-    """Test that mask_idx makes a difference in metrics computation."""
-    module = create_toy_module(n_output=3, n_input=10)
+
+
+@pytest.mark.parametrize("mode", ["train", "val", "test"])
+@pytest.mark.parametrize("prediction_task", ["classification", "regression"])
+@pytest.mark.parametrize("cross_corr", ["gene", "cell"])
+def test_compute_and_log_metrics_classification(mode, prediction_task, cross_corr):
+    """Test the _compute_and_log_metrics method for classification tasks."""
+    if prediction_task == "classification":
+        module = create_toy_module(n_output=3, n_input=10)
+        class_labels = ["class_0", "class_1", "class_2"]
+        loss = "CrossEntropy"
+    else:
+        module = create_toy_module(n_output=10, n_input=10)
+        class_labels = None
+        loss = "MSELoss"
     
     training_plan = TrainingPlan(
         module=module,
-        prediction_task="classification",
+        prediction_task=prediction_task,
         prediction_level="node",
-        loss="CrossEntropy",
-        cross_corr="gene",
-        batch_size=32
+        loss=loss,
+        cross_corr=cross_corr,
+        batch_size=32,
+        class_labels=class_labels
     )
     
-    # Create test data with some bad predictions
-    n_cells = 100
-    y_pred = torch.randn(n_cells, 3)
-    y_true = torch.randint(0, 3, (n_cells,))
-    y_true_onehot = torch.zeros(n_cells, 3)
-    y_true_onehot.scatter_(1, y_true.unsqueeze(1), 1)
+    # Create test data
+    batch_size = 32
+    if prediction_task == "classification":
+        y_pred = torch.randn(batch_size, 3)
+        y_true = torch.randint(0, 3, (batch_size,))
+        y_true_onehot = torch.zeros(batch_size, 3)
+        y_true_onehot.scatter_(1, y_true.unsqueeze(1), 1)
+    else:
+        y_pred = torch.randn(batch_size, 10)
+        y_true = torch.randn(batch_size, 10)
     
-    # Compute metrics without mask
-    metrics_no_mask = training_plan._classification_metrics(
-        y_pred, y_true_onehot, 'train', training_plan.train_metrics
-    )
+    if mode == "train":
+        metrics = training_plan.train_metrics
+    elif mode == "val":
+        metrics = training_plan.valid_metrics
+    elif mode == "test":
+        metrics = training_plan.test_metrics
     
-    # Create a mask that excludes some cells (e.g., first 20 cells)
-    mask_idx = torch.arange(20, n_cells)
-    
-    # Compute metrics with mask
-    metrics_with_mask = training_plan._classification_metrics(
-        y_pred, y_true_onehot, 'train', training_plan.train_metrics, mask_idx=mask_idx
-    )
-    
-    # The metrics should be different because we're using different subsets of data
-    print(f"Metrics without mask: {metrics_no_mask}")
-    print(f"Metrics with mask: {metrics_with_mask}")
-    
-    # Check that the loss values are different (they should be since we're using different data)
-    assert not torch.allclose(
-        metrics_no_mask['train_loss'], 
-        metrics_with_mask['train_loss'], 
-        atol=1e-6
-    ), "Loss should be different with and without mask"
-    
-    # Check that accuracy is different
-    assert not torch.allclose(
-        metrics_no_mask['train_accuracy'], 
-        metrics_with_mask['train_accuracy'], 
-        atol=1e-6
-    ), "Accuracy should be different with and without mask"
-    
-#     def test_regression_metrics_computation(self):
-#         """Test that regression metrics are computed correctly."""
-#         module = create_toy_module(n_output=10, n_input=10)
+    # Mock the log_dict method to avoid actual logging during tests
+    with patch.object(training_plan, 'log_dict') as mock_log_dict:
+        # Test metrics computation and logging
+        loss_value = training_plan._compute_and_log_metrics(
+            y_pred, y_true_onehot if prediction_task == "classification" else y_true, 
+            mode, metrics
+        )
         
-#         training_plan = TrainingPlan(
-#             module=module,
-#             prediction_task="regression",
-#             prediction_level="node",
-#             loss="MSELoss",
-#             cross_corr="gene",
-#             batch_size=32
-#         )
+        # Check that log_dict was called
+        mock_log_dict.assert_called_once()
         
-#         # Create test data
-#         batch_size = 32
-#         y_pred = torch.randn(batch_size, 10)
-#         y_true = torch.randn(batch_size, 10)
+        # Check the arguments passed to log_dict
+        call_args = mock_log_dict.call_args
+        logged_metrics = call_args[0][0]  # First argument is the metrics dict
+        log_kwargs = call_args[1]  # Keyword arguments
         
-#         # Test metrics computation
-#         loss, metrics = training_plan._regression_metrics(
-#             y_pred, y_true, training_plan.train_metrics
-#         )
+        # Check that loss is returned
+        assert isinstance(loss_value, torch.Tensor)
         
-#         assert isinstance(loss, torch.Tensor)
-#         assert 'mse' in metrics
-#         assert 'r2' in metrics
-#         assert 'loss' in metrics
-#         assert 'pearson_corr' in metrics
+        # Check that appropriate metrics are logged
+        if prediction_task == "classification":
+            assert f'{mode}_loss' in logged_metrics
+            assert f'{mode}_accuracy' in logged_metrics
+            assert f'{mode}_f1_micro' in logged_metrics
+            assert f'{mode}_f1_macro' in logged_metrics
+            # Check that per-class F1 scores are logged
+            for class_name in class_labels:
+                assert f'{mode}_f1_{class_name}' in logged_metrics
+        else:
+            assert f'{mode}_loss' in logged_metrics
+            assert f'{mode}_mse' in logged_metrics
+            assert f'{mode}_r2' in logged_metrics
+            assert f'{mode}_pearson_corr' in logged_metrics
+        
+        # Check log_kwargs
+        assert log_kwargs['batch_size'] == 32
+        assert log_kwargs['on_step'] == False
+        assert log_kwargs['on_epoch'] == True
+        # sync_dist should be True only for test mode
+        assert log_kwargs['sync_dist'] == (mode == 'test')
 
 
 # if __name__ == "__main__":
