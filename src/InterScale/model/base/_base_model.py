@@ -115,11 +115,13 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         self.local_component = False
         self.global_component = False
+        self.class_labels = None
         
         self.class_weights = None
         if self._cfg.optim.loss == 'WeightedCE':
-            self.class_weights = compute_class_weight("balanced", classes = np.unique(self._adata.obs[self._cfg.dataset.prediction_obs]), y=self._adata.obs[self._cfg.dataset.prediction_obs])
-            print('Class weights', self.class_weights)
+            self.class_weights = torch.tensor(compute_class_weight("balanced", classes = np.unique(self._adata.obs[self._cfg.dataset.prediction_obs]), y=self._adata.obs[self._cfg.dataset.prediction_obs]))
+            print('WeightedCE with class weights: ', self.class_weights)
+            self.class_labels = self._adata.obs[self._cfg.dataset.prediction_obs].cat.categories
         
     @classmethod
     def _setup_anndata(cls,

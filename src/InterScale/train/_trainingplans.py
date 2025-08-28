@@ -48,6 +48,7 @@ class TrainingPlan(pl.LightningModule):
         cross_corr: Literal["gene", "cell"],
         batch_size: int,
         class_weights: np.ndarray | None = None,
+        class_labels: List[str] | None = None,
         *,
         use_lr_scheduler: bool = True,
         weight_decay: float = 1e-6,
@@ -64,6 +65,7 @@ class TrainingPlan(pl.LightningModule):
         self.cross_corr = cross_corr
         self.batch_size = batch_size
         self.class_weights = class_weights
+        self.class_labels = class_labels
         self.weight_decay = weight_decay
         self.use_lr_scheduler = use_lr_scheduler
         self.lr_warmup = lr_warmup
@@ -139,9 +141,10 @@ class TrainingPlan(pl.LightningModule):
         mask_idx: Optional[torch.Tensor] = None
     ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """Calculate classification metrics."""
-        if mask_idx is not None:
-            y_pred = y_pred[mask_idx]
-            y_true = y_true[mask_idx]
+        ## TODO: Currently mask_idx is applied in module._common_step. Maybe move to here?
+        # if mask_idx is not None:
+        #     y_pred = y_pred[mask_idx]
+        #     y_true = y_true[mask_idx]
             
         loss = self.loss(y_pred, y_true)
         metrics = metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
@@ -159,9 +162,10 @@ class TrainingPlan(pl.LightningModule):
         ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         
         """Calculate regression metrics."""
-        if mask_idx is not None:
-            y_pred = y_pred[mask_idx]
-            y_true = y_true[mask_idx]
+         ## TODO: Currently mask_idx is applied in module._common_step. Maybe move to here?
+        # if mask_idx is not None:
+        #     y_pred = y_pred[mask_idx]
+        #     y_true = y_true[mask_idx]
             
         if self.loss_type == 'GaussianNLL':
             y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
@@ -170,6 +174,7 @@ class TrainingPlan(pl.LightningModule):
         
         if self.cross_corr == 'gene':
             # score per cell, cell numbers dependent on sliding windows / spatial slide
+            metrics = self._setup_metrics(nr_cells) 
             if self.loss_type == 'GaussianNLL':
                 loss = self.loss(y_pred, y_true, y_var)
             else:
@@ -235,6 +240,8 @@ class TrainingPlan(pl.LightningModule):
         """
         if 'classification' in self.prediction_task:
             metrics = self._classification_metrics(y_pred, y_true, mode, metrics)
+            for class_idx, class_score in enumerate(metrics['f1_per_class']):
+                metrics[f'{mode}_f1_{self.class_labels[class_idx]}'] = class_score
         elif 'regression' in self.prediction_task:
             metrics = self._regression_metrics(y_pred, y_true, mode, metrics)
             
