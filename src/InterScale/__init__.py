@@ -1,4 +1,3 @@
-from importlib.metadata import version
 
 from . import config, module, tl, model
 

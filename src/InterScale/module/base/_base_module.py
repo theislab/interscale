@@ -4,7 +4,6 @@ import torch
 from torch import nn
 import pytorch_lightning as L
 from InterScale.nn import LinearDecoder, NonLinearDecoder, LinearLSEDecoder
-from InterScale.train.losses import _setup_classification_loss, _setup_regression_loss
 
 class BaseModuleClass(L.LightningModule, ABC):
     """Abstract base class for all models defining the common training interface.
