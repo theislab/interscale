@@ -293,12 +293,12 @@ def test_compute_and_log_metrics_classification(mode, prediction_task, cross_cor
     
     # Create test data
     if prediction_task == "classification":
-        y_pred = torch.randn(batch_size, 3)
+        y_pred = torch.randn(batch_size, 3, requires_grad=True)
         y_true = torch.randint(0, 3, (batch_size,))
         y_true_onehot = torch.zeros(batch_size, 3)
         y_true_onehot.scatter_(1, y_true.unsqueeze(1), 1)
     else:
-        y_pred = torch.randn(batch_size, 10)
+        y_pred = torch.randn(batch_size, 10, requires_grad=True)
         y_true = torch.randn(batch_size, 10)
     
     if mode == "train":
@@ -315,6 +315,9 @@ def test_compute_and_log_metrics_classification(mode, prediction_task, cross_cor
             y_pred, y_true_onehot if prediction_task == "classification" else y_true, 
             mode, metrics
         )
+        
+        print(loss_value)
+        assert loss_value.grad_fn is not None, "Loss value should have grad_fn for backpropagation"
         
         # Check that log_dict was called
         mock_log_dict.assert_called_once()

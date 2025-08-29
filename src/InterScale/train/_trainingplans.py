@@ -203,7 +203,7 @@ class TrainingPlan(pl.LightningModule):
             **kwargs,
         )
         
-    @torch.inference_mode()
+    #@torch.inference_mode() decorator disables gradient computation. TODO: enable again after calculating loss in module. 
     def _compute_and_log_metrics(self, 
                      y_pred: torch.Tensor,
                      y_true: torch.Tensor,
@@ -219,9 +219,7 @@ class TrainingPlan(pl.LightningModule):
             One of 'train', 'val', or 'test'
         metrics: MetricCollection
             Metrics to log
-        """
-        print(y_pred.shape, y_true.shape)
-        
+        """        
         assert y_true.shape == y_pred.shape, "y_true and y_pred must have the same shape"
         #TODO: where is the batch size?
         
