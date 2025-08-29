@@ -8,7 +8,7 @@ import numpy as np
 from InterScale.tl import CosineWarmupScheduler, compute_dynamic_variance
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.module.base._base_module import BaseModuleClass
-from InterScale.train import BalancedPearsonCorrelationLoss
+from .losses import BalancedPearsonCorrelationLoss
 
 import torchmetrics
 from torchmetrics import MetricCollection
@@ -111,21 +111,18 @@ class TrainingPlan(pl.LightningModule):
             assert isinstance(class_weights, torch.Tensor), "class_weights must be a torch tensor"
             return nn.CrossEntropyLoss(class_weights)
             
-    @staticmethod
-    def _setup_regression_loss(loss: Literal["MSELoss", "GaussianNLL", "SmoothL1"]):
+    
+    def _setup_regression_loss(self, loss: Literal["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss"]):
         """Setup loss function based on prediction task and configuration."""
-        assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1', "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
+        assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1' or loss == "BalancedPearsonCorrelationLoss", "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
         if loss == 'MSELoss':
             return nn.MSELoss()
         elif loss == 'GaussianNLL':
             return nn.GaussianNLLLoss()
         elif loss == 'SmoothL1':
             return nn.SmoothL1Loss()
-        elif loss == 'BalancedPearsonCorrelationLoss':
-            return BalancedPearsonCorrelationLoss(
-                rel_weight_gene=self.rel_weight_gene,
-                rel_weight_cell=self.rel_weight_cell,
-            )
+        elif loss == "BalancedPearsonCorrelationLoss":
+            return self.pearson_corr
         
     @staticmethod
     def _setup_classification_metrics(num_outputs: int):
