@@ -115,7 +115,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         self.local_component = False
         self.global_component = False
-        self.class_labels = self._adata.obs[self._cfg.dataset.prediction_obs].cat.categories
+        if self.prediction_task == 'classification':
+            self.class_labels = self._adata.obs[self._cfg.dataset.prediction_obs].cat.categories
         
         self.class_weights = None
         if self._cfg.optim.loss == 'WeightedCE':

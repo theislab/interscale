@@ -5,6 +5,7 @@ import numpy as np
 from unittest.mock import Mock, patch
 
 from InterScale.train import TrainingPlan
+from InterScale.train.losses import BalancedPearsonCorrelationLoss
 
 
 def get_test_case(test_case: str, nr_cells: int, num_genes: int = 10):
@@ -134,7 +135,7 @@ def test_classification_invalid_loss(loss):
             batch_size=32
         )
     
-@pytest.mark.parametrize("loss", ["MSELoss", "GaussianNLL", "SmoothL1"])
+@pytest.mark.parametrize("loss", ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss"])
 @pytest.mark.parametrize("cross_corr", ["gene", "cell"])
 @pytest.mark.parametrize("prediction_level", ["node", "graph"]) #TODO: shouldnt be able to set up regression for graph level
 def test_regression_setup(loss, cross_corr, prediction_level):
@@ -158,7 +159,9 @@ def test_regression_setup(loss, cross_corr, prediction_level):
         assert isinstance(training_plan.loss, nn.GaussianNLLLoss)
     elif loss == "SmoothL1":
         assert isinstance(training_plan.loss, nn.SmoothL1Loss)
-    
+    elif loss == "BalancedPearsonCorrelationLoss":
+        assert isinstance(training_plan.loss, BalancedPearsonCorrelationLoss)
+        
     # Check that metrics are set up correctly
     assert hasattr(training_plan, 'train_metrics')
     assert hasattr(training_plan, 'valid_metrics')
@@ -251,7 +254,7 @@ def test_regression_metrics_computation(loss, prediction_level, test_case, n_cel
     y_pred = test_data["y_pred"]
     y_true = test_data["y_true"]
     
-    metrics = training_plan._regression_metrics(
+    loss, metrics = training_plan._regression_metrics(
         y_pred, y_true, 'train', training_plan.train_metrics
     )
     
