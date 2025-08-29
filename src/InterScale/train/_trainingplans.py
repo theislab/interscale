@@ -8,8 +8,7 @@ import numpy as np
 from InterScale.tl import CosineWarmupScheduler, compute_dynamic_variance
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.module.base._base_module import BaseModuleClass
-from scipy.stats import pearsonr
-
+from InterScale.train import BalancedPearsonCorrelationLoss
 
 import torchmetrics
 from torchmetrics import MetricCollection
@@ -75,10 +74,18 @@ class TrainingPlan(pl.LightningModule):
             if self.cross_corr == 'gene':
                 print('cross-gene per cell correlation metrics')
                 self.AXIS = 1 # selecting rows / cells
+                self.rel_weight_gene = 1.0
+                self.rel_weight_cell = 0.0
             elif self.cross_corr == 'cell':
                 print('cross-cell per gene correlation metrics')
                 self.AXIS = 0 # selecting columns / genes
-
+                self.rel_weight_gene = 0.0
+                self.rel_weight_cell = 1.0
+            self.pearson_corr = BalancedPearsonCorrelationLoss(
+                rel_weight_gene=self.rel_weight_gene,
+                rel_weight_cell=self.rel_weight_cell,
+            )
+        
         # setup metrics and loss
         if 'classification' in self.prediction_task:
             metrics = self._setup_classification_metrics(self.module.n_output)
@@ -114,6 +121,11 @@ class TrainingPlan(pl.LightningModule):
             return nn.GaussianNLLLoss()
         elif loss == 'SmoothL1':
             return nn.SmoothL1Loss()
+        elif loss == 'BalancedPearsonCorrelationLoss':
+            return BalancedPearsonCorrelationLoss(
+                rel_weight_gene=self.rel_weight_gene,
+                rel_weight_cell=self.rel_weight_cell,
+            )
         
     @staticmethod
     def _setup_classification_metrics(num_outputs: int):
@@ -160,55 +172,28 @@ class TrainingPlan(pl.LightningModule):
             metrics: MetricCollection,
             mask_idx: Optional[torch.Tensor] = None
         ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        
-        """Calculate regression metrics."""
-         ## TODO: Currently mask_idx is applied in module._common_step. Maybe move to here?
-        # if mask_idx is not None:
-        #     y_pred = y_pred[mask_idx]
-        #     y_true = y_true[mask_idx]
-            
+        """Calculate regression metrics.
+            y_true, y_pred: torch.Tensor
+                True and predicted values of shape [N, G], where N is the number of cells and G is the number of genes
+            """
         if self.loss_type == 'GaussianNLL':
             y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
-            
-        nr_cells = y_true.shape[0]
-        
-        if self.cross_corr == 'gene':
-            # score per cell, cell numbers dependent on sliding windows / spatial slide
-            #metrics = self._setup_regression_metrics(nr_cells) # does not take nr_cells as input anymore   
-            if self.loss_type == 'GaussianNLL':
-                loss = self.loss(y_pred, y_true, y_var)
-            else:
-                loss = self.loss(y_pred, y_true)
-            y_pred = y_pred.T.contiguous()
-            y_true = y_true.T.contiguous()
-            assert y_pred.shape[0] == self.module.n_input
-        elif self.cross_corr == 'cell':
-            if self.loss_type == 'GaussianNLL':
-                loss = self.loss(y_pred.T.contiguous(), y_true.T.contiguous(), y_var) # loss calculated over [N,:]
-            else:
-                loss = self.loss(y_pred.T.contiguous(), y_true.T.contiguous()) # loss calculated over [N,:]
-            assert y_pred.shape[1] == self.module.n_input
+       
+        if self.loss_type == 'GaussianNLL':
+            loss = self.loss(y_pred, y_true, y_var)
+        else:
+            loss = self.loss(y_pred, y_true)
             
         metrics = metrics(y_pred, y_true)
-        
-        # # Check if arrays are constant before calculating correlation
-        # y_pred_np = y_pred.detach().cpu().numpy()
-        # y_true_np = y_true.detach().cpu().numpy()
-        y_pred_np = y_pred
-        y_true_np = y_true
                                 
-        if np.std(y_pred_np) == 0 or np.std(y_true_np) == 0:
+        if torch.std(y_pred) == 0 or torch.std(y_true) == 0:
             print('constant array')
-            print(y_pred_np[:5], y_true_np[:5])
-            pearson_corr = torch.tensor(1.0 if np.allclose(y_pred_np, y_true_np) else float('nan'), 
+            print(y_pred[:5], y_true[:5])
+            pearson_corr = torch.tensor(1.0 if np.allclose(y_pred, y_true) else float('nan'), 
                                       dtype=torch.float32, 
                                       device=y_pred.device)
         else:
-            pearson_corr_raw = pearsonr(y_pred_np, y_true_np)
-            # np.nanmean because pearsonr returns nan if all values are constant
-            pearson_corr = torch.tensor(np.nanmean(pearson_corr_raw[0]), 
-                                      dtype=torch.float32, 
-                                      device=y_pred.device)
+            pearson_corr = self.pearson_corr(y_pred, y_true)
         
         metrics[f'{mode}_loss'] = loss
         metrics[f'{mode}_pearson_corr'] = pearson_corr
@@ -231,19 +216,26 @@ class TrainingPlan(pl.LightningModule):
         
         Parameters
         ----------
-        loss
-            Loss value
-        metric_list
-            List of metrics to log
+        y_true, y_pred: torch.Tensor
+            True and predicted values of shape [N, G], where N is the number of cells and G is the number of genes
         mode
             One of 'train', 'val', or 'test'
         metrics: MetricCollection
             Metrics to log
         """
+        print(y_pred.shape, y_true.shape)
+        
+        assert y_true.shape == y_pred.shape, "y_true and y_pred must have the same shape"
+        #TODO: where is the batch size?
+        assert y_pred.shape[0] == self.module.n_input, "y_pred must have same number of inputs as module.n_input"
+        assert y_pred.shape[1] == self.module.n_output, "y_pred must have same number of outputs as module.n_output"
+        
         if 'classification' in self.prediction_task:
             metrics = self._classification_metrics(y_pred, y_true, mode, metrics)
             for class_idx, class_score in enumerate(metrics[f'{mode}_f1_per_class']):
                 metrics[f'{mode}_f1_{self.class_labels[class_idx]}'] = class_score
+            metrics.pop(f'{mode}_f1_per_class')
+            
         elif 'regression' in self.prediction_task:
             metrics = self._regression_metrics(y_pred, y_true, mode, metrics)
             

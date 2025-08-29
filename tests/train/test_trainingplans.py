@@ -6,6 +6,45 @@ from unittest.mock import Mock, patch
 
 from InterScale.train import TrainingPlan
 
+
+def get_test_case(test_case: str, nr_cells: int, num_genes: int = 10):
+    """Generate test cases for training plan tests.
+    
+    Args:
+        test_case: The type of test case to generate
+        nr_cells: Number of cells to use in the test data
+
+    Returns:
+        Dictionary containing y_pred and y_true tensors for the specified test case
+    """
+    test_cases = {
+        "normal": {
+            "y_pred": torch.randn(nr_cells, num_genes),
+            "y_true": torch.randn(nr_cells, num_genes)
+        },
+        "constant_cell": {
+            "y_pred": torch.ones(nr_cells, num_genes) * torch.randn(nr_cells, 1),
+            "y_true": torch.ones(nr_cells, num_genes) * torch.randn(nr_cells, 1)
+        },
+        "constant_gene": {
+            "y_pred": torch.ones(num_genes, nr_cells) * torch.randn(num_genes, nr_cells),
+            "y_true": torch.ones(num_genes, nr_cells) * torch.randn(num_genes, nr_cells)
+        },
+        "zero_cell": {
+            "y_pred": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes)),
+            "y_true": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes))
+        },
+        "zero_gene": {
+            "y_pred": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes)),
+            "y_true": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes))
+        }
+    }
+    
+    if test_case not in test_cases:
+        raise ValueError(f"Unknown test case: {test_case}. Available cases: {list(test_cases.keys())}")
+    
+    return test_cases[test_case]
+
 def create_toy_module(n_output=5, n_input=10):
     """Create a mock module with required attributes."""
     class ToyModule(nn.Module):
@@ -191,19 +230,54 @@ def test_classification_metrics_computation(loss, n_cells, prediction_level):
     assert metrics['train_f1_per_class'].unsqueeze(0).shape == torch.Size([1,3]), f"Train f1_per_class expected shape (3,), got {metrics['train_f1_per_class'].unsqueeze(0).shape}"
     assert metrics['train_loss'].unsqueeze(0).shape == torch.Size([1]), f"Train loss expected shape (1), got {metrics['train_loss'].unsqueeze(0).shape}" 
     
-
+@pytest.mark.parametrize("loss", ["MSELoss", "GaussianNLL", "SmoothL1"])
+@pytest.mark.parametrize("prediction_level", ["node", "graph"])
+@pytest.mark.parametrize("test_case", ["normal", "constant_cell", "constant_gene", "zero_cell", "zero_gene"])
+@pytest.mark.parametrize("n_cells", [32, 100])
+def test_regression_metrics_computation(loss, prediction_level, test_case, n_cells):
+    """Test that classification metrics are computed correctly."""
+    module = create_toy_module(n_output=3, n_input=n_cells)
+    
+    training_plan = TrainingPlan(
+        module=module,
+        prediction_task="regression",
+        prediction_level=prediction_level,
+        loss=loss,
+        cross_corr="cell",
+        batch_size=32,
+    )
+    
+    test_data = get_test_case(test_case, n_cells)
+    y_pred = test_data["y_pred"]
+    y_true = test_data["y_true"]
+    
+    metrics = training_plan._regression_metrics(
+        y_pred, y_true, 'train', training_plan.train_metrics
+    )
+    
+    print(metrics)
+    
+    assert 'train_mse' in metrics
+    assert 'train_r2' in metrics
+    assert 'train_pearson_corr' in metrics
+    
+    assert metrics['train_mse'].unsqueeze(0).shape == torch.Size([1]), f"Train mse expected shape (1,), got {metrics['train_mse'].unsqueeze(0).shape}"
+    assert metrics['train_r2'].unsqueeze(0).shape == torch.Size([1]), f"Train r2 expected shape (1,), got {metrics['train_r2'].unsqueeze(0).shape}"
+    assert metrics['train_pearson_corr'].unsqueeze(0).shape == torch.Size([1]), f"Train pearson_corr expected shape (1,), got {metrics['train_pearson_corr'].unsqueeze(0).shape}"
 
 @pytest.mark.parametrize("mode", ["train", "val", "test"])
 @pytest.mark.parametrize("prediction_task", ["classification", "regression"])
 @pytest.mark.parametrize("cross_corr", ["gene", "cell"])
 def test_compute_and_log_metrics_classification(mode, prediction_task, cross_corr):
     """Test the _compute_and_log_metrics method for classification tasks."""
+    batch_size = 32
+    
     if prediction_task == "classification":
-        module = create_toy_module(n_output=3, n_input=10)
+        module = create_toy_module(n_output=3, n_input=batch_size)
         class_labels = ["class_0", "class_1", "class_2"]
         loss = "CrossEntropy"
     else:
-        module = create_toy_module(n_output=10, n_input=10)
+        module = create_toy_module(n_output=10, n_input=batch_size)
         class_labels = None
         loss = "MSELoss"
     
@@ -218,7 +292,6 @@ def test_compute_and_log_metrics_classification(mode, prediction_task, cross_cor
     )
     
     # Create test data
-    batch_size = 32
     if prediction_task == "classification":
         y_pred = torch.randn(batch_size, 3)
         y_true = torch.randint(0, 3, (batch_size,))
