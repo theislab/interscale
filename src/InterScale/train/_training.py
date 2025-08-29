@@ -127,7 +127,7 @@ class NodeMaskingTrainingPlan:
             self._cfg.optim.cross_corr,
             self._cfg.dataset.batch_size,
             self.class_weights,
-            self.class_labels,
+            self.class_labels if self.prediction_task == 'classification' else None,
             **plan_kwargs,
             use_lr_scheduler = self._cfg.optim.use_lr_scheduler,
             weight_decay = self._cfg.optim.wd,
