@@ -4,11 +4,10 @@ import torch
 from torch import nn
 import pytorch_lightning as L
 from InterScale.nn import LinearDecoder, NonLinearDecoder, LinearLSEDecoder
+from InterScale.train.losses import _setup_classification_loss, _setup_regression_loss
 
 class BaseModuleClass(L.LightningModule, ABC):
     """Abstract base class for all models defining the common training interface.
-    
-    
     """
     
     def __init__(
@@ -26,7 +25,7 @@ class BaseModuleClass(L.LightningModule, ABC):
         ----------
         n_input: int
             Number of input features.
-        n_classes: int
+        n_output: int
             If classification, number of output features / classes.
             For example, number of cell types.
         n_embed: int
@@ -54,7 +53,7 @@ class BaseModuleClass(L.LightningModule, ABC):
         # Define components 
         self.local_component = None
         self.global_component = None
-        
+                
         if self.decoder_type == 'linear-lse':
             self.decoder = LinearLSEDecoder(n_input = self.n_embed,
                                            n_output = self.n_output)
@@ -83,7 +82,8 @@ class BaseModuleClass(L.LightningModule, ABC):
         x: torch.Tensor,
         edge_index: torch.Tensor,
         batch: torch.Tensor,
-        mask: Optional[torch.Tensor] = None
+        mask: Optional[torch.Tensor] = None,
+        compute_loss: bool = True
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """Forward pass through the model.
         
@@ -99,4 +99,14 @@ class BaseModuleClass(L.LightningModule, ABC):
             index_nodes: Node indices [N]
         """
         pass
+    
+    # @abstractmethod
+    # def loss(self, *args, **kwargs):
+    #     """Compute the loss for a minibatch of data.
+
+    #     This function uses the outputs of the inference and generative functions to compute
+    #     a loss. This many optionally include other penalty terms, which should be computed here.
+    #     """
+        
+        
         

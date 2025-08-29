@@ -5,6 +5,7 @@
 from typing import Literal
 
 import torch
+import torch.nn as nn
 
 
 def log(t, eps=1e-20):

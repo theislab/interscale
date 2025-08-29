@@ -159,7 +159,7 @@ class TrainingPlan(pl.LightningModule):
         metrics = metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
         metrics[f'{mode}_loss'] = loss
         
-        return metrics
+        return loss, metrics
         
     def _regression_metrics(
             self,
@@ -194,7 +194,7 @@ class TrainingPlan(pl.LightningModule):
         
         metrics[f'{mode}_loss'] = loss
         metrics[f'{mode}_pearson_corr'] = pearson_corr
-        return metrics
+        return loss, metrics
 
     def forward(self, *args, **kwargs):
         """Passthrough to the module's forward method."""
@@ -224,17 +224,15 @@ class TrainingPlan(pl.LightningModule):
         
         assert y_true.shape == y_pred.shape, "y_true and y_pred must have the same shape"
         #TODO: where is the batch size?
-        assert y_pred.shape[0] == self.module.n_input, "y_pred must have same number of inputs as module.n_input"
-        assert y_pred.shape[1] == self.module.n_output, "y_pred must have same number of outputs as module.n_output"
         
         if 'classification' in self.prediction_task:
-            metrics = self._classification_metrics(y_pred, y_true, mode, metrics)
+            loss, metrics = self._classification_metrics(y_pred, y_true, mode, metrics)
             for class_idx, class_score in enumerate(metrics[f'{mode}_f1_per_class']):
                 metrics[f'{mode}_f1_{self.class_labels[class_idx]}'] = class_score
             metrics.pop(f'{mode}_f1_per_class')
             
         elif 'regression' in self.prediction_task:
-            metrics = self._regression_metrics(y_pred, y_true, mode, metrics)
+            loss, metrics = self._regression_metrics(y_pred, y_true, mode, metrics)
             
         # Set sync_dist=True only for test mode
         sync_dist = (mode == 'test')
@@ -244,10 +242,14 @@ class TrainingPlan(pl.LightningModule):
                      on_epoch=True,
                      sync_dist=sync_dist)
         
-        return metrics[f'{mode}_loss']
+        return loss
 
     def training_step(self, batch):
-        """Training step for the model."""
+        """Training step for the model.
+        
+        Returns:
+            loss: torch.nn.Module
+        """
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
         return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics)
 
