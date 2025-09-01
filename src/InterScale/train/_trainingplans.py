@@ -5,10 +5,10 @@ import torch
 import torch.nn as nn
 from typing import List, Optional, Literal, Dict, Any
 import numpy as np
-from InterScale.tl import CosineWarmupScheduler, compute_dynamic_variance
+from InterScale.tl import CosineWarmupScheduler
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.module.base._base_module import BaseModuleClass
-from .losses import BalancedPearsonCorrelationLoss
+from .losses import BalancedPearsonCorrelationLoss, GaussianLoss
 
 import torchmetrics
 from torchmetrics import MetricCollection
@@ -118,7 +118,7 @@ class TrainingPlan(pl.LightningModule):
         if loss == 'MSELoss':
             return nn.MSELoss()
         elif loss == 'GaussianNLL':
-            return nn.GaussianNLLLoss()
+            return GaussianLoss(self.cross_corr)
         elif loss == 'SmoothL1':
             return nn.SmoothL1Loss()
         elif loss == "BalancedPearsonCorrelationLoss":
@@ -173,14 +173,8 @@ class TrainingPlan(pl.LightningModule):
             y_true, y_pred: torch.Tensor
                 True and predicted values of shape [N, G], where N is the number of cells and G is the number of genes
             """
-        if self.loss_type == 'GaussianNLL':
-            y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
-       
-        if self.loss_type == 'GaussianNLL':
-            loss = self.loss(y_pred, y_true, y_var)
-        else:
-            loss = self.loss(y_pred, y_true)
-            
+        
+        loss = self.loss(y_pred, y_true)
         metrics = metrics(y_pred, y_true)
                                 
         if torch.std(y_pred) == 0 or torch.std(y_true) == 0:

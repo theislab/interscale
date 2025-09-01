@@ -34,35 +34,7 @@ def check_and_update_cfg(cfg,
     cfg.freeze()
     return cfg
 
-def compute_dynamic_variance(y_true, y_pred, axis=1, epsilon=1e-6):
-    """
-    Computes a dynamic variance estimate using both true and predicted values.
-    Handles single-sample batches by using a default variance.
 
-    Args:
-        y_true (torch.Tensor): Ground truth values.
-        y_pred (torch.Tensor): Model predictions.
-        axis (int): Axis along which to compute variance.
-        epsilon (float): Small constant to avoid division by zero.
-
-    Returns:
-        torch.Tensor: Combined variance estimate.
-    """
-    batch_size = y_true.size(0)
-    
-    if batch_size == 1:
-        # For single samples, compute squared difference between pred and true
-        # as a simple variance estimate
-        diff = (y_true - y_pred) ** 2
-        default_var = diff.mean(dim=axis, keepdim=True) + epsilon
-        return default_var
-    
-    # Normal case with multiple samples
-    var_true = torch.var(y_true, dim=axis, unbiased=False, keepdim=True)
-    var_pred = torch.var(y_pred, dim=axis, unbiased=False, keepdim=True)
-    combined_var = 0.5 * (var_true + var_pred) + epsilon
-
-    return combined_var.squeeze()
 
 def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, num_nodes: int, batch: torch.Tensor, index_nodes: list, num_heads: int) -> torch.Tensor:
     """

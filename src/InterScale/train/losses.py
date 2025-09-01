@@ -1,7 +1,3 @@
-# adjusted from seq2cells
-# https://github.com/GSK-AI/seq2cells/blob/main/seq2cells/metrics_and_losses/losses.py
-# accessed on 28 August 2025
-
 from typing import Literal
 
 import torch
@@ -36,6 +32,9 @@ def nonzero_median(tensor: torch.Tensor, axis: int, keepdim: bool) -> torch.Tens
 
 
 class BalancedPearsonCorrelationLoss(torch.nn.Module):
+# adjusted from seq2cells
+# https://github.com/GSK-AI/seq2cells/blob/main/seq2cells/metrics_and_losses/losses.py
+# accessed on 28 August 2025
     """Pearson Corr balances between across gene and cell performance"""
 
     def __init__(
@@ -107,3 +106,42 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
         loss = (loss * 2) / (self.rel_weight_gene + self.rel_weight_cell)
 
         return loss
+    
+class GaussianLoss(torch.nn.Module):
+    # adjusted from NCEM
+    # https://github.com/theislab/ncem/blob/main/ncem/utils/losses.py
+    # accessed on 01 September 2025
+    
+    """Custom gaussian loss."""
+    
+    def __init__(self, cross_corr: Literal["gene", "cell"]):
+        super().__init__()
+        self.cross_corr = cross_corr
+
+    def forward(self, y_true: torch.Tensor, 
+                y_pred: torch.Tensor) -> torch.Tensor:
+        """Implement Gaussian loss as reconstruction loss.
+
+        Parameters
+        ----------
+        y_true : torch.Tensor [N, F]
+            Ground truth values
+        y_pred : torch.Tensor [N, F]
+            Predicted values.
+
+        Returns
+        -------
+        neg_ll : torch.Tensor [1]
+            Gaussian loss as reconstruction loss
+        """
+        if self.cross_corr == "gene":
+            axis = 1
+        elif self.cross_corr == "cell":
+            axis = 0
+        else:   
+            raise ValueError("cross_corr must be either 'gene' or 'cell'.")
+
+        sd = torch.std(y_true, dim=axis, keepdim=True)
+        neg_ll = torch.log(torch.sqrt(torch.tensor(2 * torch.pi)) * sd) + 0.5 * torch.square(y_pred - y_true) / torch.square(sd)
+        neg_ll = torch.sum(neg_ll, dim=axis)  # sum across output features
+        return neg_ll.mean()
