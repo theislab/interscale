@@ -13,17 +13,17 @@ DEFAULT_CONFIG_LRZ= Path(HOME_LRZ + "/src/config_files/")
 
 def get_default_config(cluster: str):
     if cluster == "icb":
-        return Path(HOME_ICB + "/src/config_files/")
+        return Path(HOME_ICB, "/src/config_files/")
     elif cluster == "lrz":
-        return Path(HOME_LRZ + "/src/config_files/")
+        return Path(HOME_LRZ, "/src/config_files/")
     else:
         raise ValueError(f"Cluster {cluster} not supported")
 
 def get_default_data_path(cluster: str):
     if cluster == "icb":
-        return Path(PROJECT_ICB + '/data/')
+        return Path(PROJECT_ICB, '/data/')
     elif cluster == "lrz":
-        return Path(PROJECT_LRZ + '/data/')
+        return Path(PROJECT_LRZ, '/data/')
     else:
         raise ValueError(f"Cluster {cluster} not supported")
 

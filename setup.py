@@ -9,7 +9,7 @@ setup(
         "torch>=1.9.0",
         "torch-geometric>=2.0.0",
         "pytorch-lightning>=1.5.0",
-        "torchmetrics>=0.7.0",
+        "torchmetrics>=1.8.0", # R2 deprecated num_outputs and pearson correlation updated
         "numpy>=1.19.0,<2.0.0", # recommended version 1.26.4
         "scipy>=1.7.0",
         "scvi-tools>=0.19.0",
