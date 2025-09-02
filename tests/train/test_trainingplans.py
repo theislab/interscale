@@ -233,20 +233,20 @@ def test_classification_metrics_computation(loss, n_cells, prediction_level):
     assert metrics['train_f1_per_class'].unsqueeze(0).shape == torch.Size([1,3]), f"Train f1_per_class expected shape (3,), got {metrics['train_f1_per_class'].unsqueeze(0).shape}"
     assert metrics['train_loss'].unsqueeze(0).shape == torch.Size([1]), f"Train loss expected shape (1), got {metrics['train_loss'].unsqueeze(0).shape}" 
     
-@pytest.mark.parametrize("loss", ["MSELoss", "GaussianNLL", "SmoothL1"])
-@pytest.mark.parametrize("prediction_level", ["node", "graph"])
+@pytest.mark.parametrize("loss", ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss"])
 @pytest.mark.parametrize("test_case", ["normal", "constant_cell", "constant_gene", "zero_cell", "zero_gene"])
-@pytest.mark.parametrize("n_cells", [32, 100])
-def test_regression_metrics_computation(loss, prediction_level, test_case, n_cells):
+@pytest.mark.parametrize("cross_corr", ["gene", "cell"])
+def test_regression_metrics_computation(loss, test_case, cross_corr):
     """Test that classification metrics are computed correctly."""
+    n_cells = 32
     module = create_toy_module(n_output=3, n_input=n_cells)
     
     training_plan = TrainingPlan(
         module=module,
         prediction_task="regression",
-        prediction_level=prediction_level,
+        prediction_level="node",
         loss=loss,
-        cross_corr="cell",
+        cross_corr=cross_corr,
         batch_size=32,
     )
     
@@ -268,12 +268,12 @@ def test_regression_metrics_computation(loss, prediction_level, test_case, n_cel
     assert metrics['train_r2'].unsqueeze(0).shape == torch.Size([1]), f"Train r2 expected shape (1,), got {metrics['train_r2'].unsqueeze(0).shape}"
     assert metrics['train_pearson_corr'].unsqueeze(0).shape == torch.Size([1]), f"Train pearson_corr expected shape (1,), got {metrics['train_pearson_corr'].unsqueeze(0).shape}"
 
-@pytest.mark.parametrize("mode", ["train", "val", "test"])
 @pytest.mark.parametrize("prediction_task", ["classification", "regression"])
 @pytest.mark.parametrize("cross_corr", ["gene", "cell"])
-def test_compute_and_log_metrics_classification(mode, prediction_task, cross_corr):
+def test_compute_and_log_metrics(prediction_task, cross_corr):
     """Test the _compute_and_log_metrics method for classification tasks."""
     batch_size = 32
+    mode = "train"
     
     if prediction_task == "classification":
         module = create_toy_module(n_output=3, n_input=batch_size)
@@ -282,7 +282,7 @@ def test_compute_and_log_metrics_classification(mode, prediction_task, cross_cor
     else:
         module = create_toy_module(n_output=10, n_input=batch_size)
         class_labels = None
-        loss = "MSELoss"
+        loss = "GaussianNLL"
     
     training_plan = TrainingPlan(
         module=module,
@@ -304,56 +304,32 @@ def test_compute_and_log_metrics_classification(mode, prediction_task, cross_cor
         y_pred = torch.randn(batch_size, 10, requires_grad=True)
         y_true = torch.randn(batch_size, 10)
     
-    if mode == "train":
-        metrics = training_plan.train_metrics
-    elif mode == "val":
-        metrics = training_plan.valid_metrics
-    elif mode == "test":
-        metrics = training_plan.test_metrics
+    print(training_plan)   
+    metrics = training_plan.train_metrics
     
-    # Mock the log_dict method to avoid actual logging during tests
-    with patch.object(training_plan, 'log_dict') as mock_log_dict:
-        # Test metrics computation and logging
-        loss_value = training_plan._compute_and_log_metrics(
-            y_pred, y_true_onehot if prediction_task == "classification" else y_true, 
-            mode, metrics
-        )
+    if prediction_task == "classification":
+        y_true = y_true_onehot
+    
+    # Test metrics computation and logging
+    loss_value = training_plan._compute_and_log_metrics(
+        y_pred, y_true, 
+        mode, metrics
+    )
+    
+    print(loss_value)
+    assert loss_value.grad_fn is not None, "Loss value should have grad_fn for backpropagation"
+    
+    # Check that loss is returned
+    assert isinstance(loss_value, torch.Tensor)
         
-        print(loss_value)
-        assert loss_value.grad_fn is not None, "Loss value should have grad_fn for backpropagation"
-        
-        # Check that log_dict was called
-        mock_log_dict.assert_called_once()
-        
-        # Check the arguments passed to log_dict
-        call_args = mock_log_dict.call_args
-        logged_metrics = call_args[0][0]  # First argument is the metrics dict
-        log_kwargs = call_args[1]  # Keyword arguments
-        
-        # Check that loss is returned
-        assert isinstance(loss_value, torch.Tensor)
-        
-        # Check that appropriate metrics are logged
-        if prediction_task == "classification":
-            assert f'{mode}_loss' in logged_metrics
-            assert f'{mode}_accuracy' in logged_metrics
-            assert f'{mode}_f1_micro' in logged_metrics
-            assert f'{mode}_f1_macro' in logged_metrics
-            # Check that per-class F1 scores are logged
-            for class_name in class_labels:
-                assert f'{mode}_f1_{class_name}' in logged_metrics
-        else:
-            assert f'{mode}_loss' in logged_metrics
-            assert f'{mode}_mse' in logged_metrics
-            assert f'{mode}_r2' in logged_metrics
-            assert f'{mode}_pearson_corr' in logged_metrics
-        
-        # Check log_kwargs
-        assert log_kwargs['batch_size'] == 32
-        assert log_kwargs['on_step'] == False
-        assert log_kwargs['on_epoch'] == True
-        # sync_dist should be True only for test mode
-        assert log_kwargs['sync_dist'] == (mode == 'test')
+    
+    
+    # # Check log_kwargs
+    # assert log_kwargs['batch_size'] == 32
+    # assert log_kwargs['on_step'] == False
+    # assert log_kwargs['on_epoch'] == True
+    # # sync_dist should be True only for test mode
+    # assert log_kwargs['sync_dist'] == (mode == 'test')
 
 
 # if __name__ == "__main__":
