@@ -91,7 +91,7 @@ class TrainingPlan(pl.LightningModule):
             metrics = self._setup_classification_metrics(self.module.n_output)
             self.loss = self._setup_classification_loss(self.loss_type, self.class_weights)
         elif 'regression' in self.prediction_task:
-            metrics = self._setup_regression_metrics()
+            metrics = self._setup_regression_metrics(self.module.n_output)
             self.loss = self._setup_regression_loss(self.loss_type)
         else:
             raise ValueError("Prediction task must define 'classification' or 'regression'.")
@@ -134,10 +134,11 @@ class TrainingPlan(pl.LightningModule):
         })
     
     @staticmethod
-    def _setup_regression_metrics():
+    def _setup_regression_metrics(num_outputs: int):
         return MetricCollection({
             "mse": torchmetrics.MeanSquaredError(),
             "r2": torchmetrics.R2Score(multioutput='uniform_average'),
+            "pearson_corr": torchmetrics.PearsonCorrCoef(num_outputs=num_outputs),
             # "r2_single": torchmetrics.R2Score()
         })
         
@@ -176,18 +177,8 @@ class TrainingPlan(pl.LightningModule):
         
         loss = self.loss(y_pred, y_true)
         metrics = metrics(y_pred, y_true)
-                                
-        if torch.std(y_pred) == 0 or torch.std(y_true) == 0:
-            print('constant array')
-            print(y_pred[:5], y_true[:5])
-            pearson_corr = torch.tensor(1.0 if np.allclose(y_pred, y_true) else float('nan'), 
-                                      dtype=torch.float32, 
-                                      device=y_pred.device)
-        else:
-            pearson_corr = self.pearson_corr(y_pred, y_true)
         
         metrics[f'{mode}_loss'] = loss
-        metrics[f'{mode}_pearson_corr'] = pearson_corr
         return loss, metrics
 
     def forward(self, *args, **kwargs):
