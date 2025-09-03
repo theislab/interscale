@@ -121,6 +121,7 @@ class GaussianLoss(torch.nn.Module):
     def forward(self, y_true: torch.Tensor, 
                 y_pred: torch.Tensor) -> torch.Tensor:
         """Implement Gaussian loss as reconstruction loss.
+        Exception: If axis of calculation has sd = 0, return 0. each part of the sum is -inf and inf = 0. Otherwise the sum is NaN.
 
         Parameters
         ----------
@@ -142,6 +143,39 @@ class GaussianLoss(torch.nn.Module):
             raise ValueError("cross_corr must be either 'gene' or 'cell'.")
 
         sd = torch.std(y_true, dim=axis, keepdim=True)
-        neg_ll = torch.log(torch.sqrt(torch.tensor(2 * torch.pi)) * sd) + 0.5 * torch.square(y_pred - y_true) / torch.square(sd)
+        
+        zero_var_mask = sd < 1e-8
+        
+        if zero_var_mask.any():
+            # For zero variance: if predictions match perfectly, loss = 0
+            # If they don't match, use L2 loss scaled appropriately
+            perfect_pred_mask = torch.abs(y_pred - y_true) < 1e-8
+            
+            # For zero variance dimensions
+            zero_var_loss = torch.where(
+                zero_var_mask & perfect_pred_mask,
+                torch.zeros_like(y_pred),  # Perfect prediction, no loss
+                torch.where(
+                    zero_var_mask,
+                    1000 * torch.square(y_pred - y_true),  # Large penalty for wrong prediction
+                    torch.zeros_like(y_pred)
+                )
+            )
+            
+            # For non-zero variance dimensions (normal case)
+            sd_safe = torch.where(zero_var_mask, torch.ones_like(sd), sd)
+            normal_loss = torch.where(
+                ~zero_var_mask,
+                torch.log(torch.sqrt(torch.tensor(2 * torch.pi)) * sd_safe) + 
+                0.5 * torch.square(y_pred - y_true) / torch.square(sd_safe),
+                torch.zeros_like(y_pred)
+            )
+            
+            neg_ll = zero_var_loss + normal_loss
+        else:
+            # Normal case - no zero variance
+            neg_ll = (torch.log(torch.sqrt(torch.tensor(2 * torch.pi)) * sd) + 
+                     0.5 * torch.square(y_pred - y_true) / torch.square(sd))
+            
         neg_ll = torch.sum(neg_ll, dim=axis)  # sum across output features
         return neg_ll.mean()

@@ -266,6 +266,8 @@ def test_regression_metrics_computation(loss, test_case, cross_corr):
     for metric_name, metric_value in metrics.items():
         assert metric_value.numel() == 1, f"{metric_name} should return a single value, got tensor with {metric_value.numel()} elements"
         assert metric_value.dim() == 0, f"{metric_name} should be a scalar (0-dim tensor), got {metric_value.dim()}-dim tensor"
+        assert torch.isfinite(metric_value), f"{metric_name} should be finite, got {metric_value}"
+        print(metric_name, metric_value)
     
     
     assert metrics['train_mse'].unsqueeze(0).shape == torch.Size([1]), f"Train mse expected shape (1,), got {metrics['train_mse'].unsqueeze(0).shape}"

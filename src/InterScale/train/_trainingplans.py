@@ -179,7 +179,7 @@ class TrainingPlan(pl.LightningModule):
         metrics = metrics(y_pred, y_true)
         
         # Take mean across pearson correlation
-        metrics[f"{mode}_pearson_corr"] = metrics[f"{mode}_pearson_corr"].mean()
+        metrics[f"{mode}_pearson_corr"] = torch.nanmean(metrics[f"{mode}_pearson_corr"])
         metrics[f'{mode}_loss'] = loss
         return loss, metrics
 
