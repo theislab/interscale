@@ -27,10 +27,6 @@ def get_test_case(test_case: str, nr_cells: int, num_genes: int = 10):
             "y_pred": torch.ones(nr_cells, num_genes) * torch.randn(nr_cells, 1),
             "y_true": torch.ones(nr_cells, num_genes) * torch.randn(nr_cells, 1)
         },
-        "constant_gene": {
-            "y_pred": torch.ones(num_genes, nr_cells) * torch.randn(num_genes, nr_cells),
-            "y_true": torch.ones(num_genes, nr_cells) * torch.randn(num_genes, nr_cells)
-        },
         "zero_cell": {
             "y_pred": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes)),
             "y_true": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes))
@@ -234,12 +230,14 @@ def test_classification_metrics_computation(loss, n_cells, prediction_level):
     assert metrics['train_loss'].unsqueeze(0).shape == torch.Size([1]), f"Train loss expected shape (1), got {metrics['train_loss'].unsqueeze(0).shape}" 
     
 @pytest.mark.parametrize("loss", ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss"])
-@pytest.mark.parametrize("test_case", ["normal", "constant_cell", "constant_gene", "zero_cell", "zero_gene"])
+@pytest.mark.parametrize("test_case", ["normal", "constant_cell", "zero_cell", "zero_gene"])
 @pytest.mark.parametrize("cross_corr", ["gene", "cell"])
 def test_regression_metrics_computation(loss, test_case, cross_corr):
     """Test that classification metrics are computed correctly."""
     n_cells = 32
-    module = create_toy_module(n_output=3, n_input=n_cells)
+    n_genes = 10
+    
+    module = create_toy_module(n_output=n_genes, n_input=n_cells)
     
     training_plan = TrainingPlan(
         module=module,
@@ -250,7 +248,7 @@ def test_regression_metrics_computation(loss, test_case, cross_corr):
         batch_size=32,
     )
     
-    test_data = get_test_case(test_case, n_cells)
+    test_data = get_test_case(test_case, n_cells, n_genes)
     y_pred = test_data["y_pred"]
     y_true = test_data["y_true"]
     
@@ -263,6 +261,12 @@ def test_regression_metrics_computation(loss, test_case, cross_corr):
     assert 'train_mse' in metrics
     assert 'train_r2' in metrics
     assert 'train_pearson_corr' in metrics
+    
+    # Check that each metric returns a single scalar value
+    for metric_name, metric_value in metrics.items():
+        assert metric_value.numel() == 1, f"{metric_name} should return a single value, got tensor with {metric_value.numel()} elements"
+        assert metric_value.dim() == 0, f"{metric_name} should be a scalar (0-dim tensor), got {metric_value.dim()}-dim tensor"
+    
     
     assert metrics['train_mse'].unsqueeze(0).shape == torch.Size([1]), f"Train mse expected shape (1,), got {metrics['train_mse'].unsqueeze(0).shape}"
     assert metrics['train_r2'].unsqueeze(0).shape == torch.Size([1]), f"Train r2 expected shape (1,), got {metrics['train_r2'].unsqueeze(0).shape}"

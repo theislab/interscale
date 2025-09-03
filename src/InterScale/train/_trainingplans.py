@@ -178,6 +178,8 @@ class TrainingPlan(pl.LightningModule):
         loss = self.loss(y_pred, y_true)
         metrics = metrics(y_pred, y_true)
         
+        # Take mean across pearson correlation
+        metrics[f"{mode}_pearson_corr"] = metrics[f"{mode}_pearson_corr"].mean()
         metrics[f'{mode}_loss'] = loss
         return loss, metrics
 

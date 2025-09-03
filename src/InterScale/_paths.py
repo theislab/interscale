@@ -8,8 +8,8 @@ HOME_LRZ = Path("/dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches/")
 PROJECT_ICB = Path("/lustre/groups/ml01/projects/2024_spatial_long_range_GT_francesca.drummer/")
 PROJECT_LRZ = Path("/dss/dssfs03/tumdss/pn36po/pn36po-dss-0002/di93tig/Projects/A3_InterScale/")
 
-DEFAULT_CONFIG_ICB= Path(HOME_ICB + "/src/config_files/")
-DEFAULT_CONFIG_LRZ= Path(HOME_LRZ + "/src/config_files/")
+DEFAULT_CONFIG_ICB= Path(HOME_ICB, "/src/config_files/")
+DEFAULT_CONFIG_LRZ= Path(HOME_LRZ, "/src/config_files/")
 
 def get_default_config(cluster: str):
     if cluster == "icb":
@@ -26,7 +26,6 @@ def get_default_data_path(cluster: str):
         return Path(PROJECT_LRZ, '/data/')
     else:
         raise ValueError(f"Cluster {cluster} not supported")
-
 
 LEGNINI_CONFIG="Legnini23/legnini23_genes_sample_GlobalModel.yaml"
 SCHUERCH_CONFIG="Schuerch20/schuerch20_graph_sample_GlobalModel.yaml"
