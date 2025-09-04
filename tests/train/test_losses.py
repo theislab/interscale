@@ -6,9 +6,9 @@ def setup_loss(loss_type, cross_corr):
     if loss_type == "GaussianLoss":
         return GaussianLoss(cross_corr=cross_corr)
     elif loss_type == "BalancedPearsonCorrelationLoss":
-        return BalancedPearsonCorrelationLoss()
+        return BalancedPearsonCorrelationLoss(cross_corr=cross_corr)
     
-def get_test_case(test_case: str, nr_cells: int, num_genes: int = 10):
+def get_test_case(test_case: str, nr_cells: int, nr_genes: int = 10):
     """Generate test cases for training plan tests.
     
     Args:
@@ -20,20 +20,24 @@ def get_test_case(test_case: str, nr_cells: int, num_genes: int = 10):
     """
     test_cases = {
         "normal": {
-            "y_pred": torch.randn(nr_cells, num_genes),
-            "y_true": torch.randn(nr_cells, num_genes)
+            "y_pred": torch.randn(nr_cells, nr_genes),
+            "y_true": torch.randn(nr_cells, nr_genes)
         },
         "constant_cell": {
-            "y_pred": torch.ones(nr_cells, num_genes) * torch.randn(nr_cells, 1),
-            "y_true": torch.ones(nr_cells, num_genes) * torch.randn(nr_cells, 1)
+            "y_pred": torch.ones(nr_cells, nr_genes) * torch.randn(nr_cells, 1),
+            "y_true": torch.ones(nr_cells, nr_genes) * torch.randn(nr_cells, 1)
+        },
+        "constant_gene": {
+            "y_pred": torch.transpose(torch.ones(nr_genes, nr_cells) * torch.randn(nr_genes, 1), 0, 1),
+            "y_true": torch.transpose(torch.ones(nr_genes, nr_cells) * torch.randn(nr_genes, 1), 0, 1)
         },
         "zero_cell": {
-            "y_pred": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes)),
-            "y_true": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes))
+            "y_pred": torch.where(torch.rand(nr_cells, nr_genes) > 0.5, torch.randn(nr_cells, nr_genes), torch.zeros(nr_cells, nr_genes)),
+            "y_true": torch.where(torch.rand(nr_cells, nr_genes) > 0.5, torch.randn(nr_cells, nr_genes), torch.zeros(nr_cells, nr_genes))
         },
         "zero_gene": {
-            "y_pred": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes)),
-            "y_true": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes))
+            "y_pred": torch.where(torch.rand(nr_cells, nr_genes) > 0.5, torch.randn(nr_cells, nr_genes), torch.zeros(nr_cells, nr_genes)),
+            "y_true": torch.where(torch.rand(nr_cells, nr_genes) > 0.5, torch.randn(nr_cells, nr_genes), torch.zeros(nr_cells, nr_genes))
         }
     }
     
@@ -68,10 +72,13 @@ def test_perfect_prediction(cross_corr, loss_type, test_case):
     loss_fn = setup_loss(loss_type, cross_corr)
     result = loss_fn(y_true, y_pred)
     
-    print(result)
-    
     # Loss should be finite (the log term will still contribute)
     assert torch.isfinite(result), "Perfect prediction should give finite loss"
+    
+    if loss_type == "GaussianLoss":
+        assert result == 0.0, "Perfect prediction should give zero loss"
+    elif loss_type == "BalancedPearsonCorrelationLoss":
+        assert result == 1.0, "Perfect prediction should give zero loss"
     
 
     

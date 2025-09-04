@@ -39,8 +39,7 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
 
     def __init__(
         self,
-        rel_weight_gene: float = 1.0,
-        rel_weight_cell: float = 1.0,
+        cross_corr: Literal["gene", "cell"],
         norm_by: Literal["mean", "nonzero_median"] = "mean",
         eps: float = 1e-8,
     ):
@@ -61,8 +60,14 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
         super().__init__()
         self.eps = eps
         self.norm_by = norm_by
-        self.rel_weight_gene = rel_weight_gene
-        self.rel_weight_cell = rel_weight_cell
+        self.cross_corr = cross_corr
+        
+        if self.cross_corr == 'gene':
+            self.rel_weight_gene = 1.0
+            self.rel_weight_cell = 0.0
+        elif self.cross_corr == 'cell':
+            self.rel_weight_gene = 0.0
+            self.rel_weight_cell = 1.0
 
     def forward(self, preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """Forward.
@@ -178,4 +183,4 @@ class GaussianLoss(torch.nn.Module):
                      0.5 * torch.square(y_pred - y_true) / torch.square(sd))
             
         neg_ll = torch.sum(neg_ll, dim=axis)  # sum across output features
-        return neg_ll.mean()
+        return neg_ll.mean() 

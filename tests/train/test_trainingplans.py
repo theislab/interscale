@@ -8,7 +8,7 @@ from InterScale.train import TrainingPlan
 from InterScale.train.losses import BalancedPearsonCorrelationLoss
 
 
-def get_test_case(test_case: str, nr_cells: int, num_genes: int = 10):
+def get_test_case(test_case: str, nr_cells: int, nr_genes: int = 10):
     """Generate test cases for training plan tests.
     
     Args:
@@ -20,20 +20,24 @@ def get_test_case(test_case: str, nr_cells: int, num_genes: int = 10):
     """
     test_cases = {
         "normal": {
-            "y_pred": torch.randn(nr_cells, num_genes),
-            "y_true": torch.randn(nr_cells, num_genes)
+            "y_pred": torch.randn(nr_cells, nr_genes),
+            "y_true": torch.randn(nr_cells, nr_genes)
         },
         "constant_cell": {
-            "y_pred": torch.ones(nr_cells, num_genes) * torch.randn(nr_cells, 1),
-            "y_true": torch.ones(nr_cells, num_genes) * torch.randn(nr_cells, 1)
+            "y_pred": torch.ones(nr_cells, nr_genes) * torch.randn(nr_cells, 1),
+            "y_true": torch.ones(nr_cells, nr_genes) * torch.randn(nr_cells, 1)
+        },
+        "constant_gene": {
+            "y_pred": torch.transpose(torch.ones(nr_genes, nr_cells) * torch.randn(nr_genes, 1), 0, 1),
+            "y_true": torch.transpose(torch.ones(nr_genes, nr_cells) * torch.randn(nr_genes, 1), 0, 1)
         },
         "zero_cell": {
-            "y_pred": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes)),
-            "y_true": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes))
+            "y_pred": torch.where(torch.rand(nr_cells, nr_genes) > 0.5, torch.randn(nr_cells, nr_genes), torch.zeros(nr_cells, nr_genes)),
+            "y_true": torch.where(torch.rand(nr_cells, nr_genes) > 0.5, torch.randn(nr_cells, nr_genes), torch.zeros(nr_cells, nr_genes))
         },
         "zero_gene": {
-            "y_pred": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes)),
-            "y_true": torch.where(torch.rand(nr_cells, num_genes) > 0.5, torch.randn(nr_cells, num_genes), torch.zeros(nr_cells, num_genes))
+            "y_pred": torch.where(torch.rand(nr_cells, nr_genes) > 0.5, torch.randn(nr_cells, nr_genes), torch.zeros(nr_cells, nr_genes)),
+            "y_true": torch.where(torch.rand(nr_cells, nr_genes) > 0.5, torch.randn(nr_cells, nr_genes), torch.zeros(nr_cells, nr_genes))
         }
     }
     
@@ -230,7 +234,7 @@ def test_classification_metrics_computation(loss, n_cells, prediction_level):
     assert metrics['train_loss'].unsqueeze(0).shape == torch.Size([1]), f"Train loss expected shape (1), got {metrics['train_loss'].unsqueeze(0).shape}" 
     
 @pytest.mark.parametrize("loss", ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss"])
-@pytest.mark.parametrize("test_case", ["normal", "constant_cell", "zero_cell", "zero_gene"])
+@pytest.mark.parametrize("test_case", ["normal", "constant_cell", "constant_gene", "zero_cell", "zero_gene"])
 @pytest.mark.parametrize("cross_corr", ["gene", "cell"])
 def test_regression_metrics_computation(loss, test_case, cross_corr):
     """Test that classification metrics are computed correctly."""

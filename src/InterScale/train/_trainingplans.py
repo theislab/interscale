@@ -74,17 +74,9 @@ class TrainingPlan(pl.LightningModule):
             if self.cross_corr == 'gene':
                 print('cross-gene per cell correlation metrics')
                 self.AXIS = 1 # selecting rows / cells
-                self.rel_weight_gene = 1.0
-                self.rel_weight_cell = 0.0
             elif self.cross_corr == 'cell':
                 print('cross-cell per gene correlation metrics')
                 self.AXIS = 0 # selecting columns / genes
-                self.rel_weight_gene = 0.0
-                self.rel_weight_cell = 1.0
-            self.pearson_corr = BalancedPearsonCorrelationLoss(
-                rel_weight_gene=self.rel_weight_gene,
-                rel_weight_cell=self.rel_weight_cell,
-            )
         
         # setup metrics and loss
         if 'classification' in self.prediction_task:
@@ -122,7 +114,7 @@ class TrainingPlan(pl.LightningModule):
         elif loss == 'SmoothL1':
             return nn.SmoothL1Loss()
         elif loss == "BalancedPearsonCorrelationLoss":
-            return self.pearson_corr
+            return BalancedPearsonCorrelationLoss(self.cross_corr)
         
     @staticmethod
     def _setup_classification_metrics(num_outputs: int):
@@ -139,7 +131,6 @@ class TrainingPlan(pl.LightningModule):
             "mse": torchmetrics.MeanSquaredError(),
             "r2": torchmetrics.R2Score(multioutput='uniform_average'),
             "pearson_corr": torchmetrics.PearsonCorrCoef(num_outputs=num_outputs),
-            # "r2_single": torchmetrics.R2Score()
         })
         
     def _classification_metrics(
