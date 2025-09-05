@@ -131,6 +131,7 @@ class TrainingPlan(pl.LightningModule):
             "mse": torchmetrics.MeanSquaredError(),
             "r2": torchmetrics.R2Score(multioutput='uniform_average'),
             "pearson_corr": torchmetrics.PearsonCorrCoef(num_outputs=num_outputs),
+            "cosine_similarity": torchmetrics.CosineSimilarity(reduction = 'mean')
         })
         
     def _classification_metrics(
