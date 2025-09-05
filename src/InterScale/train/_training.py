@@ -149,7 +149,7 @@ class NodeMaskingTrainingPlan:
             if 'classification' in self.prediction_task:
                 early_stop_callback = EarlyStopping(monitor="val_f1_macro", min_delta=0.05, patience=10, verbose=False, mode="max")
             elif 'regression' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=steps_per_epoch, verbose=False, mode="max")
+                early_stop_callback = EarlyStopping(monitor="val_mse", min_delta=0.05, patience=steps_per_epoch, verbose=False, mode="min")
             else:
                 raise Exception("Training must be classification or regression based.")
             
