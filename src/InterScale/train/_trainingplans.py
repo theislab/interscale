@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from typing import List, Optional, Literal, Dict, Any
 import numpy as np
-from InterScale.tl import CosineWarmupScheduler, CosineWarmupSchedulerStep
+from InterScale.tl import CosineWarmupScheduler
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.module.base._base_module import BaseModuleClass
 from .losses import BalancedPearsonCorrelationLoss, GaussianLoss
@@ -249,19 +249,8 @@ class TrainingPlan(pl.LightningModule):
         #     params.extend(filter(lambda p: p.requires_grad, self.model.global_component.parameters()))
         optimizer = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
         if self.use_lr_scheduler:
-            # Calculate total steps for step-based scheduler
-            # Assuming we have access to trainer and datamodule
-            if hasattr(self, 'trainer') and self.trainer is not None:
-                total_steps = self.trainer.estimated_stepping_batches
-                warmup_steps = int(self.lr_warmup * total_steps / self.lr_max_epochs)
-            else:
-                # Fallback: estimate steps based on typical values
-                # This is a rough estimate - in practice, you'd want to calculate this properly
-                total_steps = 10000  # Adjust based on your dataset size
-                warmup_steps = int(self.lr_warmup * total_steps / self.lr_max_epochs)
-            
-            lr_scheduler = CosineWarmupSchedulerStep(optimizer,
-                                                   warmup_steps=warmup_steps,
-                                                   max_steps=total_steps)
+            lr_scheduler = CosineWarmupScheduler(optimizer,
+                                                warmup=self.lr_warmup,
+                                                max_epochs=self.lr_max_epochs)
 
-        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'step'}]
+        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
