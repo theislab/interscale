@@ -39,7 +39,7 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
 
     def __init__(
         self,
-        cross_corr: Literal["gene", "cell"],
+        cross_corr: Literal["gene", "cell"] | None = None,
         norm_by: Literal["mean", "nonzero_median"] = "mean",
         eps: float = 1e-8,
     ):
@@ -68,6 +68,11 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
         elif self.cross_corr == 'cell':
             self.rel_weight_gene = 0.0
             self.rel_weight_cell = 1.0
+        elif self.cross_corr is None:
+            self.rel_weight_gene = 1.0
+            self.rel_weight_cell = 1.0
+        else:
+            raise ValueError("cross_corr must be either 'gene' or 'cell' or None.")
 
     def forward(self, preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """Forward.
