@@ -39,6 +39,7 @@ class NodeMaskingTrainingPlan:
         load_sparse_tensor: bool = False,
         batch_size: int = 128,
         early_stopping: bool = False,
+        patience: int = 5,
         datasplitter_kwargs: dict | None = None,
         plan_kwargs: dict | None = None,
         datamodule: L.LightningDataModule | None = None,
@@ -73,6 +74,8 @@ class NodeMaskingTrainingPlan:
         early_stopping
             Perform early stopping. Additional arguments can be passed in through ``**kwargs``.
             See :class:`~scvi.train.Trainer` for further options.
+        patience
+            Patience for early stopping. Nr of epochs to wait for improvement before stopping. Passed into :class:`~scvi.train.EarlyStopping`.
         datasplitter_kwargs
             Additional keyword arguments passed into :class:`~scvi.dataloaders.DataSplitter`.
             Values in this argument can be overwritten by arguments directly passed into this
@@ -147,9 +150,9 @@ class NodeMaskingTrainingPlan:
         
         if early_stopping:
             if 'classification' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_f1_macro", min_delta=0.05, patience=10, verbose=False, mode="max")
+                early_stop_callback = EarlyStopping(monitor="val_f1_macro", min_delta=0.05, patience=patience*steps_per_epoch, verbose=False, mode="max")
             elif 'regression' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_mse", min_delta=0.05, patience=steps_per_epoch, verbose=False, mode="min")
+                early_stop_callback = EarlyStopping(monitor="val_mse", min_delta=0.05, patience=patience*steps_per_epoch, verbose=False, mode="min")
             else:
                 raise Exception("Training must be classification or regression based.")
             
