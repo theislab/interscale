@@ -18,6 +18,6 @@ def get_optim_cfg(cfg):
   cfg.optim.wd = 1e-4
   cfg.optim.loss = "CrossEntropy" 
   cfg.optim.seed = 40
-  cfg.optim.cross_corr = 'gene' # cross-gene or cross-cell correlation
+  cfg.optim.cross_corr = 'cell' # Currently cell is the only one that really works
   cfg.optim.n_epochs = 100
   return cfg
