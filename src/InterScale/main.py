@@ -2,6 +2,7 @@ import InterScale as interscale
 from InterScale.tl import prepare_geome_dataset
 from InterScale.geome_dataloader import GraphAnnDataModule
 from InterScale.config import load_config
+from InterScale.tl import remove_zero_expression_cells
 
 import argparse
 import scanpy as sc
@@ -11,6 +12,7 @@ def main(cfg_path, model_type):
     cfg = load_config(cfg_path)
     print(cfg)
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
+    adata = remove_zero_expression_cells(adata)
     print(adata)
     
     if model_type == "LocalModel":
