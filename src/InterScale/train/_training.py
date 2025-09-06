@@ -145,7 +145,7 @@ class NodeMaskingTrainingPlan:
             lr = self._cfg.optim.lr,
             lr_warmup = self._cfg.optim.lr_warmup,
             lr_max_epochs = self._cfg.optim.n_epochs,
-            patience_in_steps = patience*steps_per_epoch,
+            patience_in_steps = steps_per_epoch,
         )
         
         if early_stopping:
