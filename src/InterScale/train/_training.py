@@ -12,7 +12,6 @@ from InterScale.train._utils import MetricsHistory
 from InterScale.tl.utils import get_model_filename_prefix
 from lightning.pytorch.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.trainer import Trainer, seed_everything
-from lightning.pytorch.strategies.ddp import DDPStrategy
 import lightning as L
 
 
@@ -132,11 +131,12 @@ class NodeMaskingTrainingPlan:
             self.class_weights,
             self.class_labels if self.prediction_task == 'classification' else None,
             **plan_kwargs,
-            use_lr_scheduler = self._cfg.optim.use_lr_scheduler,
+            lr_scheduler = self._cfg.optim.lr_scheduler,
             weight_decay = self._cfg.optim.wd,
             lr = self._cfg.optim.lr,
             lr_warmup = self._cfg.optim.lr_warmup,
             lr_max_epochs = self._cfg.optim.n_epochs,
+            patience_in_steps = patience*steps_per_epoch,
         )
         
         #TODO: change steps per epoch to be based on datamodule

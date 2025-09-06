@@ -6,6 +6,7 @@ import torch.nn as nn
 from typing import List, Optional, Literal, Dict, Any
 import numpy as np
 from InterScale.tl import CosineWarmupScheduler
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.module.base._base_module import BaseModuleClass
 from .losses import BalancedPearsonCorrelationLoss, GaussianLoss
@@ -36,6 +37,9 @@ class TrainingPlan(pl.LightningModule):
     **loss_kwargs
         Keyword args to pass to the loss method of the `module`.
         `kl_weight` should not be passed here and is handled automatically.
+        
+    lr_scheduler: None | Literal["ReduceLROnPlateau", "CosineWarmupScheduler"] = None
+        Learning rate scheduler to use. Default is None. CosineWarmupScheduler reduces LR at each step, ReduceLROnPlateau reduces LR with a patience if no improvement is seen.
     """
 
     def __init__(
@@ -49,11 +53,12 @@ class TrainingPlan(pl.LightningModule):
         class_weights: np.ndarray | None = None,
         class_labels: List[str] | None = None,
         *,
-        use_lr_scheduler: bool = True,
+        lr_scheduler: None | Literal["ReduceLROnPlateau", "CosineWarmupScheduler"] = None,
         weight_decay: float = 1e-6,
         lr: float = 1e-3,
         lr_warmup: int = 0,
         lr_max_epochs: int = 100000,    
+        patience_in_steps: int = 100000,
         **kwargs,
     ):
         super().__init__()
@@ -66,7 +71,8 @@ class TrainingPlan(pl.LightningModule):
         self.class_weights = class_weights
         self.class_labels = class_labels
         self.weight_decay = weight_decay
-        self.use_lr_scheduler = use_lr_scheduler
+        self.lr_scheduler = lr_scheduler
+        self.patience_in_steps = patience_in_steps
         self.lr_warmup = lr_warmup
         self.lr_max_epochs = lr_max_epochs
         self.lr = lr
@@ -248,9 +254,15 @@ class TrainingPlan(pl.LightningModule):
         # if self.model.global_component is not None:
         #     params.extend(filter(lambda p: p.requires_grad, self.model.global_component.parameters()))
         optimizer = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
-        if self.use_lr_scheduler:
+        if self.lr_scheduler == "ReduceLROnPlateau":
+            lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=self.patience_in_steps, verbose=True)
+        elif self.lr_scheduler == "CosineWarmupScheduler":
             lr_scheduler = CosineWarmupScheduler(optimizer,
                                                 warmup=self.lr_warmup,
                                                 max_epochs=self.lr_max_epochs)
+        elif self.lr_scheduler is None:
+            lr_scheduler = None
+        else:
+            raise ValueError(f"Invalid lr_scheduler: {self.lr_scheduler}. Must be either 'None', 'ReduceLROnPlateau' or 'CosineWarmupScheduler'.")
 
         return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
