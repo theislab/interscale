@@ -256,13 +256,15 @@ class TrainingPlan(pl.LightningModule):
         optimizer = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
         if self.lr_scheduler == "ReduceLROnPlateau":
             lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=self.patience_in_steps, verbose=True)
+            monitor = 'val_loss'
         elif self.lr_scheduler == "CosineWarmupScheduler":
             lr_scheduler = CosineWarmupScheduler(optimizer,
                                                 warmup=self.lr_warmup,
                                                 max_epochs=self.lr_max_epochs)
+            monitor = None
         elif self.lr_scheduler is None:
             lr_scheduler = None
         else:
             raise ValueError(f"Invalid lr_scheduler: {self.lr_scheduler}. Must be either 'None', 'ReduceLROnPlateau' or 'CosineWarmupScheduler'.")
 
-        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch'}]
+        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch', 'monitor': monitor}]
