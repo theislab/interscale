@@ -119,6 +119,15 @@ class NodeMaskingTrainingPlan:
         plan_kwargs = plan_kwargs or {}
         
         seed_everything(self._cfg.optim.seed, workers=True)
+        
+        #TODO: change steps per epoch to be based on datamodule
+        #steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
+        steps_per_epoch = math.ceil(len(datamodule.train_data) / self._cfg.dataset.batch_size)
+        print('Steps per epoch', steps_per_epoch)
+        lr_monitor = LearningRateMonitor(logging_interval='epoch')
+        self.history_ = MetricsHistory()
+        checkpoint_callback = None
+        early_stop_callback = None
             
         # defines optimizers, training step, val step, logged metrics
         training_plan = self._training_plan_cls(
@@ -138,15 +147,6 @@ class NodeMaskingTrainingPlan:
             lr_max_epochs = self._cfg.optim.n_epochs,
             patience_in_steps = patience*steps_per_epoch,
         )
-        
-        #TODO: change steps per epoch to be based on datamodule
-        #steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
-        steps_per_epoch = math.ceil(len(datamodule.train_data) / self._cfg.dataset.batch_size)
-        print('Steps per epoch', steps_per_epoch)
-        lr_monitor = LearningRateMonitor(logging_interval='epoch')
-        self.history_ = MetricsHistory()
-        checkpoint_callback = None
-        early_stop_callback = None
         
         if early_stopping:
             if 'classification' in self.prediction_task:
