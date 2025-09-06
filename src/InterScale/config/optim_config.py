@@ -12,7 +12,7 @@ def get_optim_cfg(cfg):
   cfg.optim = CN()
 
   cfg.optim.lr = 0.001 
-  cfg.optim.use_lr_scheduler = True
+  cfg.optim.lr_scheduler = "ReduceLROnPlateau" # "ReduceLROnPlateau" or "CosineWarmupScheduler"
   cfg.optim.lr_warmup = 20
   cfg.optim.lr_max_epochs = 100
   cfg.optim.wd = 1e-4
