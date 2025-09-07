@@ -1,5 +1,6 @@
 import pytest
 import torch
+import torchmetrics
 from InterScale.train.losses import BalancedPearsonCorrelationLoss, GaussianLoss
 
 def setup_loss(loss_type, cross_corr):
@@ -7,6 +8,8 @@ def setup_loss(loss_type, cross_corr):
         return GaussianLoss(cross_corr=cross_corr)
     elif loss_type == "BalancedPearsonCorrelationLoss":
         return BalancedPearsonCorrelationLoss(cross_corr=cross_corr)
+    elif loss_type == "cosine_similarity":
+        return torchmetrics.CosineSimilarity(reduction = 'mean')
     
 def get_test_case(test_case: str, nr_cells: int, nr_genes: int = 10):
     """Generate test cases for training plan tests.
@@ -47,7 +50,7 @@ def get_test_case(test_case: str, nr_cells: int, nr_genes: int = 10):
     return test_cases[test_case]
 
 # Test basic functionality
-@pytest.mark.parametrize("loss_type", ["GaussianLoss", "BalancedPearsonCorrelationLoss"])
+@pytest.mark.parametrize("loss_type", ["GaussianLoss", "BalancedPearsonCorrelationLoss", "cosine_similarity"])
 @pytest.mark.parametrize("cross_corr", ["gene", "cell"])
 def test_basic_GaussianLoss(loss_type, cross_corr):
     """Test basic forward pass with different cross_corr modes."""
@@ -62,7 +65,7 @@ def test_basic_GaussianLoss(loss_type, cross_corr):
     assert torch.isfinite(result), "Loss should be finite"
     
 @pytest.mark.parametrize("cross_corr", ["gene", "cell"])
-@pytest.mark.parametrize("loss_type", ["GaussianLoss", "BalancedPearsonCorrelationLoss"])
+@pytest.mark.parametrize("loss_type", ["GaussianLoss", "BalancedPearsonCorrelationLoss", "cosine_similarity"])
 @pytest.mark.parametrize("test_case", ["normal", "constant_cell", "zero_cell", "zero_gene"])
 def test_perfect_prediction(cross_corr, loss_type, test_case):
     """Test loss when predictions are perfect."""
@@ -77,7 +80,7 @@ def test_perfect_prediction(cross_corr, loss_type, test_case):
     
     if loss_type == "GaussianLoss":
         assert result == 0.0, "Perfect prediction should give zero loss"
-    elif loss_type == "BalancedPearsonCorrelationLoss":
+    elif loss_type == "BalancedPearsonCorrelationLoss" or loss_type == "cosine_similarity":
         assert result == 1.0, "Perfect prediction should give zero loss"
     
 

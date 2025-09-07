@@ -42,6 +42,7 @@ class NodeMaskingTrainingPlan:
         datasplitter_kwargs: dict | None = None,
         plan_kwargs: dict | None = None,
         datamodule: L.LightningDataModule | None = None,
+        wandb_use: bool | None = None,
         **trainer_kwargs,
     ):
         """Train the model.
@@ -119,6 +120,8 @@ class NodeMaskingTrainingPlan:
         plan_kwargs = plan_kwargs or {}
         
         seed_everything(self._cfg.optim.seed, workers=True)
+        
+        self.wandb_use = wandb_use if wandb_use is not None else self._cfg.wandb.use
         
         #TODO: change steps per epoch to be based on datamodule
         #steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)

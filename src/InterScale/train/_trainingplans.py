@@ -116,11 +116,11 @@ class TrainingPlan(pl.LightningModule):
         if loss == 'MSELoss':
             return nn.MSELoss()
         elif loss == 'GaussianNLL':
-            return GaussianLoss(self.cross_corr)
+            return nn.GaussianNLLLoss()
         elif loss == 'SmoothL1':
             return nn.SmoothL1Loss()
         elif loss == "BalancedPearsonCorrelationLoss":
-            return BalancedPearsonCorrelationLoss(self.cross_corr)
+            return BalancedPearsonCorrelationLoss(None)
         
     @staticmethod
     def _setup_classification_metrics(num_outputs: int):
@@ -172,8 +172,12 @@ class TrainingPlan(pl.LightningModule):
             y_true, y_pred: torch.Tensor
                 True and predicted values of shape [N, G], where N is the number of cells and G is the number of genes
             """
-        
-        loss = self.loss(y_pred, y_true)
+        if self.loss_type == 'GaussianNLL':
+            sd = torch.std(y_true, dim=1, keepdim=True)
+            loss = self.loss(y_pred, y_true, sd)
+        else:
+            loss = self.loss(y_pred, y_true)
+
         metrics = metrics(y_pred, y_true)
         
         # Take mean across pearson correlation
