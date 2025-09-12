@@ -58,6 +58,9 @@ def main_sweep(cfg_path, model_type, sweep_goal):
                 cfg.model.global_component.parameters.n_heads = sweep_config['model.global_component.parameters.n_heads']
                 cfg.model.global_component.parameters.dropout = sweep_config['model.global_component.parameters.dropout']
                 #cfg.transformer.max_seq_len = sweep_run.config.transformer.max_seq_len
+        if sweep_goal == 'loss':
+            print('loss function sweep')
+            cfg.optim.loss = sweep_config['optim.loss']
         cfg.freeze()
 
         

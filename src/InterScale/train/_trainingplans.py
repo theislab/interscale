@@ -47,7 +47,7 @@ class TrainingPlan(pl.LightningModule):
         module: BaseModuleClass,
         prediction_task: str,
         prediction_level: Literal["node", "graph"],
-        loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1"],
+        loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss"],
         cross_corr: Literal["gene", "cell"],
         batch_size: int,
         class_weights: np.ndarray | None = None,
