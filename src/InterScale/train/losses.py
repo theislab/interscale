@@ -117,6 +117,43 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
 
         return loss
     
+class SCELoss(torch.nn.Module):
+    # adjusted from GraphMAE
+    # https://github.com/THUDM/GraphMAE/blob/b14f080c919257b495e3cb64742884d5252d6a635/graphmae/models/loss_func.py#L5
+    # accessed on 10 September 2025
+    
+    def __init__(self, alpha=3):
+        super().__init__()
+        self.alpha = alpha
+        
+    def forward(self, x, y):
+        x = F.normalize(x, p=2, dim=-1)
+        y = F.normalize(y, p=2, dim=-1)
+
+        # loss =  - (x * y).sum(dim=-1)
+        # loss = (x_h - y_h).norm(dim=1).pow(alpha)
+
+        loss = (1 - (x * y).sum(dim=-1)).pow_(self.alpha)
+
+        loss = loss.mean()
+        return loss
+
+def sce_loss(x, y, alpha=3):
+    # adjusted from GraphMAE
+    # https://github.com/THUDM/GraphMAE/blob/b14f080c919257b495e3cb6474286d5252d6a635/graphmae/models/loss_func.py#L5
+    # accessed on 10 September 2025
+    
+    x = F.normalize(x, p=2, dim=-1)
+    y = F.normalize(y, p=2, dim=-1)
+
+    # loss =  - (x * y).sum(dim=-1)
+    # loss = (x_h - y_h).norm(dim=1).pow(alpha)
+
+    loss = (1 - (x * y).sum(dim=-1)).pow_(alpha)
+
+    loss = loss.mean()
+    return loss
+    
 class GaussianLoss(torch.nn.Module):
     # adjusted from NCEM
     # https://github.com/theislab/ncem/blob/main/ncem/utils/losses.py

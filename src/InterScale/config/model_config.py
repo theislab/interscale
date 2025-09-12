@@ -19,7 +19,7 @@ def get_model_cfg(cfg):
   cfg.model.save = None
   cfg.model.loss = None
   cfg.model.decoder = CN()
-  cfg.model.decoder.type = 'linear' # [linear, nonlinear]
+  cfg.model.decoder.type = 'linear' # [linear, nonlinear, linear-lse]
   cfg.model.decoder.hidden_dims = [256, 128]
   cfg.model.decoder.dropout_decoder = 0.1
   

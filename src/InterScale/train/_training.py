@@ -32,11 +32,11 @@ class NodeMaskingTrainingPlan:
     def train(
         self,
         max_epochs: int,
-        train_size: float = 0.7,
-        validation_size: float = 0.2,
+        batch_size: int,
+        train_size: float,
+        validation_size: float,
         shuffle_set_split: bool = True,
         load_sparse_tensor: bool = False,
-        batch_size: int = 128,
         early_stopping: bool = False,
         patience: int = 5,
         datasplitter_kwargs: dict | None = None,
@@ -123,9 +123,11 @@ class NodeMaskingTrainingPlan:
         
         self.wandb_use = wandb_use if wandb_use is not None else self._cfg.wandb.use
         
+        self.batch_size = batch_size
+        
         #TODO: change steps per epoch to be based on datamodule
         #steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
-        steps_per_epoch = math.ceil(len(datamodule.train_data) / self._cfg.dataset.batch_size)
+        steps_per_epoch = math.ceil(len(datamodule.train_data) / self.batch_size)
         print('Steps per epoch', steps_per_epoch)
         lr_monitor = LearningRateMonitor(logging_interval='epoch')
         self.history_ = MetricsHistory()
@@ -139,7 +141,7 @@ class NodeMaskingTrainingPlan:
             self.prediction_level,
             self._cfg.optim.loss,
             self._cfg.optim.cross_corr,
-            self._cfg.dataset.batch_size,
+            self.batch_size,
             self.class_weights,
             self.class_labels if self.prediction_task == 'classification' else None,
             **plan_kwargs,

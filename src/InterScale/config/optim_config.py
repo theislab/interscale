@@ -20,4 +20,5 @@ def get_optim_cfg(cfg):
   cfg.optim.seed = 40
   cfg.optim.cross_corr = 'cell' # Currently cell is the only one that really works
   cfg.optim.n_epochs = 100
+  cfg.optim.early_stopping = True
   return cfg

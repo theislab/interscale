@@ -49,6 +49,11 @@ class BaseModuleClass(L.LightningModule, ABC):
         self.decoder_type = decoder_type
         self.decoder_hidden_dims = decoder_hidden_dims
         self.pct_mask_nodes = pct_mask_nodes
+        if self.pct_mask_nodes > 0:
+            self.masked_nodes = True
+        else:
+            self.masked_nodes = False
+        
         # Define components 
         self.local_component = None
         self.global_component = None

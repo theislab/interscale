@@ -57,16 +57,20 @@ def gene_rank_analysis(adata,
                        layers_global_pred: str = 'layers_global',
                        top_n: int = 5,
                        plot_result: bool = True,
-                       return_top_genes: bool = False):
+                       return_top_genes: bool = False,
+                       save_dir: str = None,
+                       post_fix: str = None):
     """Ranks how well the local and global predictions capture the gene expression. 
     Plots the top N predicted genes for each model and consensus genes. 
 
     Args:
         adata (_type_): _description_
-        y_pred_local_obs (str, optional): _description_. Defaults to 'y_pred_local'.
-        y_pred_global_obs (str, optional): _description_. Defaults to 'y_pred_global'.
+        layers_local_pred (str, optional): _description_. Defaults to 'layers_local'.
+        layers_global_pred (str, optional): _description_. Defaults to 'layers_global'.
         top_n (int, optional): _description_. Defaults to 5.
         plot_result (bool, optional): _description_. Defaults to True.
+        return_top_genes (bool, optional): _description_. Defaults to False.
+        save_dir (str, optional): Directory to save the figure. If None, figure is not saved. Defaults to None.
     """
     assert layers_local_pred in adata.layers.keys(), f"layers_local_pred {layers_local_pred} not in adata.layers.keys()"
     assert layers_global_pred in adata.layers.keys(), f"layers_global_pred {layers_global_pred} not in adata.layers.keys()"
@@ -120,6 +124,13 @@ def gene_rank_analysis(adata,
     plt.ylabel("Global Model Rank")
     plt.title("Gene Prediction Rank: Local vs. Global")
     plt.legend()
+    
+    # Save figure if save_dir is provided
+    if save_dir is not None:
+        save_path = os.path.join(save_dir, f"gene_rank_analysis_{post_fix}.png")
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')    
+        print(f"Figure saved to: {save_path}")
+    
     plt.show()
 
     # Return top genes if requested

@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=300GB
-#SBATCH --time=40:00:00
+#SBATCH --time=1:00:00
 #SBATCH --output=logs/main_%j.out
 #SBATCH --error=logs/main_%j.out
 #SBATCH --partition=cpu_p
@@ -14,7 +14,7 @@ source activate GT_long_range_env
 
 ### NODE CELL TYPE ###
 ## MERFISH MOUSE BRAIN ##
-python src/graph_transformer_long_range_niches/main_sweep.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/MERFISH_mouse_brain/node_cell_type/yao_gnn_ct.yaml --sweep_cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/MERFISH_mouse_brain/sweep_experiment.yaml --model_type gnn --sweep_goal experiment --prediction_task classification
+python src/InterScale/main_sweep.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/Legnini_23/legnini23_genes_sample_GlobalModel.yaml --sweep_cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/Legnini_23/sweep/loss.yaml --model_type GlobalModel --sweep_goal loss --prediction_task regression
 
 # HYPERPARAMETER SWEEP
 #python src/graph_transformer_long_range_niches/main_sweep.py --cfg /home/icbDkls-4hg34

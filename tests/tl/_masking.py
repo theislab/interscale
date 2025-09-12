@@ -1,7 +1,7 @@
 import torch
 import pytest
 from torch_geometric.data import Data, Batch
-from graph_transformer_long_range_niches.tl import apply_mask, MASK_VALUE
+from graph_transformer_long_range_niches.tl import apply_mask, MASK_VALUE, pad_batch
 
 def test_apply_mask():
     # Create a simple graph with 4 nodes and features
