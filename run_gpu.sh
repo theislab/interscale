@@ -1,20 +1,21 @@
 #!/bin/bash
-#SBATCH --job-name=gt_long_range_gpu
+#SBATCH --job-name=InterScale_gpu
 #SBATCH --nodes=1
 #SBATCH --cpus-per-task=1
-#SBATCH --mem=240GB
-#SBATCH --time=5:00:00
+#SBATCH --mem=200GB
+#SBATCH --time=2:00:00
 #SBATCH --output=logs/main_%j.out
 #SBATCH --error=logs/main_%j.out
 #SBATCH --partition=gpu_p
-#SBATCH --qos=gpu_long
+#SBATCH --qos=gpu_priority
 #SBATCH --nice=10000
 
-source activate GT_long_range_env #exphormer_geome
+source activate GT_long_range_env
+
+# Default config path
+DEFAULT_CONFIG="/home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/"
+LEGNINI_CONFIG="Legnini23/legnini23_genes_sample_GlobalModel.yaml"
+XENIUM_PIG_PANCREAS_CONFIG="Xenium_pig_pancreas/pancreas_regr_sw_CombinedComponent.yaml"
 
 # srun necessary for running lightning on SLURM
-#srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_ct.yaml
-#srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/He23/he23_gnntrans_ct.yaml #he23_gnn_ct_lung5.yaml #he23_gnn_ct.yaml #he23_gnn_niche_lung5.yaml
-#python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/he23_cosmx_human_lung_ct_gnn.yaml
-srun python src/graph_transformer_long_range_niches/main.py --cfg /home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/VisiumBreastCancer/visium_gnntrans_genes.yaml
-
+python src/InterScale/main.py --cfg "$DEFAULT_CONFIG$LEGNINI_CONFIG" --model_type GlobalModel
