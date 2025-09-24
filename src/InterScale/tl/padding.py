@@ -60,6 +60,8 @@ def pad_batch(x: torch.Tensor,
             maximum number of nodes in any batch
         
     """
+    assert max_seq_len > 0, "max_seq_len must be greater than 0"
+    
     num_batch = int(batch_idx[-1].item() + 1)
     num_nodes = []
     masks = []
@@ -71,10 +73,8 @@ def pad_batch(x: torch.Tensor,
         num_nodes.append(num_nodes_i)
         masks.append(mask)
 
-    if max_seq_len:
-        max_num_nodes = max_seq_len
-    else:
-        max_num_nodes = max(num_nodes)
+    # Why not just equal to max_seq_len?
+    max_num_nodes = min(max(num_nodes), max_seq_len)
     
     # initialize padded_h_node with 0.0 and src_padding_mask with False (valid node)
     padded_x = x.data.new(max_num_nodes, num_batch, x.size(-1)).fill_(0)
