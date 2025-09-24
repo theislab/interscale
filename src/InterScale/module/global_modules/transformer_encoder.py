@@ -71,14 +71,6 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         # Layer normalization
         emb = self.norm_input(emb)
         
-        # Debug: Check if masked_nodes exists
-        if not hasattr(self, 'masked_nodes'):
-            print(f"ERROR: self.masked_nodes not found! Object type: {type(self)}")
-            print(f"Object id: {id(self)}")
-            print(f"Available attributes: {[attr for attr in dir(self) if not attr.startswith('_')]}")
-            print(f"Object __dict__ keys: {list(self.__dict__.keys())}")
-            raise AttributeError(f"'{type(self).__name__}' object has no attribute 'masked_nodes'")
-        
         if self.masked_nodes and not eval:
             keep_indices = batched_data.mask
         else:

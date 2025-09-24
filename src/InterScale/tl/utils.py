@@ -99,7 +99,6 @@ def pad_batch(h_node, batch, max_seq_len: int, get_mask=False, keep_indices=None
         num_nodes.append(num_nodes_i)
         masks.append(mask)
 
-    # logger.info(max(num_nodes))
     if max_seq_len:
         max_num_nodes = min(max(num_nodes), max_seq_len)
     else:
@@ -112,7 +111,9 @@ def pad_batch(h_node, batch, max_seq_len: int, get_mask=False, keep_indices=None
     index_nodes = []
     for i, mask in enumerate(masks):
         num_nodes_i = num_nodes[i]
+        # Case 1: Number of nodes in graph exceeds maximum sequence length
         if num_nodes_i > max_num_nodes:
+            # Case 1.1: Node masking of input data then select masked nodes to keep
             if get_mask:
                 must_keep = keep_indices[mask] # torch.tensor(Bool) [G]
                 other_nodes = ~must_keep # torch.tensor(Bool)
@@ -135,7 +136,8 @@ def pad_batch(h_node, batch, max_seq_len: int, get_mask=False, keep_indices=None
                     assert max(idx_nodes) < num_nodes_i
                 else:
                     idx_nodes = random.sample(keep_idx, max_seq_len)
-                    
+            
+            # Case 1.2: No node masking of input data then select random nodes to keep
             else: # no masking
                 idx_nodes = random.sample(range(0, num_nodes_i), max_seq_len)
             
