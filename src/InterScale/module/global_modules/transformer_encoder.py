@@ -100,7 +100,8 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
             
         return padded_emb, src_padding_mask, index_nodes, attention_mask
 
-    def forward(self, padded_h_node, 
+    def forward(self,
+                padded_h_node, 
                 src_padding_mask, 
                 mask = None, 
                 register_hook: bool = False):

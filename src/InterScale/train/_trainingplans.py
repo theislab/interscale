@@ -13,6 +13,11 @@ from .losses import BalancedPearsonCorrelationLoss, GaussianLoss, SCELoss
 
 import torchmetrics
 from torchmetrics import MetricCollection
+
+CLASSIFICATION_LOSSES = ["CrossEntropy", "WeightedCE"]
+REGRESSION_LOSSES = ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss", "SCELoss"]
+
+
 # adjusted from scvi-tools
 # https://github.com/scverse/scvi-tools/blob/main/src/scvi/train/_trainingplans.py
 # accessed on 28 April 2025
@@ -47,7 +52,7 @@ class TrainingPlan(pl.LightningModule):
         module: BaseModuleClass,
         prediction_task: str,
         prediction_level: Literal["node", "graph"],
-        loss: Literal["CrossEntropy", "WeightedCE", "MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss"],
+        loss: Literal[CLASSIFICATION_LOSSES, REGRESSION_LOSSES],
         cross_corr: Literal["gene", "cell"],
         batch_size: int,
         class_weights: np.ndarray | None = None,
@@ -101,7 +106,7 @@ class TrainingPlan(pl.LightningModule):
     @staticmethod
     def _setup_classification_loss(loss: Literal["CrossEntropy", "WeightedCE"], class_weights: torch.Tensor | None = None):
         """Setup loss function based on prediction task and configuration."""
-        assert loss == 'CrossEntropy' or loss == 'WeightedCE', "Classification must be run with CrossEntropy or WeightedCE loss."
+        assert loss in CLASSIFICATION_LOSSES, "Classification must be run with CrossEntropy or WeightedCE loss."
         if loss == 'CrossEntropy':
             return nn.CrossEntropyLoss()
         elif loss == 'WeightedCE':
@@ -110,9 +115,9 @@ class TrainingPlan(pl.LightningModule):
             return nn.CrossEntropyLoss(class_weights)
             
     
-    def _setup_regression_loss(self, loss: Literal["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss"]):
+    def _setup_regression_loss(self, loss: Literal[REGRESSION_LOSSES]):
         """Setup loss function based on prediction task and configuration."""
-        assert loss == 'MSELoss' or loss == 'GaussianNLL' or loss == 'SmoothL1' or loss == "BalancedPearsonCorrelationLoss", "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
+        assert loss in REGRESSION_LOSSES, "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
         if loss == 'MSELoss':
             return nn.MSELoss()
         elif loss == 'GaussianNLL':

@@ -27,13 +27,25 @@ def _select_masked_nodes(keep_indices, mask, num_nodes_i, max_seq_len):
     
     return sorted(idx_nodes)
 
+# adjusted from: https://github.com/ucbrise/graphtrans/blob/main/modules/utils.py#L5
 def pad_batch(x: torch.Tensor, 
               batch_idx: torch.Tensor,
               max_seq_len: int,
               get_mask: bool = False,
               keep_indices: torch.Tensor = None):
     """
-    adjusted from: https://github.com/ucbrise/graphtrans/blob/main/modules/utils.py#L5
+    Pads the batch to a fixed length because transfmrer can not handle variable-length sequences.
+    For example if:
+    batch = [
+        [node1, node2, node3],           # 3 nodes
+        [node1, node2, node3, node4, node5]  # 5 nodes
+    ]
+    needs to be padded to:
+    batch = [
+        [node1, node2, node3, 0, 0],  # 3 nodes
+        [node1, node2, node3, node4, node5]  # 5 nodes
+    ]
+    
     Input: 
         x: torch.Tensor of shape [N, E]
             gene-expression values X 
@@ -58,7 +70,6 @@ def pad_batch(x: torch.Tensor,
             mask for each batch
         max_num_nodes: int
             maximum number of nodes in any batch
-        
     """
     assert max_seq_len > 0, "max_seq_len must be greater than 0"
     
@@ -73,7 +84,8 @@ def pad_batch(x: torch.Tensor,
         num_nodes.append(num_nodes_i)
         masks.append(mask)
 
-    # Why not just equal to max_seq_len?
+    # get max number of nodes in any batch or maximum sequence length
+    # transformer needs equal-sized sequences as input but agnostic across batches
     max_num_nodes = min(max(num_nodes), max_seq_len)
     
     # initialize padded_h_node with 0.0 and src_padding_mask with False (valid node)
