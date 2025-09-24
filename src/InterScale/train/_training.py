@@ -168,10 +168,10 @@ class NodeMaskingTrainingPlan:
             elif 'regression' in self._cfg.dataset.prediction_task:
                 if self._cfg.optim.loss == 'MSELoss':
                     checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) 
-                elif self._cfg.optim.loss == 'GaussianNLL' or self._cfg.optim.loss == 'SmoothL1' or self._cfg.optim.loss == 'BalancedPearsonCorrelationLoss':
+                elif self._cfg.optim.loss == 'GaussianNLL' or self._cfg.optim.loss == 'SmoothL1' or self._cfg.optim.loss == 'BalancedPearsonCorrelationLoss' or self._cfg.optim.loss == 'SCELoss':
                     checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="max", ) 
                 else:
-                    raise Exception("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")            
+                    raise Exception("Regression must be run with MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss or SCELoss loss.")            
             
         # Create list of callbacks and filter out None values
         callbacks = [callback for callback in [lr_monitor, early_stop_callback, self.history_, checkpoint_callback] if callback is not None]
