@@ -44,9 +44,6 @@ class GraphAnnDataModule(pl.LightningDataModule):
         ------
             ValueError: If `learning_type` is not one of {"node", "graph"}.
         """
-        # TODO: Fill the docstring
-        print('Masked dataloader')
-
         super().__init__()
         self.setup_called = False
         self.batch_size = batch_size
@@ -102,19 +99,9 @@ class GraphAnnDataModule(pl.LightningDataModule):
         ----
         stage (str, optional): the stage of the training, either 'train', 'val' or 'test'. Defaults to None.
         """
-        # TODO: Implement each case
-        # TODO: Splitting
-        # stage = "train" if not stage else stage
-
         if stage not in VALID_STAGE:
             raise ValueError("Stage must be one of %r." % VALID_STAGE)
 
-        # if self.learning_type == "graph":
-        #     if len(self.data) <= 3:
-        #         raise RuntimeError("Not enough graphs in data to do graph-wise learning")
-        #     self._graphwise_setup(stage)
-
-        # else:
         self._nodewise_setup(stage)
         self.setup_called = True
 
@@ -135,30 +122,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
             raise RuntimeError("setup method should be called before getting dataloaders")
         return dataloader
 
-    def _graph_loader(self, data: list, shuffle: bool = False, **kwargs) -> DataListLoader:
-        """Loads the data in the form of graphs.
-
-        Args:
-        ----
-        data (List): list of data to be loaded
-        shuffle (bool, optional): whether to shuffle the data. Defaults to False.
-        kwargs: arguments passed to the pyg.DataListLoader
-
-        Returns
-        -------
-        DataListLoader: the graph dataloader
-        """
-        return DataListLoader(
-            dataset=data, shuffle=shuffle, batch_size=self.batch_size, num_workers=self.num_workers, **kwargs
-        )
-    
-    # def smallest_data_batch_length(self, data_batch):
-    #     """Returns the number of nodes in the smallest graph from the Batch."""
-    #     batch_size = data_batch.batch.max().item() + 1  # Number of graphs
-    #     lengths = [(data_batch.batch == i).sum().item() for i in range(batch_size)]
-    #     return min(lengths)
-
-    def smallest_data_batch_length(self, data_list: List['BaseData']):
+    def _smallest_data_batch_length(self, data_list: List['BaseData']):
         """Returns the number of nodes in the smallest graph from the list of BaseData."""
         lengths = [data.num_nodes for data in data_list]
         return min(lengths)
@@ -179,7 +143,7 @@ class GraphAnnDataModule(pl.LightningDataModule):
         -------
             NeighborLoader: the node dataloader
         """
-        smallest_length = self.smallest_data_batch_length(data_list)
+        smallest_length = self._smallest_data_batch_length(data_list)
         num_nodes_to_mask = int(smallest_length * self.pct_mask_nodes)
         if num_nodes_to_mask == 0: # must mask at least one node
             num_nodes_to_mask = 1
@@ -198,6 +162,5 @@ class GraphAnnDataModule(pl.LightningDataModule):
             shuffle=shuffle,
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            #collate_fn=collate_fn,
             **kwargs,
         )    
