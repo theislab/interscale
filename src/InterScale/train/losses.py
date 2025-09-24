@@ -2,6 +2,7 @@ from typing import Literal
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 def log(t, eps=1e-20):
