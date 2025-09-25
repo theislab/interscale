@@ -23,6 +23,7 @@ class LinearLSEDecoder(nn.Module):
         # Weight and bias similar to Linear layer, but we handle them manually
         self.weight = nn.Parameter(torch.Tensor(n_output, n_input))
         self.bias = nn.Parameter(torch.Tensor(n_output))
+        self.n_input = n_input
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -41,7 +42,7 @@ class LinearLSEDecoder(nn.Module):
         contrib = x.unsqueeze(2) * self.weight.t().unsqueeze(0)
         
         # Apply log-sum-exp across latent dimension (dim=1)
-        y = torch.logsumexp(contrib, dim=1)  # [batch_size, n_output]
+        y = torch.logsumexp(contrib, dim=1) - math.log(self.n_input) # [batch_size, n_output]
 
         # Add bias
         return y + self.bias
