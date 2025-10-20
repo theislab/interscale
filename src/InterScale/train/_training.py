@@ -157,7 +157,7 @@ class NodeMaskingTrainingPlan:
             if 'classification' in self.prediction_task:
                 early_stop_callback = EarlyStopping(monitor="val_f1_macro", min_delta=0.05, patience=patience*steps_per_epoch, verbose=False, mode="max")
             elif 'regression' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_mse", min_delta=0.05, patience=patience*steps_per_epoch, verbose=False, mode="min")
+                early_stop_callback = EarlyStopping(monitor="val_mse", min_delta=0.005, patience=patience*steps_per_epoch, verbose=False, mode="min")
             else:
                 raise Exception("Training must be classification or regression based.")
             
@@ -169,7 +169,7 @@ class NodeMaskingTrainingPlan:
                 if self._cfg.optim.loss == 'MSELoss':
                     checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) 
                 elif self._cfg.optim.loss == 'GaussianNLL' or self._cfg.optim.loss == 'SmoothL1' or self._cfg.optim.loss == 'BalancedPearsonCorrelationLoss' or self._cfg.optim.loss == 'SCELoss':
-                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="max", ) 
+                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) 
                 else:
                     raise Exception("Regression must be run with MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss or SCELoss loss.")            
             
