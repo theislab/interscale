@@ -76,13 +76,13 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         else:
             keep_indices = None
 
-        # Ensure masked nodes are included in padding
+        # Ensure masked nodes are included in padding; during evaluation, no masking is applied
         padded_emb, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
             emb, 
             batched_data.batch, 
             self.max_seq_len, 
-            get_mask=self.masked_nodes,
-            keep_indices=keep_indices  # Add parameter to ensure masked nodes are kept
+            get_mask=False if eval else self.masked_nodes, 
+            keep_indices=None if eval else keep_indices  # Add parameter to ensure masked nodes are kept (not during evaluation) 
         )
         
         if self.long_range_attention:
