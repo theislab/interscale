@@ -93,9 +93,11 @@ class TrainingPlan(pl.LightningModule):
         if 'classification' in self.prediction_task:
             metrics = self._setup_classification_metrics(self.module.n_output)
             self.loss = self._setup_classification_loss(self.loss_type, self.class_weights)
+            self.monitor_metric = 'val_f1'
         elif 'regression' in self.prediction_task:
             metrics = self._setup_regression_metrics(self.module.n_output)
             self.loss = self._setup_regression_loss(self.loss_type)
+            self.monitor_metric = 'val_r2'
         else:
             raise ValueError("Prediction task must define 'classification' or 'regression'.")
         
@@ -267,15 +269,13 @@ class TrainingPlan(pl.LightningModule):
         optimizer = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
         if self.lr_scheduler == "ReduceLROnPlateau":
             lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=self.patience_in_steps, verbose=True)
-            monitor = 'val_r2'
         elif self.lr_scheduler == "CosineWarmupScheduler":
             lr_scheduler = CosineWarmupScheduler(optimizer,
                                                 warmup=self.lr_warmup,
                                                 max_epochs=self.lr_max_epochs)
-            monitor = None
         elif self.lr_scheduler is None:
             lr_scheduler = None
         else:
             raise ValueError(f"Invalid lr_scheduler: {self.lr_scheduler}. Must be either 'None', 'ReduceLROnPlateau' or 'CosineWarmupScheduler'.")
 
-        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch', 'monitor': monitor}]
+        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch', 'monitor': self.monitor_metric}]
