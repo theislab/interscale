@@ -322,9 +322,48 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         return adata
 
     
-    def _make_dataloader(self):
+    def save_evaluation_results(self,
+                                adata: AnnData,
+                                prefix: str,
+                                decoder_weight_df: pd.DataFrame,
+                                y_pred_df: pd.DataFrame,
+                                local_embeddings_df: pd.DataFrame | None = None,
+                                global_embeddings_df: pd.DataFrame | None = None,
+                                attention_matrix_df: pd.DataFrame | None = None,
+                                cls: np.ndarray | None = None):
+        """Save the evaluation results in the adata object.
         
-        return None
+        Parameters
+        ----------
+        adata: AnnData
+        prefix: str
+        local_embeddings_df: pd.DataFrame
+        global_embeddings_df: pd.DataFrame
+        attention_matrix_df: pd.DataFrame
+        decoder_weight_df: pd.DataFrame
+        y_pred_df: pd.DataFrame
+        cls: np.ndarray
+        
+        returns
+        -------
+        adata: AnnData
+            AnnData object with the evaluation results saved in the obsm and layers.
+        """
+        adata.obsm[f'{prefix}_decoder_weight'] = decoder_weight_df.values
+         if local_embeddings_df is not None:
+            adata.obsm[f'{prefix}_local_emb'] = local_embeddings_df.values
+        if global_embeddings_df is not None:
+            adata.obsm[f'{prefix}_global_emb'] = global_embeddings_df.values
+        if attention_matrix_df is not None:
+            adata.obsm[f'{prefix}_attn_matrix'] = attention_matrix_df.values
+        if cls is not None:
+            adata.obs[f'{prefix}_cls'] = cls
+        if self.prediction_task == 'classification':
+            adata.obsm[f'{prefix}_y_pred'] = y_pred_df.values # [cells, classes]
+        else:
+            adata.layers[f'{prefix}_y_pred'] = y_pred_df.values # [cells, genes]   
+        
+        return adata
     
     @abstractmethod
     def train(self):
