@@ -350,7 +350,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             AnnData object with the evaluation results saved in the obsm and layers.
         """
         adata.obsm[f'{prefix}_decoder_weight'] = decoder_weight_df.values
-         if local_embeddings_df is not None:
+        if local_embeddings_df is not None:
             adata.obsm[f'{prefix}_local_emb'] = local_embeddings_df.values
         if global_embeddings_df is not None:
             adata.obsm[f'{prefix}_global_emb'] = global_embeddings_df.values

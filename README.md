@@ -7,22 +7,32 @@
 [link-tests]: https://github.com/theislab/GT-long-range-niches/actions/workflows/test.yml
 [badge-docs]: https://img.shields.io/readthedocs/graph-transformer-long-range-niches
 
-graph transformer for non-homogeneous niches at long-range prediction
+InterScale is a computational model for analysis of intercellular interactions in spatial transcriptomcis across different length-scales. It consists of a workflow that generates  per cell, cell-based attention matrix and several evaluation functions for tissue, cell and gene level communication. 
 
+InterScale folder structure: 
+
+```python
+/
+└── InterScale/
+    └── config/ 
+    └── eval/
+    └── model/
+    └── module/
+    └── nn/
+    └── tl/
+    └── train/
+└── config_files/
+```
+
+<!--
 ## Getting started
 
 Please refer to the [documentation][link-docs]. In particular, the
 
 -   [API documentation][link-api].
 
-## Installation
 
-You need to have Python 3.9 or newer installed on your system. If you don't have
-Python installed, we recommend installing [Mambaforge](https://github.com/conda-forge/miniforge#mambaforge).
 
-There are several alternative options to install graph-transformer-long-range-niches:
-
-<!--
 1) Install the latest release of `graph-transformer-long-range-niches` from `PyPI <https://pypi.org/project/graph-transformer-long-range-niches/>`_:
 
 ```bash
@@ -30,11 +40,6 @@ pip install graph-transformer-long-range-niches
 ```
 -->
 
-1. Install the latest development version:
-
-```bash
-pip install git+https://github.com/theislab/GT-long-range-niches.git@main
-```
 
 ## Environment installation
 
@@ -96,52 +101,56 @@ echo "NVIDIA_VISIBLE_DEVICES=all" >> /etc/environment
 enroot export --output InterScale.sqsh interscale_container
 ```
 
-## Guide on Config files
-
-Each experiment requires a `.yaml` file for the settings. Some configs are required for each experiment (e.i. `dataset.h5ad_data`) and others are set to a default value which are overwritten when included in the `experiment.yaml` file. All config parameters and default setting can be found in the `configs` folder. The current default parameters are the InterScale parameters from the publication. 
-
-Example config file: [example.yaml](src/config_files/example.yaml)
-(copy paste the file, remove all defaults )
-
-**Config settings are based on [YACS](https://github.com/rbgirshick/yacs)*
-
 ## Workflow
 
 There are three stages for InterScale:
 
-1. Data preparation: 
+1. Config set up and data preparation
 2. Model set-up and training
 3. Evaluation
 
-### 1. Data preperation
+### 1. Config set up and data preperation
 
-We recommend using sliding patterns for the training to detect interaction patterns. 
+#### 1.1 InterScale config
 
-2. Prepare Configuration file
+The default config settings can be observed in:
 
-All possible configuration settings can be found in the `config` folder. 
+``` python
+/
+└── InterScale/
+    └── config/ # default config setttings
+        └── dataset_config/ # 
+        └── global_component_config/ # 
+        └── local_component_config/ # 
+        └── model_config/ # 
+        └── optim_config/ # training optimization parameters (e.i. learning rate, weight decay,...)
+        └── wandb_config/ # 
+```
 
-The necessary configuration to define in the `.yaml` file are: 
+Some parameters can not be loaded as default such as path to h5ad object, results directory etc. An example of a config file with the necessary parameters to set can be found [here](./../src/config_files/InterScale_example.yaml). By default the model is trained for a node regression tasks, meaning prediction of GEX values, with `adata.X`. 
 
-| Config                 | Description                                                               |
-|------------------------|---------------------------------------------------------------------------|
-| `dataset.h5ad_data`    | Path to `.h5ad` data.                                                       |
-| `dataset.prediction_task` | Task to perform. Options: `node_regression`, `node_classification`. |
-| `dataset.prediction_obs` | Observation to predict. |
-| `dataset.library_key` | Key to use for the library. |
-| `dataset.spatial_neigbors_kwargs` | Keyword arguments for the spatial neighbors calculation. `radius` should be set such that number of average neighbors is 30. |
-| `optim.loss` | Loss function to use. Options: Classification = ['CrossEntropy', 'WeightedCE'], Regression = ['MSELoss', 'GaussianNLL', 'SmoothL1'] |
+You can customize the model by inluding other parameter from the config folder files. If you set them in your `.yaml` file you will overwrite the default values. 
 
-TODO: Complete!
+#### 1.2 Data preperation
 
+For model training we three necessary steps to prepare the data
 
-### 2. Model set-up and training
+1. **Normalization** (we recommend log-norm to have counts in a range between 0-3.0) 
+2. Calculate **spatial connectivity matrix** (with suidpy.)
+3. Optional: Split into **sliding windows**. We recommend creating sliding windows when your tissue slices contain more than 4k cells. The reason for this is the context length of the transformer, for larger context lengths training still works but will take longer.
 
-| Config                 | Description                                                               |
-|------------------------|---------------------------------------------------------------------------|
-| `model.save`    | Path to `.h5ad` data.                                                       |
+Check out [this tutorial]() for more instructions to set up and download data. 
 
-### 3. Evaluation
+#### 2. Model training
+
+The model can either be trained interactively in a notebook (only recommended for small datasets) or via a script. 
+
+In both cases the model will be saved as `.ckpt` and then loaded for the evaluation. 
+                                    
+
+#### 3.  Evaluation
+
+@Sara add descriptions
 
 | Evaluation level | Function name | Description |
 | ---------------- | ------------- | ----------- |

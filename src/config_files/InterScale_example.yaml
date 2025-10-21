@@ -1,0 +1,13 @@
+model:
+  local_component:
+    name: GCN
+  global_component:
+    name: self-attn-transformer
+  save: /path/to/save/model/
+dataset:
+  h5ad_data: /path/to/h5ad/data
+  name: data_name
+  sample_key: ['sample']
+  group_label: condition
+  spatial_neigbors_kwargs:
+    radius: 200
