@@ -12,12 +12,13 @@ def get_optim_cfg(cfg):
   cfg.optim = CN()
 
   cfg.optim.lr = 0.001 
-  cfg.optim.use_lr_scheduler = True
+  cfg.optim.lr_scheduler = "CosineWarmupScheduler" # "ReduceLROnPlateau" or "CosineWarmupScheduler"
   cfg.optim.lr_warmup = 20
   cfg.optim.lr_max_epochs = 100
   cfg.optim.wd = 1e-4
-  cfg.optim.loss = "CrossEntropy" 
+  cfg.optim.loss = "CrossEntropy" # regression: [MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss, SCELoss]
   cfg.optim.seed = 40
-  cfg.optim.cross_corr = 'gene' # cross-gene or cross-cell correlation
+  cfg.optim.cross_corr = 'cell' # Currently cell is the only one that really works
   cfg.optim.n_epochs = 100
+  cfg.optim.early_stopping = True
   return cfg

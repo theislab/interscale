@@ -2,6 +2,7 @@ import InterScale as interscale
 from InterScale.tl import prepare_geome_dataset
 from InterScale.geome_dataloader import GraphAnnDataModule
 from InterScale.config import load_config
+from InterScale.tl import remove_zero_expression_cells
 
 import argparse
 import scanpy as sc
@@ -11,6 +12,7 @@ def main(cfg_path, model_type):
     cfg = load_config(cfg_path)
     print(cfg)
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
+    adata = remove_zero_expression_cells(adata)
     print(adata)
     
     if model_type == "LocalModel":
@@ -59,7 +61,10 @@ def main(cfg_path, model_type):
     
     model.train(max_epochs = cfg.optim.n_epochs, 
                 datamodule = dm,
-                early_stopping = True)
+                batch_size = cfg.dataset.batch_size,
+                early_stopping = cfg.optim.early_stopping,
+                train_size = cfg.dataset.train_size,
+                validation_size = cfg.dataset.val_size)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GTLongRange')

@@ -44,9 +44,9 @@ class LocalModuleClass(BaseModuleClass):
         global_embedding: torch.Tensor 
             Size: [N, E]
         y_pred: torch.Tensor 
-            Size: [N, C] (classification) or [N, F] (regression)
+            Size: [B, C] (classification) or [B, F] (regression)
         y_true: torch.Tensor 
-            Size: [N, ] (classification) or [N, F] (regression)
+            Size: [B, ] (classification) or [B, F] (regression)
         """
         # Mask nodes 
         if self.pct_mask_nodes > 0:

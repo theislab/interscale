@@ -91,9 +91,12 @@ class LocalModel(NodeMaskingTrainingPlan,
             y_pred_df.loc[sample_mask] = y_pred.detach().cpu().numpy()
 
         # Save embeddings in adata.obsm
-        adata.obsm[f'{prefix}_local_emb'] = local_embeddings_df.values
-        adata.obsm[f'{prefix}_decoder_weight'] = decoder_weight_df.values
-        adata.layers[f'{prefix}_y_pred'] = y_pred_df.values
+        adata = self.save_evaluation_results(adata, 
+                                             prefix, 
+                                             local_embeddings_df = local_embeddings_df, 
+                                             decoder_weight_df = decoder_weight_df, 
+                                             y_pred_df = y_pred_df)
+
         
         return adata
     

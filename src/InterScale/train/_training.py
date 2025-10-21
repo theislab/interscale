@@ -12,7 +12,6 @@ from InterScale.train._utils import MetricsHistory
 from InterScale.tl.utils import get_model_filename_prefix
 from lightning.pytorch.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.trainer import Trainer, seed_everything
-from lightning.pytorch.strategies.ddp import DDPStrategy
 import lightning as L
 
 
@@ -33,15 +32,17 @@ class NodeMaskingTrainingPlan:
     def train(
         self,
         max_epochs: int,
-        train_size: float = 0.7,
-        validation_size: float = 0.2,
+        batch_size: int,
+        train_size: float,
+        validation_size: float,
         shuffle_set_split: bool = True,
         load_sparse_tensor: bool = False,
-        batch_size: int = 128,
         early_stopping: bool = False,
+        patience: int = 5,
         datasplitter_kwargs: dict | None = None,
         plan_kwargs: dict | None = None,
         datamodule: L.LightningDataModule | None = None,
+        wandb_use: bool | None = None,
         **trainer_kwargs,
     ):
         """Train the model.
@@ -54,7 +55,7 @@ class NodeMaskingTrainingPlan:
             :func:`~scvi.model.get_max_epochs_heuristic`. Must be passed in if ``datamodule`` is
             passed in, and it does not have an ``n_obs`` attribute.
         train_size
-            Float, or None. Size of training set in the range ``[0.0, 1.0]``. default is 0.7 and 
+            Float, or None. Size of training set in the range ``[0.0, 1.0]``. default is 0.7 and
             potentially adding small last batch to validation cells.
             Passed into :class:`DataSplitter`.
             Not used if ``datamodule`` is passed in.
@@ -73,6 +74,8 @@ class NodeMaskingTrainingPlan:
         early_stopping
             Perform early stopping. Additional arguments can be passed in through ``**kwargs``.
             See :class:`~scvi.train.Trainer` for further options.
+        patience
+            Patience for early stopping. Nr of epochs to wait for improvement before stopping. Passed into :class:`~scvi.train.EarlyStopping`.
         datasplitter_kwargs
             Additional keyword arguments passed into :class:`~scvi.dataloaders.DataSplitter`.
             Values in this argument can be overwritten by arguments directly passed into this
@@ -117,6 +120,19 @@ class NodeMaskingTrainingPlan:
         plan_kwargs = plan_kwargs or {}
         
         seed_everything(self._cfg.optim.seed, workers=True)
+        
+        self.wandb_use = wandb_use if wandb_use is not None else self._cfg.wandb.use
+        
+        self.batch_size = batch_size
+        
+        #TODO: change steps per epoch to be based on datamodule
+        #steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
+        steps_per_epoch = math.ceil(len(datamodule.train_data) / self.batch_size)
+        print('Steps per epoch', steps_per_epoch)
+        lr_monitor = LearningRateMonitor(logging_interval='epoch')
+        self.history_ = MetricsHistory()
+        checkpoint_callback = None
+        early_stop_callback = None
             
         # defines optimizers, training step, val step, logged metrics
         training_plan = self._training_plan_cls(
@@ -125,44 +141,37 @@ class NodeMaskingTrainingPlan:
             self.prediction_level,
             self._cfg.optim.loss,
             self._cfg.optim.cross_corr,
-            self._cfg.dataset.batch_size,
+            self.batch_size,
             self.class_weights,
+            self.class_labels if self.prediction_task == 'classification' else None,
             **plan_kwargs,
-            use_lr_scheduler = self._cfg.optim.use_lr_scheduler,
+            lr_scheduler = self._cfg.optim.lr_scheduler,
             weight_decay = self._cfg.optim.wd,
             lr = self._cfg.optim.lr,
             lr_warmup = self._cfg.optim.lr_warmup,
             lr_max_epochs = self._cfg.optim.n_epochs,
+            patience_in_steps = steps_per_epoch,
         )
-        
-        #TODO: change steps per epoch to be based on datamodule
-        #steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
-        steps_per_epoch = math.ceil(len(datamodule.train_data) / self._cfg.dataset.batch_size)
-        print('Steps per epoch', steps_per_epoch)
-        lr_monitor = LearningRateMonitor(logging_interval='epoch')
-        self.history_ = MetricsHistory()
-        checkpoint_callback = None
-        early_stop_callback = None
         
         if early_stopping:
             if 'classification' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_f1_macro/avg", min_delta=0.05, patience=10, verbose=False, mode="max")
+                early_stop_callback = EarlyStopping(monitor="val_f1_macro", min_delta=0.05, patience=patience*steps_per_epoch, verbose=False, mode="max")
             elif 'regression' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_r2", min_delta=0.05, patience=steps_per_epoch, verbose=False, mode="max")
+                early_stop_callback = EarlyStopping(monitor="val_mse", min_delta=0.005, patience=patience*steps_per_epoch, verbose=False, mode="min")
             else:
                 raise Exception("Training must be classification or regression based.")
             
         if self._cfg.model.save is not None:
             run_name = get_model_filename_prefix(self._cfg, self.local_component, self.global_component)
             if 'classification' in self._cfg.dataset.prediction_task:
-                checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_acc", mode="max", ) # save model if validation accuracy increases
+                checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="max", ) # save model if validation accuracy increases
             elif 'regression' in self._cfg.dataset.prediction_task:
                 if self._cfg.optim.loss == 'MSELoss':
-                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_mse", mode="min", ) 
-                elif self._cfg.optim.loss == 'GaussianNLL' or self._cfg.optim.loss == 'SmoothL1':
-                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_r2", mode="max", ) 
+                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) 
+                elif self._cfg.optim.loss == 'GaussianNLL' or self._cfg.optim.loss == 'SmoothL1' or self._cfg.optim.loss == 'BalancedPearsonCorrelationLoss' or self._cfg.optim.loss == 'SCELoss':
+                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) 
                 else:
-                    raise Exception("Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss.")            
+                    raise Exception("Regression must be run with MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss or SCELoss loss.")            
             
         # Create list of callbacks and filter out None values
         callbacks = [callback for callback in [lr_monitor, early_stop_callback, self.history_, checkpoint_callback] if callback is not None]

@@ -50,7 +50,7 @@ def main_sweep(cfg_path, model_type, sweep_goal):
                 cfg.model.local_component.parameters.hidden_dim = sweep_config['model.local_component.parameters.hidden_dim']
                 cfg.model.local_component.parameters.embed_dim = sweep_config['model.local_component.parameters.embed_dim']
                 cfg.model.local_component.parameters.dropout = sweep_config['model.local_component.parameters.dropout']
-            if model_type == 'GlobalModel' or model_type == 'CombinedModel':
+            elif model_type == 'GlobalModel' or model_type == 'CombinedModel':
                 print('transformer configs')
                 cfg.model.global_component.parameters.d_model = sweep_config['model.n_embed'] # input transformer dimension equal to gnn embed dim
                 cfg.model.global_component.parameters.dim_feedforward = sweep_config['model.global_component.parameters.dim_feedforward']
@@ -58,6 +58,9 @@ def main_sweep(cfg_path, model_type, sweep_goal):
                 cfg.model.global_component.parameters.n_heads = sweep_config['model.global_component.parameters.n_heads']
                 cfg.model.global_component.parameters.dropout = sweep_config['model.global_component.parameters.dropout']
                 #cfg.transformer.max_seq_len = sweep_run.config.transformer.max_seq_len
+            elif sweep_goal == 'loss':
+                print('loss sweep')
+                cfg.optim.loss = sweep_config['optim.loss']
         cfg.freeze()
 
         
@@ -147,7 +150,7 @@ if __name__ == '__main__':
                 'goal': 'maximize'},  # Use 'val_r2' for regression tasks
         })
     
-    if "transformer" not in args.model_type:
+    if "GlobalModel" not in args.model_type or "CombinedModel" not in args.model_type:
         transformer_keys = [key for key in sweep_config['parameters'] if key.startswith("transformer.")]
         for key in transformer_keys:
             del sweep_config['parameters'][key]

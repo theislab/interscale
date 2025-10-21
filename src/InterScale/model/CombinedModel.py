@@ -123,11 +123,13 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 contribution = torch.matmul(global_embedding[:-1].squeeze(1), torch.transpose(W, 0, 1))
                 decoder_weight_df.loc[sample_mask] = contribution.detach().numpy()
                 
-        adata.obsm[f'{prefix}_local_emb'] = local_embeddings_df.values
-        adata.obsm[f'{prefix}_global_emb'] = global_embeddings_df.values
-        adata.obsm[f'{prefix}_attn_matrix'] = attention_matrix_df.values
-        adata.obsm[f'{prefix}_decoder_weight'] = decoder_weight_df.values
-        adata.obs[f'{prefix}_cls'] = cls
-        adata.layers[f'{prefix}_y_pred'] = y_pred_df.values
+        adata = self.save_evaluation_results(adata, 
+                                             prefix, 
+                                             decoder_weight_df = decoder_weight_df, 
+                                             y_pred_df = y_pred_df, 
+                                             local_embeddings_df = local_embeddings_df, 
+                                             global_embeddings_df = global_embeddings_df, 
+                                             attention_matrix_df = attention_matrix_df, 
+                                             cls = cls)
         
         return adata

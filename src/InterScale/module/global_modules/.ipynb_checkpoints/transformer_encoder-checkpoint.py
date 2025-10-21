@@ -57,8 +57,6 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
             index_nodes: torch.Tensor [N]
                 Indices of the nodes in the original graph
         """
-        self.masked_nodes = False
-        
         # Layer normalization
         emb = self.norm_input(emb)
         

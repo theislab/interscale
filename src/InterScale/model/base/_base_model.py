@@ -18,6 +18,7 @@ from typing import List, Optional, Literal, Dict, Any, Sequence
 import torch
 import torch.nn as nn
 from sklearn.utils.class_weight import compute_class_weight
+import pandas as pd
 
 from InterScale.module.base import LocalModuleClass, GlobalModuleClass  
 from InterScale.module.local_modules import GCN
@@ -115,11 +116,14 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         self.local_component = False
         self.global_component = False
+        if self.prediction_task == 'classification':
+            self.class_labels = self._adata.obs[self._cfg.dataset.prediction_obs].cat.categories
         
         self.class_weights = None
         if self._cfg.optim.loss == 'WeightedCE':
-            self.class_weights = compute_class_weight("balanced", classes = np.unique(self._adata.obs[self._cfg.dataset.prediction_obs]), y=self._adata.obs[self._cfg.dataset.prediction_obs])
-            print('Class weights', self.class_weights)
+            self.class_weights = torch.tensor(compute_class_weight("balanced", classes = np.unique(self._adata.obs[self._cfg.dataset.prediction_obs]), y=self._adata.obs[self._cfg.dataset.prediction_obs]))
+            print('WeightedCE with class weights: ', self.class_weights)
+            
         
     @classmethod
     def _setup_anndata(cls,
@@ -319,9 +323,48 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         return adata
 
     
-    def _make_dataloader(self):
+    def save_evaluation_results(self,
+                                adata: AnnData,
+                                prefix: str,
+                                decoder_weight_df: pd.DataFrame,
+                                y_pred_df: pd.DataFrame,
+                                local_embeddings_df: pd.DataFrame | None = None,
+                                global_embeddings_df: pd.DataFrame | None = None,
+                                attention_matrix_df: pd.DataFrame | None = None,
+                                cls: np.ndarray | None = None):
+        """Save the evaluation results in the adata object.
         
-        return None
+        Parameters
+        ----------
+        adata: AnnData
+        prefix: str
+        local_embeddings_df: pd.DataFrame
+        global_embeddings_df: pd.DataFrame
+        attention_matrix_df: pd.DataFrame
+        decoder_weight_df: pd.DataFrame
+        y_pred_df: pd.DataFrame
+        cls: np.ndarray
+        
+        returns
+        -------
+        adata: AnnData
+            AnnData object with the evaluation results saved in the obsm and layers.
+        """
+        adata.obsm[f'{prefix}_decoder_weight'] = decoder_weight_df.values
+        if local_embeddings_df is not None:
+            adata.obsm[f'{prefix}_local_emb'] = local_embeddings_df.values
+        if global_embeddings_df is not None:
+            adata.obsm[f'{prefix}_global_emb'] = global_embeddings_df.values
+        if attention_matrix_df is not None:
+            adata.obsm[f'{prefix}_attn_matrix'] = attention_matrix_df.values
+        if cls is not None:
+            adata.obs[f'{prefix}_cls'] = cls
+        if self.prediction_task == 'classification':
+            adata.obsm[f'{prefix}_y_pred'] = y_pred_df.values # [cells, classes]
+        else:
+            adata.layers[f'{prefix}_y_pred'] = y_pred_df.values # [cells, genes]   
+        
+        return adata
     
     @abstractmethod
     def train(self):
