@@ -139,8 +139,7 @@ For model training we three necessary steps to prepare the data
 2. Calculate **spatial connectivity matrix** (with suidpy.)
 3. Optional: Split into **sliding windows**. We recommend creating sliding windows when your tissue slices contain more than 4k cells. The reason for this is the context length of the transformer, for larger context lengths training still works but will take longer.
 
-Check out [this tutorial](./docs/notebooks/data_and_config_set_up
-/setup_Visium.ipynb) for more instructions to set up and download data. 
+Check out [this tutorial](./docs/notebooks/data_and_config_set_up/setup_Visium.ipynb) for more instructions to set up and download data. 
 
 #### 2. Model training
 
