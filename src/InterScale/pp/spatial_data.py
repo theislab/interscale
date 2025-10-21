@@ -84,18 +84,15 @@ def sliding_window(
     if coord_columns is None:
         assert "spatial" in adata.obsm, "Coordinates not found. Provide `spatial` in `adata.obsm` or coord_columns in `adata.obs`"
         x_col, y_col = adata.obsm["spatial"][:, 0], adata.obsm["spatial"][:, 1]
-    else:
-        assert x_col in adata.obs and y_col in adata.obs, "Coordinates not found. Provide `{x_col}` and `{y_col}` in `adata.obs`"
-        x_col, y_col = x_col, y_col
-
-    if x_col in adata.obs and y_col in adata.obs:
-        coords = adata.obs[[x_col, y_col]].copy()
-    elif spatial_key in adata.obsm:
         coords = pd.DataFrame(
             adata.obsm[spatial_key][:, :2],
             index=adata.obs.index,
             columns=[x_col, y_col],
         )
+    elif coord_columns is tuple:
+        assert x_col in adata.obs and y_col in adata.obs, "Coordinates not found. Provide `{x_col}` and `{y_col}` in `adata.obs`"
+        x_col, y_col = coord_columns
+        coords = adata.obs[[x_col, y_col]].copy()
     else:
         raise ValueError(
             f"Coordinates not found. Provide `{coord_columns}` in `adata.obs` or specify a suitable `spatial_key` in `adata.obsm`."
