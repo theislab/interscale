@@ -17,7 +17,7 @@ from squidpy.gr._utils import _save_data
 def sliding_window(
     adata: AnnData | SpatialData,
     library_key: str | None = None,
-    coord_columns: None | tuple[str, str] = ("globalX", "globalY") = None,
+    coord_columns: None | tuple[str, str] = None,
     window_size: int | tuple[int, int] | None = None,
     spatial_key: str = "spatial",
     sliding_window_key: str = "sliding_window_assignment",
@@ -85,7 +85,8 @@ def sliding_window(
         assert "spatial" in adata.obsm, "Coordinates not found. Provide `spatial` in `adata.obsm` or coord_columns in `adata.obs`"
         x_col, y_col = adata.obsm["spatial"][:, 0], adata.obsm["spatial"][:, 1]
     else:
-        x_col, y_col = coord_columns
+        assert x_col in adata.obs and y_col in adata.obs, "Coordinates not found. Provide `{x_col}` and `{y_col}` in `adata.obs`"
+        x_col, y_col = x_col, y_col
 
     if x_col in adata.obs and y_col in adata.obs:
         coords = adata.obs[[x_col, y_col]].copy()
