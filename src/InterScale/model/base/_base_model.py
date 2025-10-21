@@ -18,6 +18,7 @@ from typing import List, Optional, Literal, Dict, Any, Sequence
 import torch
 import torch.nn as nn
 from sklearn.utils.class_weight import compute_class_weight
+import pandas as pd
 
 from InterScale.module.base import LocalModuleClass, GlobalModuleClass  
 from InterScale.module.local_modules import GCN
