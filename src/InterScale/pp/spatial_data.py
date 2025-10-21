@@ -17,7 +17,7 @@ from squidpy.gr._utils import _save_data
 def sliding_window(
     adata: AnnData | SpatialData,
     library_key: str | None = None,
-    coord_columns: None | tuple[str, str] = None,
+    coord_columns: tuple[str, str] = ('X', 'Y'),
     window_size: int | tuple[int, int] | None = None,
     spatial_key: str = "spatial",
     sliding_window_key: str = "sliding_window_assignment",
@@ -80,23 +80,14 @@ def sliding_window(
     if "sliding_window_assignment_colors" in adata.uns:
         del adata.uns["sliding_window_assignment_colors"]
     # extract coordinates of observations
-    
-    if coord_columns is None:
+    x_col, y_col = coord_columns
+    if coord_columns not in adata.obs:
         assert "spatial" in adata.obsm, "Coordinates not found. Provide `spatial` in `adata.obsm` or coord_columns in `adata.obs`"
-        x_col, y_col = adata.obsm["spatial"][:, 0], adata.obsm["spatial"][:, 1]
-        coords = pd.DataFrame(
-            adata.obsm[spatial_key][:, :2],
-            index=adata.obs.index,
-            columns=[x_col, y_col],
-        )
-    elif coord_columns is tuple:
-        assert x_col in adata.obs and y_col in adata.obs, "Coordinates not found. Provide `{x_col}` and `{y_col}` in `adata.obs`"
-        x_col, y_col = coord_columns
+        adata.obs[x_col] = adata.obsm["spatial"][:, 0]
+        adata.obs[y_col] = adata.obsm["spatial"][:, 1]
         coords = adata.obs[[x_col, y_col]].copy()
     else:
-        raise ValueError(
-            f"Coordinates not found. Provide `{coord_columns}` in `adata.obs` or specify a suitable `spatial_key` in `adata.obsm`."
-        )
+        coords = adata.obs[[x_col, y_col]].copy()
 
     if library_key is not None and library_key not in adata.obs:
         raise ValueError(f"Library key '{library_key}' not found in adata.obs")
