@@ -127,7 +127,7 @@ The default config settings can be observed in:
         └── wandb_config/ # 
 ```
 
-Some parameters can not be loaded as default such as path to h5ad object, results directory etc. An example of a config file with the necessary parameters to set can be found [here](./../src/config_files/InterScale_example.yaml). By default the model is trained for a node regression tasks, meaning prediction of GEX values, with `adata.X`. 
+Some parameters can not be loaded as default such as path to h5ad object, results directory etc. An example of a config file with the necessary parameters to set can be found [here](./src/config_files/InterScale_example.yaml). By default the model is trained for a node regression tasks, meaning prediction of GEX values, with `adata.X`. 
 
 You can customize the model by inluding other parameter from the config folder files. If you set them in your `.yaml` file you will overwrite the default values. 
 
@@ -139,7 +139,8 @@ For model training we three necessary steps to prepare the data
 2. Calculate **spatial connectivity matrix** (with suidpy.)
 3. Optional: Split into **sliding windows**. We recommend creating sliding windows when your tissue slices contain more than 4k cells. The reason for this is the context length of the transformer, for larger context lengths training still works but will take longer.
 
-Check out [this tutorial]() for more instructions to set up and download data. 
+Check out [this tutorial](./docs/notebooks/data_and_config_set_up
+/setup_Visium.ipynb) for more instructions to set up and download data. 
 
 #### 2. Model training
 
