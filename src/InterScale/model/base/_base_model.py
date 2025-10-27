@@ -133,6 +133,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
                        sample_key_list: List[str],
                        prediction_obs: str = None,
                        group_key: str | None = None,
+                       split_key: str | None = "split",
                        view_registry: bool = True):
         
         """
@@ -150,19 +151,14 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             Key in `adata.obs` that contains the prediction information.
         sample_key  
             Key in `adata.obs` that contains the sample information. For example, if the data is split by FOV or sliding windows.
+        split_key
+            Key in `adata.obs` that contains the split information.
         group_key
+            Key in `adata.obs` that contains the group information.
             Only required if split should stratify groups of group_key, usually this should be condition. Otherwise random split.
-            
-        Returns
-        -------
-        AnnDataManager object
-            AnnDataManager object that contains the data.
         """  
         
-        if layer_key is not None or layer_key != "":
-            anndata_fields = [fields.LayerField("x", layer = layer_key)]
-        else:
-            anndata_fields = [fields.XField("x")]
+        anndata_fields = [fields.LayerField("x", layer = layer_key)]
         
         for i, sample_key in enumerate(sample_key_list):
             anndata_fields.append(fields.CategoricalObsField(registry_key = f'sample_key_{i}', attr_key = sample_key))
@@ -172,6 +168,11 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         if group_key is not None:
             anndata_fields.append(fields.CategoricalObsField(registry_key = 'group_key', attr_key = group_key))    
+        else:
+            anndata_fields.append(fields.CategoricalObsField(registry_key = 'split_key', attr_key = split_key))
+        # Check that split_key contains required values
+        if split_key is not None:
+            assert {'train', 'val'}.issubset(set(adata.obs[split_key].unique())), f"'{split_key}' must contain 'train' and 'val' categories"
             
         manager = scvi.data.AnnDataManager(anndata_fields)
         manager.register_fields(adata)
