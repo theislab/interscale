@@ -99,7 +99,7 @@ def prepare_geome_dataset(adata,
         spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
 
         one_hot_encode_list = [prediction_obs]
-        X_key = f"layers/{layer_key}" if layer_key is not None else "X"
+        X_key = f"layers/{layer_key}" if layer_key is not None else ".X"
 
         if 'classification' in cfg.dataset.prediction_task:
             fields = {
