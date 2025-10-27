@@ -5,6 +5,7 @@ def get_dataset_cfg(cfg):
         prediction_task: str = [graph, node_classification, node_regression]
         prediction_obs: str = value to be predicted during training, must be in adata.obs
         subset_dict: {adata}
+        sample_key: list of keys in adata.obs to split the data into PyG Data objects (e.i. sliding_window, FOV, sample etc)
         num_features: number of gene expressions (added in prepare_geome_function)
         num_features: number of classes in prediction_obs (added in prepare_geome_function)
         pct_mask_nodes: percentage of single nodes to mask during training in a graph
@@ -15,9 +16,9 @@ def get_dataset_cfg(cfg):
     cfg.dataset.name = ""
     cfg.dataset.description = ""
     cfg.dataset.prediction_task = "regression" 
-    cfg.dataset.prediction_obs = "node" 
-    cfg.dataset.prediction_level = ""
-    cfg.dataset.layer_key = ""  #default: .X 
+    cfg.dataset.prediction_obs = None 
+    cfg.dataset.prediction_level = "node"
+    cfg.dataset.layer_key = None  #default: .X 
     cfg.dataset.sample_key = []
     cfg.dataset.group_label = ""
     cfg.dataset.split_key = "split"

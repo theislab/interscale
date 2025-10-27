@@ -143,7 +143,11 @@ Check out [this tutorial](./docs/notebooks/data_and_config_set_up/setup_Visium.i
 
 #### 2. Model training
 
-The model can either be trained interactively in a notebook (only recommended for small datasets) or via a script. 
+The model can either be trained interactively in a notebook (only recommended for small datasets) or via a script. If you train the model using a script, then execute:
+
+```
+python src/InterScale/main.py  --cfg "path/to/config.yaml" --model_type "CombinedModel"
+```
 
 In both cases the model will be saved as `.ckpt` and then loaded for the evaluation. 
                                     

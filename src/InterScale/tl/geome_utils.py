@@ -17,7 +17,7 @@ def prepare_a2d_dataset(cfg: CN):
 
         one_hot_encode_list = [prediction_obs]
         
-        X_key = f"layers/{layer_key}" if layer_key is not "" else "X"
+        X_key = f"layers/{layer_key}" if layer_key is not None else ".X"
         print(f"Load GEX from .{X_key}")
 
         if 'classification' in cfg.dataset.prediction_task:
@@ -90,7 +90,6 @@ def prepare_geome_dataset(adata,
     if cfg.dataset.split_key in adata.obs.columns:
         print(f'Split key {cfg.dataset.split_key} already exists in adata.obs')
         split_key = cfg.dataset.split_key
-    # TODO Add split
 
     # initalize object to save train, val and test PyG datas
     datas_train, datas_val, datas_test = list(), list(), list()
