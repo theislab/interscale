@@ -37,7 +37,12 @@ def main_sweep(cfg_path, model_type, sweep_goal):
         cfg.defrost()
         print('sweep config: ', sweep_config)
         print('sweep run: ', sweep_run.config)
-        if sweep_goal == 'hyperparmeter':
+        if sweep_goal == 'robustness':
+            print('robustness sweep')
+            cfg.dataset.pct_mask_nodes = sweep_config['dataset.pct_mask_nodes']
+            cfg.dataset.spatial_neigbors_kwargs.radius = sweep_config['dataset.spatial_neigbors_kwargs.radius']
+            cfg.optim.seed = sweep_config['optim.seed']
+        elif sweep_goal == 'hyperparmeter':
             print('hyperparameter sweep')
             cfg.optim.lr = sweep_config['optim.lr']
             cfg.optim.n_epochs = sweep_config['optim.n_epochs']
@@ -115,10 +120,13 @@ def main_sweep(cfg_path, model_type, sweep_goal):
                            pct_mask_nodes=cfg.dataset.pct_mask_nodes,
                            learning_type="node")
     
-    model.train(max_epochs = cfg.optim.n_epochs, 
+   model.train(max_epochs = cfg.optim.n_epochs, 
                 datamodule = dm,
-                early_stopping = True)
-
+                batch_size = cfg.dataset.batch_size,
+                early_stopping = cfg.optim.early_stopping,
+                train_size = cfg.dataset.train_size,
+                validation_size = cfg.dataset.val_size)
+   
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GTLongRange')
 
