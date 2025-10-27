@@ -145,7 +145,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         adata
             AnnData object
         layer_key
-            Key in `adata.layers` that contains the data.
+            Key in `adata.layers` that contains the data. If None, uses `adata.X` by default.
         prediction_obs:
             Key in `adata.obs` that contains the prediction information.
         sample_key  
@@ -159,7 +159,10 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             AnnDataManager object that contains the data.
         """  
         
-        anndata_fields = [fields.LayerField("x", layer = layer_key)]
+        if layer_key is not None or layer_key != "":
+            anndata_fields = [fields.LayerField("x", layer = layer_key)]
+        else:
+            anndata_fields = [fields.XField("x")]
         
         for i, sample_key in enumerate(sample_key_list):
             anndata_fields.append(fields.CategoricalObsField(registry_key = f'sample_key_{i}', attr_key = sample_key))
