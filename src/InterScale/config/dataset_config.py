@@ -17,7 +17,7 @@ def get_dataset_cfg(cfg):
     cfg.dataset.prediction_task = "regression" 
     cfg.dataset.prediction_obs = "node" 
     cfg.dataset.prediction_level = ""
-    cfg.dataset.layer_key = ""  #default: .X 
+    cfg.dataset.layer_key = None  #default: .X 
     cfg.dataset.sample_key = []
     cfg.dataset.group_label = ""
     cfg.dataset.split_key = "split"
