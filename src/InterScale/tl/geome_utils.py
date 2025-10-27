@@ -18,7 +18,7 @@ def prepare_a2d_dataset(cfg: CN):
         one_hot_encode_list = [prediction_obs]
         
         X_key = f"layers/{layer_key}" if layer_key is not None else ".X"
-        print(f"Load GEX from .{X_key}")
+        print(f"Load GEX from {X_key}")
 
         if 'classification' in cfg.dataset.prediction_task:
             fields = {

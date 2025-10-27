@@ -565,6 +565,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         # Initialize model
         model = cls(adata, cfg)
         
+        print(f"Loading model from {model_save_path}")
+        
         # Load state dict
         state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
         
