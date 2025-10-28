@@ -174,7 +174,6 @@ class SelfAttentionRelevance:
         loss.backward(retain_graph=True)
 
         num_tokens = self.transformer_encoder.layers[0].get_attn_output().shape[0]
-        print(num_tokens)
 
         #I = torch.eye(num_tokens, num_tokens).cuda()
         I = torch.eye(num_tokens, num_tokens)

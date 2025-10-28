@@ -38,5 +38,8 @@ def get_dataset_cfg(cfg):
 
     cfg.dataset.stratify_group = None
     cfg.dataset.pct_mask_nodes = 0.2
+    
+    # Segmentation robustness parameters
+    cfg.dataset.segmentation_robustness = None  # [node_fraction, overflow_fraction] or None
 
     return cfg

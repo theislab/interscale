@@ -150,8 +150,6 @@ class TrainingPlan(pl.LightningModule):
             y_pred = y_pred[mask_idx]
             y_true = y_true[mask_idx]
             
-        print('y_pred:', y_pred.shape)
-        print('y_true:', y_true.shape)
             
         if self.loss_type == 'GaussianNLL':
             y_var = compute_dynamic_variance(y_true, y_pred, axis=self.AXIS)
