@@ -120,7 +120,7 @@ def main_sweep(cfg_path, model_type, sweep_goal):
                            pct_mask_nodes=cfg.dataset.pct_mask_nodes,
                            learning_type="node")
     
-   model.train(max_epochs = cfg.optim.n_epochs, 
+    model.train(max_epochs = cfg.optim.n_epochs,
                 datamodule = dm,
                 batch_size = cfg.dataset.batch_size,
                 early_stopping = cfg.optim.early_stopping,
