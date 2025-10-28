@@ -4,6 +4,7 @@ from sklearn.metrics import average_precision_score, precision_recall_curve
 
 import matplotlib.pyplot as plt
 import numpy as np
+from anndata import AnnData
 
 def calculate_pr_auc(result: AnnData,
                      plot_curve: bool = True):
