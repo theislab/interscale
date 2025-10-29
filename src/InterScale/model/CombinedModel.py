@@ -94,8 +94,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
             columns=range(self.n_output)
         )
         
-        cls_token_horizontal = np.full(len(adata.obs_names), np.nan)
-        cls_token_vertical = np.full(len(adata.obs_names), np.nan)
+        cls_token_horizontal = np.full(len(adata.obs_names) + 1, np.nan)
+        cls_token_vertical = np.full(len(adata.obs_names) + 1, np.nan)
         
         for batch in pyg:
             ## Get model output
