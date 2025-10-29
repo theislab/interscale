@@ -55,7 +55,7 @@ def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, num_n
     attention_mask = torch.ones((num_batch*num_heads, max_seq_len+1, max_seq_len+1), device=edge_index.device)
     
     # Create full adjacency matrix + 1 for cls token (end of sequence)
-    adj_matrix = torch.ones((num_nodes, num_nodes), device=edge_index.device) 
+    adj_matrix = torch.zeros((num_nodes, num_nodes), device=edge_index.device) # TODO: check if zero or ones
     adj_matrix[edge_index[0], edge_index[1]] = 1  
     print('adj_matrix:', adj_matrix)
     
