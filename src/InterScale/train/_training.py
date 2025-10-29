@@ -154,10 +154,17 @@ class NodeMaskingTrainingPlan:
         )
         
         if early_stopping:
+            loss_callback = EarlyStopping(
+                    monitor="val_loss", 
+                    min_delta=0.001, 
+                    patience=(patience//2)*steps_per_epoch,  # Often shorter patience for loss
+                    verbose=False, 
+                    mode="min"
+                )
             if 'classification' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_f1_macro", min_delta=0.05, patience=patience*steps_per_epoch, verbose=False, mode="max")
+                performance_callback = EarlyStopping(monitor="val_f1_macro", min_delta=0.05, patience=patience*steps_per_epoch, verbose=False, mode="max")
             elif 'regression' in self.prediction_task:
-                early_stop_callback = EarlyStopping(monitor="val_mse", min_delta=0.005, patience=patience*steps_per_epoch, verbose=False, mode="min")
+                performance_callback = EarlyStopping(monitor="val_mse", min_delta=0.005, patience=patience*steps_per_epoch, verbose=False, mode="min")
             else:
                 raise Exception("Training must be classification or regression based.")
             
@@ -174,7 +181,7 @@ class NodeMaskingTrainingPlan:
                     raise Exception("Regression must be run with MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss or SCELoss loss.")            
             
         # Create list of callbacks and filter out None values
-        callbacks = [callback for callback in [lr_monitor, early_stop_callback, self.history_, checkpoint_callback] if callback is not None]
+        callbacks = [callback for callback in [lr_monitor, performance_callback, loss_callback, self.history_, checkpoint_callback] if callback is not None]
             
         # Set up WandB logger if requested
         logger = None
