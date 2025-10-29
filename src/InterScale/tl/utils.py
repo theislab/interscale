@@ -34,11 +34,9 @@ def check_and_update_cfg(cfg,
     cfg.freeze()
     return cfg
 
-
-
 def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, num_nodes: int, batch: torch.Tensor, index_nodes: list, num_heads: int) -> torch.Tensor:
     """
-    Creates an attention mask that is inverse to the edge indices.
+    Creates an attention mask that is inverse to the edge indices. Unmasekd = 0 and masked = 1
     If two nodes are connected in the adjacency matrix (edge_index = 1) then we have no attention (0) and vice versa. 
     
     Args:
@@ -54,11 +52,12 @@ def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, num_n
     max_seq_len = max(len(nodes) for nodes in index_nodes)
     
     # Initialize with 1s (no attention allowed) 
-    attention_mask = torch.zeros((num_batch*num_heads, max_seq_len+1, max_seq_len+1), device=edge_index.device)
+    attention_mask = torch.ones((num_batch*num_heads, max_seq_len+1, max_seq_len+1), device=edge_index.device)
     
     # Create full adjacency matrix + 1 for cls token (end of sequence)
     adj_matrix = torch.ones((num_nodes, num_nodes), device=edge_index.device) 
     adj_matrix[edge_index[0], edge_index[1]] = 1  
+    print('adj_matrix:', adj_matrix)
     
     # For each batch, extract the submatrix for kept nodes
     for b in range(num_batch):
