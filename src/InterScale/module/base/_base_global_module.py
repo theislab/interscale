@@ -110,11 +110,11 @@ class GlobalModuleClass(BaseModuleClass):
         prediction_level: Literal["node", "graph"]
             Level of prediction
         """
-        ## Graph-level prediction: get cls
+        ## Graph-level prediction: get cls_token from last position
         if 'graph' in prediction_level:
-            cls = global_embedding[-1,:, :] # [B, E]
-            return self.decoder(cls)
-        ## Node-level prediction: remove cls
+            cls_token = global_embedding[-1,:, :] # [B, E]
+            return self.decoder(cls_token)
+        ## Node-level prediction: remove cls_token from last position
         elif 'node' in prediction_level: 
             h_graph = global_embedding[:-1] # [E, B, C]
             h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
