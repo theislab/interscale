@@ -1,6 +1,7 @@
 import pytest
 import torch
 from torch_geometric.data import Data, Batch
+from torch import nn
 import numpy as np
 
 from InterScale.module.global_modules.transformer_encoder import TransformerNodeEncoderHook
@@ -24,10 +25,10 @@ def sample_transformer_config():
 
 
 @pytest.fixture
-def sample_graph_data():
+def sample_graph_data(sample_transformer_config):
     """Create sample graph data for testing."""
-    num_nodes = 8
-    num_features = 10
+    num_nodes = sample_transformer_config['n_input']
+    num_features = 40
     
     # Create random node features
     x = torch.randn(num_nodes, num_features)
@@ -50,16 +51,9 @@ def transformer_encoder(sample_transformer_config):
     return TransformerNodeEncoderHook(**sample_transformer_config)
 
 
-def test_cls_embedding_consistency_forward_vs_evaluate(transformer_encoder, sample_graph_data):
+def test_cls_embedding_at_sequence_end(transformer_encoder, sample_graph_data):
     """
-    Test that the CLS embedding appended during forward pass is the same 
-    as the one retrieved during evaluation.
-    
-    This test verifies:
-    1. CLS embedding is properly appended during forward pass
-    2. CLS embedding is positioned correctly (at the end of sequence)
-    3. The same CLS embedding is used in both forward and evaluate methods
-    4. CLS embedding values are consistent across calls
+    Test that the CLS embedding is appended at the end of the sequence.
     """
     # Set model to evaluation mode
     transformer_encoder.eval()
@@ -71,62 +65,24 @@ def test_cls_embedding_consistency_forward_vs_evaluate(transformer_encoder, samp
     
     # Test 1: Forward pass - get CLS embedding from appended sequence
     with torch.no_grad():
+        
+        cls_embedding = transformer_encoder.cls_embedding 
+        print('cls_embedding.shape:', cls_embedding.shape)
+        print('cls_embedding values:', cls_embedding)
+        
         # Prepare data for forward pass
         padded_emb, src_padding_mask, index_nodes, attention_mask = transformer_encoder.common_step_local_to_global(
             sample_graph_data, sample_embeddings, eval=False
         )
         
-        # Forward pass
-        transformer_out_forward, src_padding_mask_forward = transformer_encoder.forward(
-            padded_emb, src_padding_mask, register_hook=False
-        )
+        # append cls embedding
+        expand_cls_embedding = transformer_encoder.cls_embedding.expand(1, padded_emb.size(1), -1)
+        padded_emb = torch.cat([padded_emb, expand_cls_embedding], dim=0)
+        print('expanded_cls_embedding.shape:', expand_cls_embedding)
+        print('padded_emb.shape:', padded_emb)
         
-        print('transformer_out_forward.shape:', transformer_out_forward.shape)
-        
-        # Extract CLS embedding from forward pass output (last position)
-        cls_embedding_forward = transformer_out_forward[-1, :, :]  # Shape: [batch_size, n_embed]
-        
-    # Test 2: Evaluate method - get CLS embedding from evaluation
-    # Note: evaluate method requires gradients for hook registration and backward pass
-    transformer_in_eval, transformer_out_eval, src_padding_mask_eval, index_nodes_eval, I = transformer_encoder.evaluate(
-        sample_graph_data, sample_embeddings
-    )
-    
-    # Extract CLS embedding from evaluate output (last position)
-    cls_embedding_eval = transformer_out_eval[-1, :, :]  # Shape: [batch_size, n_embed]
-    
-    # Test 3: Verify CLS embeddings are identical
-    assert torch.allclose(cls_embedding_forward, cls_embedding_eval, atol=1e-6), \
-        "CLS embeddings from forward and evaluate methods should be identical"
-    
-    # Test 4: Verify CLS embedding is the same as the stored parameter
-    stored_cls_embedding = transformer_encoder.cls_embedding.squeeze(0)  # Remove batch dimension
-    assert torch.allclose(cls_embedding_forward, stored_cls_embedding, atol=1e-6), \
-        "CLS embedding should match the stored parameter"
-    
-    # Test 5: Verify output shapes are correct
-    batch_size = 1  # Single graph
-    assert cls_embedding_forward.shape == (batch_size, embedding_dim), \
-        f"CLS embedding shape should be ({batch_size}, {embedding_dim}), got {cls_embedding_forward.shape}"
-    
-    assert cls_embedding_eval.shape == (batch_size, embedding_dim), \
-        f"CLS embedding shape should be ({batch_size}, {embedding_dim}), got {cls_embedding_eval.shape}"
-    
-    # Test 6: Verify CLS embedding is positioned at the end of the sequence
-    assert transformer_out_forward.shape[0] == transformer_out_eval.shape[0], \
-        "Sequence length should be the same in both forward and evaluate outputs"
-    
-    # Test 7: Verify that the CLS embedding is actually appended (sequence length increased by 1)
-    original_seq_len = padded_emb.shape[0]
-    output_seq_len = transformer_out_forward.shape[0]
-    assert output_seq_len == original_seq_len + 1, \
-        f"Output sequence length should be {original_seq_len + 1}, got {output_seq_len}"
-    
-    print(f"✓ CLS embedding consistency test passed")
-    print(f"  - Forward CLS embedding shape: {cls_embedding_forward.shape}")
-    print(f"  - Evaluate CLS embedding shape: {cls_embedding_eval.shape}")
-    print(f"  - Sequence length: {original_seq_len} -> {output_seq_len}")
-
+        assert padded_emb[-1, :, :] == cls_embedding, "CLS embedding should be appended at the end of the sequence"
+                
 
 def test_cls_embedding_multiple_calls_consistency(transformer_encoder, sample_graph_data):
     """

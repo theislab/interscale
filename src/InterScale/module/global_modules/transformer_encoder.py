@@ -116,8 +116,8 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                 encoder.register_hook = True
 
         # append cls embedding
-        expand_cls_embedding = self.cls_embedding.expand(1, padded_h_node.size(1), -1)
-        padded_h_node = torch.cat([padded_h_node, expand_cls_embedding], dim=0)
+        expand_cls_embedding = self.cls_embedding.expand(1, padded_h_node.size(1), -1) # expand cls embedding to the same batch size (1, B, E)
+        padded_h_node = torch.cat([padded_h_node, expand_cls_embedding], dim=0) #append cls embedding at the end of the sequence
         # normalize input
         padded_h_node = self.norm_input(padded_h_node)
 

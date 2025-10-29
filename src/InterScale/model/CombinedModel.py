@@ -102,6 +102,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
             transformer_in, global_embedding, src_padding_mask, index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
             
+            print('I.shape:', I.shape)
+            
             ## Save model output
             # Get indices for this sample
             sample_mask = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
