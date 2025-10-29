@@ -94,8 +94,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
             columns=range(self.n_output)
         )
         
-        cls_token_horizontal = np.full(len(adata.obs_names) + 1, np.nan)
-        cls_token_vertical = np.full(len(adata.obs_names) + 1, np.nan)
+        cls_token_horizontal = np.full(len(adata.obs_names), np.nan)
+        cls_token_vertical = np.full(len(adata.obs_names), np.nan)
         
         for batch in pyg:
             ## Get model output
@@ -111,8 +111,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[index_nodes[0]]
             sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
             global_embeddings_df.loc[sample_mask] = global_embedding[:-1].squeeze(1).detach().cpu().numpy()
-            cls_token_horizontal[sample_mask] = I[-1, :].squeeze().cpu().detach().numpy() 
-            cls_token_vertical[sample_mask] = I[:, -1].squeeze().cpu().detach().numpy() 
+            cls_token_horizontal[sample_mask] = I[-1, :-1].squeeze().cpu().detach().numpy() 
+            cls_token_vertical[sample_mask] = I[:-1, -1].squeeze().cpu().detach().numpy() 
             attn_matrix = I[:-1, :-1].cpu().detach().numpy()
             # Pad attention matrix to match max_seq_len with NaN
             padded_attn = np.full((attn_matrix.shape[0], self._cfg.model.global_component.parameters.max_seq_len), np.nan)
