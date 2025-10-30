@@ -185,7 +185,7 @@ class NodeMaskingTrainingPlan:
             
         # Set up WandB logger if requested
         logger = None
-        if self._cfg.wandb.use:
+        if self.wandb.use:
             print('Wandb initialize...')
             run_name = get_model_filename_prefix(self._cfg, self.local_component, self.global_component)
             if self._cfg.wandb.project_name is None:
