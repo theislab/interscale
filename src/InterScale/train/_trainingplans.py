@@ -93,7 +93,7 @@ class TrainingPlan(pl.LightningModule):
         if 'classification' in self.prediction_task:
             metrics = self._setup_classification_metrics(self.module.n_output)
             self.loss = self._setup_classification_loss(self.loss_type, self.class_weights)
-            self.monitor_metric = 'val_f1'
+            self.monitor_metric = 'val_acc'
         elif 'regression' in self.prediction_task:
             metrics = self._setup_regression_metrics(self.module.n_output)
             self.loss = self._setup_regression_loss(self.loss_type)
@@ -273,8 +273,10 @@ class TrainingPlan(pl.LightningModule):
             lr_scheduler = CosineWarmupScheduler(optimizer,
                                                 warmup=self.lr_warmup,
                                                 max_epochs=self.lr_max_epochs)
+            self.monitor_metric = None
         elif self.lr_scheduler is None:
             lr_scheduler = None
+            self.monitor_metric = None
         else:
             raise ValueError(f"Invalid lr_scheduler: {self.lr_scheduler}. Must be either 'None', 'ReduceLROnPlateau' or 'CosineWarmupScheduler'.")
 
