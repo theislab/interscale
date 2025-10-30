@@ -157,6 +157,7 @@ class NodeMaskingTrainingPlan:
         )
         
         if early_stopping:
+            #TODO: why does the self.history_ stop working when using loss_callback?
             # loss_callback = EarlyStopping(
             #         monitor="val_loss", 
             #         min_delta=0.001, 
@@ -221,11 +222,12 @@ class NodeMaskingTrainingPlan:
             trainer.test(training_plan, datamodule)
         
         # Print early stopping information if it was used
-        if early_stopping and loss_callback is not None or performance_callback is not None:
+        if early_stopping and loss_callback is not None:
             if loss_callback.stopped_epoch > 0:
                 print(f"\nEarly stopping triggered at epoch {loss_callback.stopped_epoch}")
                 print(f"Best {loss_callback.monitor}: {loss_callback.best_score:.4f}")
-            elif performance_callback.stopped_epoch > 0:
+        if early_stopping and performance_callback is not None:
+            if performance_callback.stopped_epoch > 0:
                 print(f"\nEarly stopping triggered at epoch {performance_callback.stopped_epoch}")
                 print(f"Best {performance_callback.monitor}: {performance_callback.best_score:.4f}")
         
