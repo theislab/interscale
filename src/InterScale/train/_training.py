@@ -32,9 +32,9 @@ class NodeMaskingTrainingPlan:
     def train(
         self,
         max_epochs: int,
-        batch_size: int,
-        train_size: float,
-        validation_size: float,
+        # batch_size: int,
+        # train_size: float,
+        # validation_size: float,
         shuffle_set_split: bool = True,
         load_sparse_tensor: bool = False,
         early_stopping: bool = False,
@@ -122,9 +122,10 @@ class NodeMaskingTrainingPlan:
         seed_everything(self._cfg.optim.seed, workers=True)
         
         self.wandb_use = wandb_use if wandb_use is not None else self._cfg.wandb.use
-        
-        self.batch_size = batch_size
-        
+        self.batch_size = self._cfg.dataset.batch_size
+        self.train_size = self._cfg.dataset.train_size
+        self.validation_size = self._cfg.dataset.val_size
+                
         #TODO: change steps per epoch to be based on datamodule
         #steps_per_epoch = math.ceil(len(train_ds) / cfg.dataset.batch_size)
         steps_per_epoch = math.ceil(len(datamodule.train_data) / self.batch_size)
@@ -132,6 +133,8 @@ class NodeMaskingTrainingPlan:
         lr_monitor = LearningRateMonitor(logging_interval='epoch')
         self.history_ = MetricsHistory()
         checkpoint_callback = None
+        loss_callback = None
+        performance_callback = None
         early_stop_callback = None
             
         # defines optimizers, training step, val step, logged metrics
@@ -214,14 +217,17 @@ class NodeMaskingTrainingPlan:
         
         trainer.fit(training_plan, datamodule)
         trainer.validate(training_plan, datamodule)
-        if train_size + validation_size < 1:
+        if self.train_size + self.validation_size < 1:
             trainer.test(training_plan, datamodule)
         
         # Print early stopping information if it was used
-        if early_stopping and early_stop_callback is not None:
-            if early_stop_callback.stopped_epoch > 0:
-                print(f"\nEarly stopping triggered at epoch {early_stop_callback.stopped_epoch}")
-                print(f"Best {early_stop_callback.monitor}: {early_stop_callback.best_score:.4f}")
+        if early_stopping and loss_callback is not None or performance_callback is not None:
+            if loss_callback.stopped_epoch > 0:
+                print(f"\nEarly stopping triggered at epoch {loss_callback.stopped_epoch}")
+                print(f"Best {loss_callback.monitor}: {loss_callback.best_score:.4f}")
+            elif performance_callback.stopped_epoch > 0:
+                print(f"\nEarly stopping triggered at epoch {performance_callback.stopped_epoch}")
+                print(f"Best {performance_callback.monitor}: {performance_callback.best_score:.4f}")
         
         if self._cfg.model.save is not None:
             print('Model checkpoint will be saved in: ', self._cfg.model.save + run_name + "model.ckpt")
@@ -229,9 +235,9 @@ class NodeMaskingTrainingPlan:
             self.save(self._cfg.model.save)
 
         # Close WandB logger if it was used
-        if self._cfg.wandb.use and logger is not None:
+        if self.wandb_use and logger is not None:
             logger.finalize("success")
-                    
+
         self.is_trained_ = True
     
 
