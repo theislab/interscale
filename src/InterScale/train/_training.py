@@ -157,13 +157,13 @@ class NodeMaskingTrainingPlan:
         )
         
         if early_stopping:
-            loss_callback = EarlyStopping(
-                    monitor="val_loss", 
-                    min_delta=0.001, 
-                    patience=(patience//2)*steps_per_epoch,  # Often shorter patience for loss
-                    verbose=False, 
-                    mode="min"
-                )
+            # loss_callback = EarlyStopping(
+            #         monitor="val_loss", 
+            #         min_delta=0.001, 
+            #         patience=(patience//2)*steps_per_epoch,  # Often shorter patience for loss
+            #         verbose=False, 
+            #         mode="min"
+            #     )
             if 'classification' in self.prediction_task:
                 performance_callback = EarlyStopping(monitor="val_f1_macro", min_delta=0.05, patience=patience*steps_per_epoch, verbose=False, mode="max")
             elif 'regression' in self.prediction_task:
