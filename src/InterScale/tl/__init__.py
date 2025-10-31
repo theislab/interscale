@@ -5,6 +5,7 @@ from .utils import create_transformer_attention_mask_from_edges, check_and_updat
 from .self_attn_relevance import SelfAttentionRelevance
 from .masking import apply_mask
 from ._preprocessing import remove_zero_expression_cells
+from .patient_split import split_adata_patient_stratified
 
 __all__ = ["CosineWarmupScheduler", 
            "prepare_geome_dataset",
@@ -14,4 +15,5 @@ __all__ = ["CosineWarmupScheduler",
            "check_and_update_cfg",
            "SelfAttentionRelevance",
            "apply_mask",
-           "remove_zero_expression_cells"]
+           "remove_zero_expression_cells", 
+           "split_adata_patient_stratified"]

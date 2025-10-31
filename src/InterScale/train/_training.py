@@ -32,9 +32,6 @@ class NodeMaskingTrainingPlan:
     def train(
         self,
         max_epochs: int,
-        # batch_size: int,
-        # train_size: float,
-        # validation_size: float,
         shuffle_set_split: bool = True,
         load_sparse_tensor: bool = False,
         early_stopping: bool = False,

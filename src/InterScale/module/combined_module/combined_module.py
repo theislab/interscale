@@ -13,7 +13,7 @@ class CombinedModuleClass(BaseModuleClass):
     
     def __init__(self,
                  cfg: CN,
-                 **base_module_kwargs,):
+                 **base_module_kwargs):
         super().__init__(**base_module_kwargs)
         
         self.local_module_args = cfg.model.local_component
