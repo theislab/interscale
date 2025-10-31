@@ -280,4 +280,4 @@ class TrainingPlan(pl.LightningModule):
         else:
             raise ValueError(f"Invalid lr_scheduler: {self.lr_scheduler}. Must be either 'None', 'ReduceLROnPlateau' or 'CosineWarmupScheduler'.")
 
-        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch', 'monitor': self.monitor_metric}]
+        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch', 'monitor': self.monitor_metric}] 

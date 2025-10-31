@@ -67,7 +67,6 @@ def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, num_n
         # Add row and column of ones for CLS token - full attention
         batch_mask = torch.cat([batch_mask, torch.zeros(batch_mask.size(0), 1, device=batch_mask.device)], dim=1)  # Add column
         batch_mask = torch.cat([batch_mask, torch.zeros(1, batch_mask.size(1), device=batch_mask.device)], dim=0)  # Add row
-        print('batch_mask:', batch_mask)
         attention_mask[b*num_heads:b*num_heads+num_heads, :seq_len+1, :seq_len+1] = batch_mask
     return attention_mask
 
