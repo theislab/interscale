@@ -42,6 +42,10 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             cfg.dataset.pct_mask_nodes = sweep_config['dataset.pct_mask_nodes']
             cfg.dataset.spatial_neigbors_kwargs.radius = sweep_config['dataset.spatial_neigbors_kwargs.radius']
             cfg.optim.seed = sweep_config['optim.seed']
+        elif sweep_goal == 'segmentation':
+            print('segmentation sweep')
+            cfg.dataset.segmentation_robustness = sweep_config['dataset.segmentation_robustness']
+            cfg.optim.seed = sweep_config['optim.seed']
         elif sweep_goal == 'hyperparmeter':
             print('hyperparameter sweep')
             cfg.optim.lr = sweep_config['optim.lr']
