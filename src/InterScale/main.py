@@ -61,10 +61,7 @@ def main(cfg_path, model_type):
     
     model.train(max_epochs = cfg.optim.n_epochs, 
                 datamodule = dm,
-                batch_size = cfg.dataset.batch_size,
-                early_stopping = cfg.optim.early_stopping,
-                train_size = cfg.dataset.train_size,
-                validation_size = cfg.dataset.val_size)
+                early_stopping = cfg.optim.early_stopping)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GTLongRange')

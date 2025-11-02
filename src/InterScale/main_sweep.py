@@ -75,6 +75,10 @@ def main_sweep(cfg_path, model_type, sweep_goal):
     print(cfg)
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
     print(adata)
+    if cfg.dataset.segmentation_robustness is not None:
+        print('Applying segmentation noise...')
+        sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
+        adata = apply_segmentation_noise(adata, cfg.dataset.segmentation_robustness)
     
     if model_type == "LocalModel":
         interscale.model.LocalModel._setup_anndata(adata = adata,
@@ -122,10 +126,7 @@ def main_sweep(cfg_path, model_type, sweep_goal):
     
     model.train(max_epochs = cfg.optim.n_epochs,
                 datamodule = dm,
-                batch_size = cfg.dataset.batch_size,
-                early_stopping = cfg.optim.early_stopping,
-                train_size = cfg.dataset.train_size,
-                validation_size = cfg.dataset.val_size)
+                early_stopping = cfg.optim.early_stopping)
    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GTLongRange')

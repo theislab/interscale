@@ -33,7 +33,12 @@ class GlobalModuleClass(BaseModuleClass):
                              type: Literal["PCA", "scvi"]):
         """Generate embeddings for GEX if no local component is used."""
         if type == "PCA":
-            return self.pca.fit_transform(embeddings)
+            # Fit PCA only once (on first batch), then use transform for subsequent batches
+            # This avoids expensive refitting on every batch during training
+            if not hasattr(self.pca, 'components_'):
+                return self.pca.fit_transform(embeddings)
+            else:
+                return self.pca.transform(embeddings)
         # elif type == "scvi":
         #     return scvi.model.SCVI(embeddings)
         else:
