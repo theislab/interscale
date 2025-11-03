@@ -233,19 +233,22 @@ class TrainingPlan(pl.LightningModule):
                 for class_idx, class_score in enumerate(metrics_dict[f'{mode}_f1_per_class']):
                     metrics_dict[f'{mode}_f1_{self.class_labels[class_idx]}'] = class_score
                 metrics_dict.pop(f'{mode}_f1_per_class')
+                
             
         elif 'regression' in self.prediction_task:
-            loss, metrics_dict = self._regression_metrics(y_pred, y_true, mode, metrics_dict)
+            loss, metrics_dict = self._regression_metrics(y_pred, y_true, mode, metrics)
             
         # Set sync_dist=True only for test mode
         sync_dist = (mode == 'test')
         if mode == 'train':
-            print('train step')
+            metrics_dict[f'{mode}_loss'] = loss
             self.log_dict(metrics_dict, 
                      batch_size=int(self.batch_size), 
                      on_step=True, 
                      on_epoch=False,
                      sync_dist=sync_dist)
+            
+        print('loss', loss)
         
         return loss
 
@@ -257,6 +260,9 @@ class TrainingPlan(pl.LightningModule):
         """
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
         return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics)
+    
+    def on_train_epoch_end(self):
+        self.train_metrics.reset()
 
     def validation_step(self, batch):
         """Validation step for the model."""
