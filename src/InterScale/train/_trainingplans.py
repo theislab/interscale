@@ -241,6 +241,7 @@ class TrainingPlan(pl.LightningModule):
         # Set sync_dist=True only for test mode
         sync_dist = (mode == 'test')
         if mode == 'train':
+            print('train step')
             metrics_dict[f'{mode}_loss'] = loss
             self.log_dict(metrics_dict, 
                      batch_size=int(self.batch_size), 
