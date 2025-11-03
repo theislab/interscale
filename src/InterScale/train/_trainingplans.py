@@ -224,8 +224,9 @@ class TrainingPlan(pl.LightningModule):
         metrics: MetricCollection
             Metrics to log
         """        
+        print('y_true', y_true.shape)
+        print('y_pred', y_pred.shape)
         assert y_true.shape == y_pred.shape, "y_true and y_pred must have the same shape"
-        #TODO: where is the batch size?
         
         if 'classification' in self.prediction_task:
             loss, metrics_dict = self._classification_metrics(y_pred, y_true, mode, metrics)
