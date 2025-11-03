@@ -172,9 +172,7 @@ class TrainingPlan(pl.LightningModule):
         elif mode == 'val' or mode == 'test':
             metrics.update(pred_classes, true_classes)
             metrics_dict = {}
-            
-        
-        
+
         return loss, metrics_dict
             
     def _regression_metrics(
