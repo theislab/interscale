@@ -158,12 +158,13 @@ class GlobalModuleClass(BaseModuleClass):
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
         global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
-        
-        y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
-        
+        print('global_embedding', global_embedding.shape, global_embedding)
         y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
         print('y_pred', y_pred.shape, y_pred)
-        print('global_embedding', global_embedding.shape, global_embedding)
+        print('padded_emb', padded_emb.shape, padded_emb)
+        print('mask_idx', mask_idx.shape, mask_idx)
+        
+        y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
         
         assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
         
