@@ -218,14 +218,15 @@ class TrainingPlan(pl.LightningModule):
         Parameters
         ----------
         y_true, y_pred: torch.Tensor
-            True and predicted values of shape [N, G], where N is the number of cells and G is the number of genes
+            Classificaton: [B, C] with B being the batch size and C being the number of classes.
+            Regression: [N, G] with N being the number of cells or genes and G being the number of genes.
         mode
             One of 'train', 'val', or 'test'
         metrics: MetricCollection
             Metrics to log
         """        
-        print('y_true', y_true.shape)
-        print('y_pred', y_pred.shape)
+        print('y_true', y_true.shape, y_true)
+        print('y_pred', y_pred.shape, y_pred)
         assert y_true.shape == y_pred.shape, "y_true and y_pred must have the same shape"
         
         if 'classification' in self.prediction_task:
