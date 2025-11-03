@@ -229,6 +229,10 @@ class TrainingPlan(pl.LightningModule):
         
         if 'classification' in self.prediction_task:
             loss, metrics_dict = self._classification_metrics(y_pred, y_true, mode, metrics)
+            if mode == 'train':
+                for class_idx, class_score in enumerate(metrics[f'{mode}_f1_per_class']):
+                    metrics[f'{mode}_f1_{self.class_labels[class_idx]}'] = class_score
+                metrics.pop(f'{mode}_f1_per_class')
             
         elif 'regression' in self.prediction_task:
             loss, metrics_dict = self._regression_metrics(y_pred, y_true, mode, metrics_dict)
@@ -236,6 +240,7 @@ class TrainingPlan(pl.LightningModule):
         # Set sync_dist=True only for test mode
         sync_dist = (mode == 'test')
         if mode == 'train':
+            print('train step')
             self.log_dict(metrics_dict, 
                      batch_size=int(self.batch_size), 
                      on_step=True, 
@@ -261,6 +266,10 @@ class TrainingPlan(pl.LightningModule):
     def on_validation_epoch_end(self):
         print('validation epoch end')
         metrics_dict = self.valid_metrics.compute()
+        if 'classification' in self.prediction_task:
+            for class_idx, class_score in enumerate(metrics_dict[f'val_f1_per_class']):
+                metrics_dict[f'val_f1_{self.class_labels[class_idx]}'] = class_score
+            metrics_dict.pop(f'val_f1_per_class')
         self.log_dict(metrics_dict, 
                      batch_size=int(self.batch_size), 
                      on_step=False, 
