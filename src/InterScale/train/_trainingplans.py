@@ -172,6 +172,8 @@ class TrainingPlan(pl.LightningModule):
         elif mode == 'val' or mode == 'test':
             metrics.update(pred_classes, true_classes)
             metrics_dict = {}
+            
+        
         
         return loss, metrics_dict
             
@@ -230,9 +232,9 @@ class TrainingPlan(pl.LightningModule):
         if 'classification' in self.prediction_task:
             loss, metrics_dict = self._classification_metrics(y_pred, y_true, mode, metrics)
             if mode == 'train':
-                for class_idx, class_score in enumerate(metrics[f'{mode}_f1_per_class']):
-                    metrics[f'{mode}_f1_{self.class_labels[class_idx]}'] = class_score
-                metrics.pop(f'{mode}_f1_per_class')
+                for class_idx, class_score in enumerate(metrics_dict[f'{mode}_f1_per_class']):
+                    metrics_dict[f'{mode}_f1_{self.class_labels[class_idx]}'] = class_score
+                metrics_dict.pop(f'{mode}_f1_per_class')
             
         elif 'regression' in self.prediction_task:
             loss, metrics_dict = self._regression_metrics(y_pred, y_true, mode, metrics_dict)
