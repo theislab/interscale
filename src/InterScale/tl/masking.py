@@ -25,9 +25,8 @@ def apply_mask(batched_data: Batch):
         mask_idx = torch.tensor([1, 3])
         masked_values = torch.tensor([[0., 0.], [3., 4.], [0., 0.], [7., 8.]])
     """
-    if batched_data.mask is None:
-        print("No mask found in batched_data")
-        return batched_data
+    assert batched_data.mask is not None, "Mask is not set in the batch."
+    
     mask = batched_data.mask
     mask_idx = torch.where(mask == 1)[0] # TODO into 2D array [B, N_batched_nodes]
     masked_values = batched_data.x.clone()

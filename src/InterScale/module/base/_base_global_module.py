@@ -31,7 +31,20 @@ class GlobalModuleClass(BaseModuleClass):
     def create_gex_embedding(self, 
                              embeddings: torch.Tensor,
                              type: Literal["PCA", "scvi"]):
-        """Generate embeddings for GEX if no local component is used."""
+        """Generate embeddings for GEX if no local component is used.
+        
+        Parameters
+        ----------
+        batch.x: torch.Tensor
+            Size: [N, F]
+        type: Literal["PCA", "scvi"]
+            Type of embedding to generate.
+        
+        Returns
+        -------
+        gex_embedding: torch.Tensor
+            Size: [N, E]
+        """
         if type == "PCA":
             # Fit PCA only once (on first batch), then use transform for subsequent batches
             # This avoids expensive refitting on every batch during training
@@ -147,14 +160,12 @@ class GlobalModuleClass(BaseModuleClass):
             Size: [N, C] (classification) or [N, F] (regression) with SEQ_LEN_MASK for padding nodes.
         """
         # Mask nodes  - before GEX embedding because otherwise embedding contains information about masked nodes
-        if self.pct_mask_nodes > 0:
-            batch_masked, mask_idx = apply_mask(batch)
-        else:
-            mask_idx = torch.ones(batch.x.shape[0], dtype=torch.bool, device=batch.x.device)
-            batch_masked = batch
+        batch_masked, mask_idx = self._common_step_masking(batch)
         
         embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type="PCA")
         embedding = torch.tensor(embedding, dtype=torch.float32, device=batch_masked.x.device)
+        
+        assert embedding.shape == (batch_masked.x.shape[0], self.n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}"
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
         global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
