@@ -76,7 +76,7 @@ def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor,
         batch_mask = torch.cat([batch_mask, torch.zeros(1, batch_mask.size(1), device=batch_mask.device)], dim=0)  # Add row
         assert batch_mask.shape == (seq_len+1, seq_len+1), f"Mismatch: batch_mask.shape: {batch_mask.shape}, (seq_len+1, seq_len+1): {(seq_len+1, seq_len+1)}"
         assert attention_mask.shape[-2:] == (max_seq_len+1, max_seq_len+1), f"Mismatch: attention_maks.shape[-2:]: {attention_mask.shape[-2:]}, (seq_len+1, seq_len+1): {(seq_len+1, seq_len+1)}"
-        #attention_mask[b*num_heads:b*num_heads+num_heads, -seq_len+1:, -seq_len+1:] = batch_mask
+        # append inverse adjacency matrix to the end of the attention mask
         attention_mask[b*num_heads:b*num_heads+num_heads, -(seq_len+1):, -(seq_len+1):] = batch_mask
     return attention_mask
 
