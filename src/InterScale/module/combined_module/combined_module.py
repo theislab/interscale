@@ -40,10 +40,7 @@ class CombinedModuleClass(BaseModuleClass):
     def predict(self,
                 global_embedding,
                 src_padding_mask,
-                prediction_level,
-                prediction_task,
-                pad_index_nodes,
-                mask_idx):
+                prediction_level):
         """Predict with the decoder."""
         return self.global_module.predict(global_embedding, src_padding_mask, prediction_level)
         
@@ -56,7 +53,18 @@ class CombinedModuleClass(BaseModuleClass):
         batch_masked, mask_idx = self._common_step_masking(batch)
             
         local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask = self.forward(batch_masked)
-        y_pred, y_true = self.predict(global_embedding, src_padding_mask, prediction_level, prediction_task, pad_index_nodes, mask_idx)
+        y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
+        
+        if prediction_task == 'classification' and prediction_level == 'graph':
+            y_true = batch.y[batch.ptr[:-1]]
+        else:
+            y_true, adjusted_mask_idx = self.global_module._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
+            y_pred = y_pred[adjusted_mask_idx]
+            y_true = y_true[adjusted_mask_idx]
+            
+        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
+        assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
+        assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
 
         return local_embedding, global_embedding, y_pred, y_true
     

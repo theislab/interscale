@@ -95,8 +95,7 @@ class GlobalModel(NodeMaskingTrainingPlan,
             embedding = torch.tensor(embedding, dtype=torch.float32, device=batch.x.device)
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.evaluate(batch, embedding)
             # no masking during evaluation
-            mask_idx = torch.arange(batch.x.shape[0], device=batch.x.device)
-            y_pred, y_true = self.module.predict(global_embedding, src_padding_mask, self.prediction_level, self.prediction_task, pad_index_nodes, mask_idx)
+            y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
             #I = self_attention_relevance.generate_relevance(transformer_in, src_padding_mask)
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[index_nodes[0]]
             sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)

@@ -133,29 +133,16 @@ class GlobalModuleClass(BaseModuleClass):
         ## Graph-level prediction: get cls_token from last position
         if 'graph' in prediction_level:
             cls_token = global_embedding[-1,:, :] # [B, E]
-            y_pred = self.decoder(cls_token)
+            return self.decoder(cls_token)
         ## Node-level prediction: remove cls_token from last position
         elif 'node' in prediction_level: 
             h_graph = global_embedding[:-1] # [E, B, C]
             h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
             src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
             masked_output = h_graph[~ src_padding_mask] # [N, E]
-            y_pred = self.decoder(masked_output)
+            return self.decoder(masked_output)
         else:
             raise Exception('Choose a valid prediction tasks (graph or node).')
-        
-        if prediction_task == 'classification' and prediction_level == 'graph':
-            y_true = batch.y[batch.ptr[:-1]]
-        else:
-            y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
-            y_pred = y_pred[adjusted_mask_idx]
-            y_true = y_true[adjusted_mask_idx]
-            
-        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
-        assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
-        assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
-            
-        return y_pred, y_true
         
     def _common_step(self,
                      batch,
@@ -187,7 +174,18 @@ class GlobalModuleClass(BaseModuleClass):
         global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
         assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
         
-        y_pred, y_true = self.predict(global_embedding, src_padding_mask, prediction_level, prediction_task, pad_index_nodes, mask_idx)
+        y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
+        
+        if prediction_task == 'classification' and prediction_level == 'graph':
+            y_true = batch.y[batch.ptr[:-1]]
+        else:
+            y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
+            y_pred = y_pred[adjusted_mask_idx]
+            y_true = y_true[adjusted_mask_idx]
+            
+        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
+        assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
+        assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
         
         return None, global_embedding, y_pred, y_true
 
