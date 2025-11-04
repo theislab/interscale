@@ -40,7 +40,10 @@ class CombinedModuleClass(BaseModuleClass):
     def predict(self,
                 global_embedding,
                 src_padding_mask,
-                prediction_level):
+                prediction_level,
+                prediction_task,
+                pad_index_nodes,
+                mask_idx):
         """Predict with the decoder."""
         return self.global_module.predict(global_embedding, src_padding_mask, prediction_level)
         
@@ -50,42 +53,12 @@ class CombinedModuleClass(BaseModuleClass):
                     prediction_level: Literal["node", "graph"]):
         """Shared step between train, val and test.
         """
-        # Mask nodes 
-        if self.pct_mask_nodes > 0:
-            batch_masked, mask_idx = apply_mask(batch)
-        else:
-            # pretend as if all nodes are masked
-            mask_idx = torch.arange(batch.x.shape[0])
-            batch_masked = batch
+        batch_masked, mask_idx = self._common_step_masking(batch)
             
         local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask = self.forward(batch_masked)
-        
-        y_true, adjusted_mask_idx = self.global_module._process_batch_for_metrics(batch, 
-                                                                    prediction_task, 
-                                                                    prediction_level, 
-                                                                    pad_index_nodes, 
-                                                                    mask_idx)
-        
-        y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
+        y_pred, y_true = self.predict(global_embedding, src_padding_mask, prediction_level, prediction_task, pad_index_nodes, mask_idx)
 
-        if prediction_level == "node":
-            y_pred = y_pred[adjusted_mask_idx]
-            y_true = y_true[adjusted_mask_idx]
-        
-        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent" 
         return local_embedding, global_embedding, y_pred, y_true
-        
-    def forward(
-        self,
-        batch_masked):
-        """Forward pass through the model"""
-        
-        local_embedding = self.local_module.forward(batch_masked.x, batch_masked.edge_index)
-        
-        padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.global_module.common_step_local_to_global(batch_masked, local_embedding)
-        global_embedding, src_padding_mask = self.global_module.forward(padded_emb, src_padding_mask, attention_mask)
-        
-        return local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask
     
     def get_model_summary(self) -> str:
         """Returns a string containing the model's parameters summary.

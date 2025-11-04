@@ -100,9 +100,10 @@ class CombinedModel(NodeMaskingTrainingPlan,
         for batch in pyg:
             ## Get model output
             local_embedding = self.module.local_module.forward(batch.x, batch.edge_index)
-            transformer_in, global_embedding, src_padding_mask, index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
-            y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
-            
+            transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
+            # no masking during evaluation
+            mask_idx = torch.arange(batch.x.shape[0], device=batch.x.device)
+            y_pred, y_true = self.module.predict(global_embedding, src_padding_mask, self.prediction_level, self.prediction_task, pad_index_nodes, mask_idx)
             ## Save model output
             # Get indices for this sample
             sample_mask = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
