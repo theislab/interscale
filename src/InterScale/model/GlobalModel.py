@@ -97,7 +97,7 @@ class GlobalModel(NodeMaskingTrainingPlan,
             # no masking during evaluation
             y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
             #I = self_attention_relevance.generate_relevance(transformer_in, src_padding_mask)
-            batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[index_nodes[0]]
+            batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[pad_index_nodes[0]]
             sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
             global_embeddings_df.loc[sample_mask] = global_embedding[:-1].squeeze(1).detach().cpu().numpy()
             cls_token_horizontal[sample_mask] = I[-1, :-1].squeeze().cpu().detach().numpy() 
