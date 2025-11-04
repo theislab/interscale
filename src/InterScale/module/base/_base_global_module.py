@@ -168,6 +168,7 @@ class GlobalModuleClass(BaseModuleClass):
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
         print('padded_emb', padded_emb.shape, padded_emb)
+        print('src_padding_mask', src_padding_mask.shape, src_padding_mask)
         assert not torch.any(torch.isnan(padded_emb)), "padded_emb contains NaN values"
         global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
         print('global_embedding', global_embedding.shape, global_embedding)

@@ -10,8 +10,7 @@ from InterScale.tl import pad_batch, apply_mask
 from InterScale.tl.masking import MASK_VALUE
 
 
-@pytest.fixture
-def sample_global_module_kwargs():
+def create_sample_global_module_kwargs(long_range_attention):
     """Create sample keyword arguments for global module testing."""
     return {
         'max_seq_len': 20,
@@ -19,12 +18,11 @@ def sample_global_module_kwargs():
         'dropout_global': 0.1,
         'num_layers': 2,
         'dim_feedforward': 64,
-        'long_range_attention': False
+        'long_range_attention': long_range_attention
     }
 
 
-@pytest.fixture
-def sample_graph(num_nodes=10, num_features=5, num_classes=3, graph_level=True):
+def create_sample_graph(num_nodes=10, num_features=5, num_classes=3, graph_level=True):
     """Create a sample PyG graph for testing."""
     x = torch.randn(num_nodes, num_features)
     
@@ -53,10 +51,12 @@ def sample_graph(num_nodes=10, num_features=5, num_classes=3, graph_level=True):
 
 
 @pytest.fixture
-def sample_batch(sample_graph, num_graphs=2):
+def sample_batch(num_graphs=2, num_features=5, num_classes=3, graph_level=True):
     """Create a batch of graphs for testing."""
     graphs = []
     for _ in range(num_graphs):
+        num_nodes = np.random.randint(5, 11)
+        sample_graph = create_sample_graph(num_nodes=num_nodes, num_features=num_features, num_classes=num_classes, graph_level=graph_level)
         graphs.append(sample_graph)
     batch = Batch.from_data_list(graphs)
     return batch
@@ -88,14 +88,17 @@ def test_common_step_masking(sample_global_module_kwargs, sample_batch, pct_mask
         assert mask_idx.shape == (sample_batch.x.shape[0],)
         
 @pytest.mark.parametrize('prediction_level', ['node', 'graph'])
-@pytest.mark.parametrize('pct_mask_nodes', [0.0, 0.2])
-def test_common_step_local_to_global(sample_global_module_kwargs, sample_batch, pct_mask_nodes, prediction_level):
+@pytest.mark.parametrize('pct_mask_nodes', [0.0, 0.6])
+@pytest.mark.parametrize('long_range_attention', [True, False])
+def test_common_step_local_to_global(sample_batch, pct_mask_nodes, prediction_level, long_range_attention):
     """Test common_step_local_to_global."""
     n_input = 5
     n_output = 3
     n_embed = 4
     
     batch_size = len(np.unique(sample_batch.batch))
+    
+    global_module_kwargs = create_sample_global_module_kwargs(long_range_attention=long_range_attention)
 
     module = TransformerNodeEncoderHook(
         n_input=n_input,
@@ -103,7 +106,7 @@ def test_common_step_local_to_global(sample_global_module_kwargs, sample_batch, 
         n_embed=n_embed,
         decoder_type='linear',
         pct_mask_nodes=pct_mask_nodes,
-        **sample_global_module_kwargs
+        **global_module_kwargs
     )
     
     batch_masked, mask_idx = module._common_step_masking(sample_batch)
@@ -122,10 +125,7 @@ def test_common_step_local_to_global(sample_global_module_kwargs, sample_batch, 
     
     global_embedding, src_padding_mask = module.forward(padded_emb, src_padding_mask, attention_mask)
     y_pred = module.predict(global_embedding, src_padding_mask, prediction_level)
-
+    print('src_padding_mask', src_padding_mask.shape, src_padding_mask)
     print('y_pred', y_pred.shape, y_pred)
     print('embedding', embedding.shape, embedding)
     print('global_embedding', global_embedding.shape, global_embedding)
-    #y_true, adjusted_mask_idx = module._process_batch_for_metrics(sample_batch, 'classification', prediction_level, pad_index_nodes, mask_idx)
-    # print('y_true', y_true.shape, y_true)
-    # print('adjusted_mask_idx', adjusted_mask_idx.shape, adjusted_mask_idx)

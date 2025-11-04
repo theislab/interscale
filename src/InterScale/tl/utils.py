@@ -34,9 +34,13 @@ def check_and_update_cfg(cfg,
     cfg.freeze()
     return cfg
 
-def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, num_nodes: int, batch: torch.Tensor, index_nodes: list, num_heads: int) -> torch.Tensor:
+def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, 
+                                                 num_nodes: int, 
+                                                 batch: torch.Tensor, 
+                                                 index_nodes: list, 
+                                                 num_heads: int) -> torch.Tensor:
     """
-    Creates an attention mask that is inverse to the edge indices. Unmasked = 0 and masked = 1
+    Creates an attention mask that is inverse to the edge indices. Unmasked = 0 and masked = -inf
     If two nodes are connected in the adjacency matrix (edge_index = 1) then we have no attention (0) and vice versa. 
     
     Args:
@@ -48,11 +52,13 @@ def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, num_n
     Returns:
         torch.Tensor: Attention mask of shape [num_batch*num_heads, max_seq_len, max_seq_len] with 1s for no attention (True -> mask attention) and 0s for attention (False -> no mask)
     """
+    INVALID_MASK_VALUE = -float('inf')
+    
     num_batch = int(batch[-1].item() + 1)
     max_seq_len = max(len(nodes) for nodes in index_nodes)
     
-    # Initialize with 1s (no attention allowed) 
-    attention_mask = torch.ones((num_batch*num_heads, max_seq_len+1, max_seq_len+1), device=edge_index.device)
+    # Initialize with -inf (no attention allowed) 
+    attention_mask = torch.full((num_batch*num_heads, max_seq_len+1, max_seq_len+1), INVALID_MASK_VALUE, device=edge_index.device)
     
     # Create full adjacency matrix + 1 for cls token (end of sequence)
     adj_matrix = torch.zeros((num_nodes, num_nodes), device=edge_index.device) # TODO: check if zero or ones
@@ -62,12 +68,16 @@ def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor, num_n
     for b in range(num_batch):
         nodes = index_nodes[b]
         seq_len = len(nodes)
+        assert seq_len+1 <= max_seq_len+1, f"Mismatch: seq_len+1: {seq_len+1}, max_seq_len+1: {max_seq_len+1}"
         # Extract submatrix for the kept nodes
         batch_mask = adj_matrix[nodes][:, nodes]  # Get submatrix for kept nodes
         # Add row and column of ones for CLS token - full attention
         batch_mask = torch.cat([batch_mask, torch.zeros(batch_mask.size(0), 1, device=batch_mask.device)], dim=1)  # Add column
         batch_mask = torch.cat([batch_mask, torch.zeros(1, batch_mask.size(1), device=batch_mask.device)], dim=0)  # Add row
-        attention_mask[b*num_heads:b*num_heads+num_heads, :seq_len+1, :seq_len+1] = batch_mask
+        assert batch_mask.shape == (seq_len+1, seq_len+1), f"Mismatch: batch_mask.shape: {batch_mask.shape}, (seq_len+1, seq_len+1): {(seq_len+1, seq_len+1)}"
+        assert attention_mask.shape[-2:] == (max_seq_len+1, max_seq_len+1), f"Mismatch: attention_maks.shape[-2:]: {attention_mask.shape[-2:]}, (seq_len+1, seq_len+1): {(seq_len+1, seq_len+1)}"
+        #attention_mask[b*num_heads:b*num_heads+num_heads, -seq_len+1:, -seq_len+1:] = batch_mask
+        attention_mask[b*num_heads:b*num_heads+num_heads, -(seq_len+1):, -(seq_len+1):] = batch_mask
     return attention_mask
 
 def get_model_filename_prefix(cfg, local_component: bool, global_component: bool):

@@ -106,10 +106,17 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                 mask = None, 
                 register_hook: bool = False):
         """
+        N_b_max: maximum number of nodes in the batch
+        B: batch size
+        H_d: dimension of transformer
+        
         Input: 
-            padded_h_node: [n_b x B X h_d] with n_b: dimension of batch, B: batch size, h_d: dimension of transformer
-            src_padding_mask: [B x n_b] matrix indicating the size of the padding mask to be ignored during calculation 
-            mask: [n_b x n_b] matrix indicating the long-range connections (inverse of adjacency matrix). Default: None
+            padded_h_node: [N_b_max x B X H_d] 
+                GEX embeddings of the nodes in the batch with padding (0) to the maximum number of nodes in the batch.
+            src_padding_mask: [B x N_b_max] 
+                Matrix indicating the size of the padding mask to be ignored during calculation.
+            mask: H_d, N_b_max x N_b_max] 
+                matrix indicating the long-range connections (inverse of adjacency matrix). Default: None
         """
         if register_hook:
             for encoder in self.transformer_encoder.layers:
@@ -120,6 +127,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         padded_h_node = torch.cat([padded_h_node, expand_cls_embedding], dim=0) #append cls embedding at the end of the sequence
         # normalize input
         padded_h_node = self.norm_input(padded_h_node)
+        assert not torch.any(torch.isnan(padded_h_node)), "normalized padded_h_node contains NaN values"
 
         zeros = src_padding_mask.data.new(src_padding_mask.size(0), 1).fill_(0)
         src_padding_mask = torch.cat([src_padding_mask, zeros], dim=1)
