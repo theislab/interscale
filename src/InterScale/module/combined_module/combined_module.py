@@ -43,6 +43,18 @@ class CombinedModuleClass(BaseModuleClass):
                 prediction_level):
         """Predict with the decoder."""
         return self.global_module.predict(global_embedding, src_padding_mask, prediction_level)
+    
+    def forward(
+        self,
+        batch_masked):
+        """Forward pass through the model"""
+        
+        local_embedding = self.local_module.forward(batch_masked.x, batch_masked.edge_index)
+        
+        padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.global_module.common_step_local_to_global(batch_masked, local_embedding)
+        global_embedding, src_padding_mask = self.global_module.forward(padded_emb, src_padding_mask, attention_mask)
+        
+        return local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask
         
     def _common_step(self,
                     batch, 
