@@ -118,7 +118,7 @@ class GlobalModuleClass(BaseModuleClass):
                 global_embedding,
                 src_padding_mask,
                 prediction_level,
-                prediction_task
+                prediction_task,
                 pad_index_nodes,
                 mask_idx):
         """Predict with the decoder.
@@ -187,7 +187,7 @@ class GlobalModuleClass(BaseModuleClass):
         global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
         assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
         
-        y_pred, y_true = self.predict(global_embedding, src_padding_mask, prediction_level, prediction_task, pad_index_nodes, mask_idx)
+        y_pred, y_true = self.predict(global_embedding, src_padding_mask, prediction_level)
         
         return None, global_embedding, y_pred, y_true
 
