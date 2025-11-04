@@ -122,9 +122,10 @@ def test_common_step_local_to_global(sample_global_module_kwargs, sample_batch, 
     
     global_embedding, src_padding_mask = module.forward(padded_emb, src_padding_mask, attention_mask)
     y_pred = module.predict(global_embedding, src_padding_mask, prediction_level)
+
     print('y_pred', y_pred.shape, y_pred)
     print('embedding', embedding.shape, embedding)
     print('global_embedding', global_embedding.shape, global_embedding)
-    y_true, adjusted_mask_idx = module._process_batch_for_metrics(sample_batch, 'classification', prediction_level, pad_index_nodes, mask_idx)
-    print('y_true', y_true.shape, y_true)
-    print('adjusted_mask_idx', adjusted_mask_idx.shape, adjusted_mask_idx)
+    #y_true, adjusted_mask_idx = module._process_batch_for_metrics(sample_batch, 'classification', prediction_level, pad_index_nodes, mask_idx)
+    # print('y_true', y_true.shape, y_true)
+    # print('adjusted_mask_idx', adjusted_mask_idx.shape, adjusted_mask_idx)

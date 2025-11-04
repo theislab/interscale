@@ -175,15 +175,17 @@ class GlobalModuleClass(BaseModuleClass):
         print('padded_emb', padded_emb.shape, padded_emb)
         print('mask_idx', mask_idx.shape, mask_idx)
         
-        y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
-        
-        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
-        
-        if prediction_level == "node":
+        if prediction_task == 'classification' and prediction_level == 'graph':
+            y_true = batch.y[batch.ptr[:-1]]
+        else:
+            y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
             y_pred = y_pred[adjusted_mask_idx]
             y_true = y_true[adjusted_mask_idx]
         
         assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
+        assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
+        assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
+        
         return None, global_embedding, y_pred, y_true
 
     def get_global_embeddings(self, x, edge_index):
