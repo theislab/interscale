@@ -117,10 +117,7 @@ class GlobalModuleClass(BaseModuleClass):
     def predict(self,
                 global_embedding,
                 src_padding_mask,
-                prediction_level,
-                prediction_task,
-                pad_index_nodes,
-                mask_idx):
+                prediction_level):
         """Predict with the decoder.
         
         Parameters
