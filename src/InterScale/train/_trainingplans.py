@@ -269,20 +269,13 @@ class TrainingPlan(pl.LightningModule):
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
         return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
     
-    def on_validation_epoch_end(self, outputs):
-        print('validation epoch end')
-        
-        # Calculate the average validation loss from the outputs of validation_step
-        avg_val_loss = torch.stack(outputs).mean()
+    def on_validation_epoch_end(self):
 
         metrics_dict = self.valid_metrics.compute()
         if 'classification' in self.prediction_task:
             for class_idx, class_score in enumerate(metrics_dict[f'val_f1_per_class']):
                 metrics_dict[f'val_f1_{self.class_labels[class_idx]}'] = class_score
             metrics_dict.pop(f'val_f1_per_class')
-        
-        # Add the average validation loss to the metrics dictionary
-        metrics_dict[f'val_loss'] = avg_val_loss
         
         self.log_dict(metrics_dict, 
                      batch_size=int(self.batch_size), 
