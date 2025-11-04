@@ -80,6 +80,8 @@ class GlobalModuleClass(BaseModuleClass):
         adjusted_mask_idx: torch.Tensor
             Adjusted indices for masked nodes
         """
+        assert prediction_level == "node", "Node specific retrieval only necessary for node-level prediction."
+        
         y_true = []
         adjusted_mask_idx = []  # Track new positions of masked nodes
         current_offset = 0
@@ -100,10 +102,7 @@ class GlobalModuleClass(BaseModuleClass):
             start = end
             
             if 'classification' in prediction_task:
-                if 'node' in prediction_level:
-                    y_true += batch.y[mask][pad_index_nodes[i]].clone().detach()
-                elif 'graph' in prediction_level:
-                    y_true.append(batch.y[mask][-1].clone().detach())
+                y_true += batch.y[mask][pad_index_nodes[i]].clone().detach()
             elif 'regression' in prediction_task:
                 y_true += batch.x[mask][pad_index_nodes[i]].clone().detach()
             else:
@@ -168,11 +167,13 @@ class GlobalModuleClass(BaseModuleClass):
         assert embedding.shape == (batch_masked.x.shape[0], self.n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}"
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
+        print('padded_emb', padded_emb.shape, padded_emb)
+        assert not torch.any(torch.isnan(padded_emb)), "padded_emb contains NaN values"
         global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
         print('global_embedding', global_embedding.shape, global_embedding)
+        assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
         y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
         print('y_pred', y_pred.shape, y_pred)
-        print('padded_emb', padded_emb.shape, padded_emb)
         print('mask_idx', mask_idx.shape, mask_idx)
         
         if prediction_task == 'classification' and prediction_level == 'graph':
