@@ -164,7 +164,8 @@ class GlobalModuleClass(BaseModuleClass):
         embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type="PCA")
         embedding = torch.tensor(embedding, dtype=torch.float32, device=batch_masked.x.device)
         
-        assert embedding.shape == (batch_masked.x.shape[0], self.n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}"
+        assert embedding.shape == (batch_masked.x.shape[0], self.n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}
+        assert not torch.any(torch.isnan(embedding)), "embedding contains NaN values"
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
         assert not torch.any(torch.isnan(padded_emb)), "padded_emb contains NaN values"

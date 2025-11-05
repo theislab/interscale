@@ -47,7 +47,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
     def common_step_local_to_global(self, 
                                     batched_data, 
                                     emb,
-                                    eval: bool = False):
+                                    eval_step: bool = False):
         """
         Convert local node embeddings [N, E] to padded local node embeddings [max_seq_len, E] 
         with N being the number of nodes in the graph and E being the embedding dimension.
@@ -60,7 +60,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                 Whether to evaluate the transformer encoder. If True, the transformer encoder will not be masked.
         
         Returns:
-            padded_emb: torch.Tensor [max_seq_len, E]
+            padded_emb: torch.Tensor [max_seq_len, B, E]
                 Padded local node embeddings
             src_padding_mask: torch.Tensor [max_seq_len]
                 Mask indicating padding nodes
@@ -71,7 +71,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         # Layer normalization
         emb = self.norm_input(emb)
         
-        if self.masked_nodes and not eval:
+        if self.masked_nodes and not eval_step:
             keep_indices = batched_data.mask
         else:
             keep_indices = None
@@ -81,8 +81,8 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
             emb, 
             batched_data.batch, 
             self.max_seq_len, 
-            get_mask=False if eval else self.masked_nodes, 
-            keep_indices=None if eval else keep_indices  # Add parameter to ensure masked nodes are kept (not during evaluation) 
+            get_mask=False if eval_step else self.masked_nodes, 
+            keep_indices=None if eval_step else keep_indices  # Add parameter to ensure masked nodes are kept (not during evaluation) 
         )
         
         if self.long_range_attention:
@@ -115,7 +115,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                 GEX embeddings of the nodes in the batch with padding (0) to the maximum number of nodes in the batch.
             src_padding_mask: [B x N_b_max] 
                 Matrix indicating the size of the padding mask to be ignored during calculation.
-            mask: H_d, N_b_max x N_b_max] 
+            mask: [H_d, N_b_max x N_b_max] 
                 matrix indicating the long-range connections (inverse of adjacency matrix). Default: None
         """
         if register_hook:
