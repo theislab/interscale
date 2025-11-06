@@ -13,6 +13,6 @@ def get_global_component_cfg(cfg, global_component_name):
         cfg.model.global_component.parameters.activation_func = "relu"
         cfg.model.global_component.parameters.num_layers = 2
         cfg.model.global_component.parameters.max_seq_len = 2000 # optionally adjust to maximum number of cells, ideally shouldnt be larger than 4000
-        cfg.model.global_component.parameters.long_range_attention = True # if True, takes inverse of adjacency matrix as long-range attention mask
+        cfg.model.global_component.parameters.long_range_attention = False # if True, takes inverse of adjacency matrix as long-range attention mask
     
     return cfg

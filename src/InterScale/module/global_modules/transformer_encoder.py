@@ -86,6 +86,8 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         )
         
         if self.long_range_attention:
+            # INSERT_YOUR_CODE
+            raise NotImplementedError("Long-range attention mask feature is currently not implemented.")
             attention_mask = create_transformer_attention_mask_from_edges(
                 batched_data.edge_index, 
                 len(batched_data.obs_names), 

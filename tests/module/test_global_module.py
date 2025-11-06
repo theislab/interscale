@@ -115,17 +115,20 @@ def test_common_step_local_to_global(sample_batch, pct_mask_nodes, prediction_le
     assert embedding.shape == (batch_masked.x.shape[0], n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}"
     
     padded_emb, src_padding_mask, pad_index_nodes, attention_mask = module.common_step_local_to_global(batch_masked, embedding)
-    print('padded_emb', padded_emb.shape)
-    print('src_padding_mask', src_padding_mask.shape)
-    print('pad_index_nodes', len(pad_index_nodes), pad_index_nodes)
+    print('padded_emb', padded_emb.shape, padded_emb)
     if attention_mask is not None:
         print('attention_mask', attention_mask.shape, attention_mask)
     else:
         print('attention_mask is None')
-    
+        
     global_embedding, src_padding_mask = module.forward(padded_emb, src_padding_mask, attention_mask)
-    y_pred = module.predict(global_embedding, src_padding_mask, prediction_level)
     print('src_padding_mask', src_padding_mask.shape, src_padding_mask)
+    
+    y_pred = module.predict(global_embedding, src_padding_mask, prediction_level)
+    
     print('y_pred', y_pred.shape, y_pred)
     print('embedding', embedding.shape, embedding)
     print('global_embedding', global_embedding.shape, global_embedding)
+    
+    assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
+    assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
