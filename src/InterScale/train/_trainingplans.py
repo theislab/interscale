@@ -239,13 +239,15 @@ class TrainingPlan(pl.LightningModule):
             
         # Set sync_dist=True only for test mode
         sync_dist = (mode == 'test')
-        metrics_dict[f'{mode}_loss'] = loss
         if mode == 'train':
+            metrics_dict[f'{mode}_loss'] = loss
             self.log_dict(metrics_dict, 
                      batch_size=int(self.batch_size), 
                      on_step=True, 
                      on_epoch=False,
                      sync_dist=sync_dist)
+        elif mode == 'val':
+            self.log('val_loss', loss, on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=sync_dist)
             
         assert not torch.isnan(loss), "loss is NaN"
         
@@ -266,10 +268,7 @@ class TrainingPlan(pl.LightningModule):
     def validation_step(self, batch):
         """Validation step for the model."""
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
-        loss = self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
-        # Log validation loss to ensure it's recorded
-        self.log('val_loss', loss, on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
-        return loss
+        return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
     
     def on_validation_epoch_end(self):
 
