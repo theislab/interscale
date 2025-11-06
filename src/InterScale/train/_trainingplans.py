@@ -266,7 +266,10 @@ class TrainingPlan(pl.LightningModule):
     def validation_step(self, batch):
         """Validation step for the model."""
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
-        return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
+        loss = self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
+        # Log validation loss to ensure it's recorded
+        self.log('val_loss', loss, on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
+        return loss
     
     def on_validation_epoch_end(self):
 
