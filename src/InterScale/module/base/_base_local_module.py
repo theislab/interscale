@@ -53,8 +53,6 @@ class LocalModuleClass(BaseModuleClass):
         
         local_embedding = self.forward(batch_masked.x, batch_masked.edge_index)
         y_pred = self.decoder.forward(local_embedding)
-        print('y_pred', y_pred.shape, y_pred)
-        print('local_embedding', local_embedding.shape, local_embedding)
         
         assert y_pred.shape[0] == len(batch.obs_names), f"Mismatch: y_pred.shape: {y_pred.shape[0]}, batch.obs_names: {len(batch.obs_names)}"
         assert y_pred.shape[1] == self.n_output, f"Mismatch: y_pred.shape: {y_pred.shape[1]}, self.n_output: {self.n_output}"
