@@ -93,7 +93,7 @@ class TrainingPlan(pl.LightningModule):
         if 'classification' in self.prediction_task:
             metrics = self._setup_classification_metrics(self.module.n_output)
             self.loss = self._setup_classification_loss(self.loss_type, self.class_weights)
-            self.monitor_metric = 'val_f1'
+            self.monitor_metric = 'val_acc'
         elif 'regression' in self.prediction_task:
             metrics = self._setup_regression_metrics(self.module.n_output)
             self.loss = self._setup_regression_loss(self.loss_type)
@@ -158,17 +158,23 @@ class TrainingPlan(pl.LightningModule):
         mask_idx: Optional[torch.Tensor] = None
     ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """Calculate classification metrics."""
-        ## TODO: Currently mask_idx is applied in module._common_step. Maybe move to here?
-        # if mask_idx is not None:
-        #     y_pred = y_pred[mask_idx]
-        #     y_true = y_true[mask_idx]
-            
+        
         loss = self.loss(y_pred, y_true)
-        metrics = metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
-        metrics[f'{mode}_loss'] = loss
         
-        return loss, metrics
+        # Get predicted and true classes
+        pred_classes = y_pred.argmax(dim=1)
+        true_classes = y_true.argmax(dim=1)
         
+        # training: compute metrics
+        # validation: update metrics
+        if mode == 'train':
+            metrics_dict = metrics(pred_classes, true_classes)
+        elif mode == 'val' or mode == 'test':
+            metrics.update(pred_classes, true_classes)
+            metrics_dict = {}
+
+        return loss, metrics_dict
+            
     def _regression_metrics(
             self,
             y_pred: torch.Tensor,
@@ -212,31 +218,38 @@ class TrainingPlan(pl.LightningModule):
         Parameters
         ----------
         y_true, y_pred: torch.Tensor
-            True and predicted values of shape [N, G], where N is the number of cells and G is the number of genes
+            Classificaton: [B, C] with B being the batch size and C being the number of classes.
+            Regression: [N, G] with N being the number of cells or genes and G being the number of genes.
         mode
             One of 'train', 'val', or 'test'
         metrics: MetricCollection
             Metrics to log
         """        
         assert y_true.shape == y_pred.shape, "y_true and y_pred must have the same shape"
-        #TODO: where is the batch size?
         
         if 'classification' in self.prediction_task:
-            loss, metrics = self._classification_metrics(y_pred, y_true, mode, metrics)
-            for class_idx, class_score in enumerate(metrics[f'{mode}_f1_per_class']):
-                metrics[f'{mode}_f1_{self.class_labels[class_idx]}'] = class_score
-            metrics.pop(f'{mode}_f1_per_class')
+            loss, metrics_dict = self._classification_metrics(y_pred, y_true, mode, metrics)
+            if mode == 'train':
+                for class_idx, class_score in enumerate(metrics_dict[f'{mode}_f1_per_class']):
+                    metrics_dict[f'{mode}_f1_{self.class_labels[class_idx]}'] = class_score
+                metrics_dict.pop(f'{mode}_f1_per_class')
             
         elif 'regression' in self.prediction_task:
-            loss, metrics = self._regression_metrics(y_pred, y_true, mode, metrics)
+            loss, metrics_dict = self._regression_metrics(y_pred, y_true, mode, metrics)
             
         # Set sync_dist=True only for test mode
         sync_dist = (mode == 'test')
-        self.log_dict(metrics, 
+        if mode == 'train':
+            metrics_dict[f'{mode}_loss'] = loss
+            self.log_dict(metrics_dict, 
                      batch_size=int(self.batch_size), 
-                     on_step=False, 
-                     on_epoch=True,
+                     on_step=True, 
+                     on_epoch=False,
                      sync_dist=sync_dist)
+        elif mode == 'val':
+            self.log('val_loss', loss, on_step=True, on_epoch=False, batch_size=int(self.batch_size), sync_dist=sync_dist)
+            
+        assert not torch.isnan(loss), "loss is NaN"
         
         return loss
 
@@ -248,11 +261,29 @@ class TrainingPlan(pl.LightningModule):
         """
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
         return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics)
+    
+    def on_train_epoch_end(self):
+        self.train_metrics.reset()
 
     def validation_step(self, batch):
         """Validation step for the model."""
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
         return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
+    
+    def on_validation_epoch_end(self):
+
+        metrics_dict = self.valid_metrics.compute()
+        if 'classification' in self.prediction_task:
+            for class_idx, class_score in enumerate(metrics_dict[f'val_f1_per_class']):
+                metrics_dict[f'val_f1_{self.class_labels[class_idx]}'] = class_score
+            metrics_dict.pop(f'val_f1_per_class')
+        
+        self.log_dict(metrics_dict, 
+                     batch_size=int(self.batch_size), 
+                     on_step=False, 
+                     on_epoch=True,
+                     sync_dist=False)
+        self.valid_metrics.reset()
     
     def test_step(self, batch):
         """Test step for the model."""
@@ -273,9 +304,11 @@ class TrainingPlan(pl.LightningModule):
             lr_scheduler = CosineWarmupScheduler(optimizer,
                                                 warmup=self.lr_warmup,
                                                 max_epochs=self.lr_max_epochs)
+            self.monitor_metric = None
         elif self.lr_scheduler is None:
             lr_scheduler = None
+            self.monitor_metric = None
         else:
             raise ValueError(f"Invalid lr_scheduler: {self.lr_scheduler}. Must be either 'None', 'ReduceLROnPlateau' or 'CosineWarmupScheduler'.")
 
-        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch', 'monitor': self.monitor_metric}]
+        return [optimizer], [{'scheduler': lr_scheduler, 'interval': 'epoch', 'monitor': self.monitor_metric}] 
