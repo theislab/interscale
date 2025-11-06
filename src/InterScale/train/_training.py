@@ -34,8 +34,8 @@ class NodeMaskingTrainingPlan:
         max_epochs: int,
         shuffle_set_split: bool = True,
         load_sparse_tensor: bool = False,
-        early_stopping: bool = False,
-        patience: int = 5,
+        early_stopping: bool = True,
+        patience: int = 2,
         datasplitter_kwargs: dict | None = None,
         plan_kwargs: dict | None = None,
         datamodule: L.LightningDataModule | None = None,
@@ -163,7 +163,7 @@ class NodeMaskingTrainingPlan:
             #         mode="min"
             #     )
             if 'classification' in self.prediction_task:
-                performance_callback = EarlyStopping(monitor="val_f1_macro", min_delta=0.05, patience=patience*steps_per_epoch, verbose=False, mode="max")
+                performance_callback = EarlyStopping(monitor="val_loss", min_delta=0.005, patience=patience*steps_per_epoch, verbose=False, mode="min")
             elif 'regression' in self.prediction_task:
                 performance_callback = EarlyStopping(monitor="val_mse", min_delta=0.005, patience=patience*steps_per_epoch, verbose=False, mode="min")
             else:
