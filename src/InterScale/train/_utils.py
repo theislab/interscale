@@ -16,6 +16,7 @@ class MetricsHistory(Callback):
         self.history.append(epoch_dict)
         
     def on_test_epoch_end(self, trainer, pl_module):
+        print('on_test_epoch_end', trainer.current_epoch)
         metrics = trainer.callback_metrics
         # Convert tensor values to float
         epoch_dict = {k: v.item() if hasattr(v, 'item') else v 
@@ -23,7 +24,7 @@ class MetricsHistory(Callback):
         epoch_dict['epoch'] = trainer.current_epoch
         
         # Record metrics every 10 epochs or at the end of training
-        if trainer.current_epoch % 10 == 0 or trainer.current_epoch == trainer.max_epochs - 1:
+        if trainer.current_epoch % 5 == 0 or trainer.current_epoch == trainer.max_epochs - 1:
             self.history.append(epoch_dict)
         
     def plot_history(self, subset_term=None):

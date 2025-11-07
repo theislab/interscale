@@ -8,7 +8,7 @@ import wandb
 from lightning.pytorch.loggers import WandbLogger
 
 from InterScale.train._trainingplans import TrainingPlan
-from InterScale.train._utils import MetricsHistory
+from InterScale.train._utils import MetricsHistory, PeriodicTestCallback
 from InterScale.tl.utils import get_model_filename_prefix
 from lightning.pytorch.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.trainer import Trainer, seed_everything
@@ -133,6 +133,7 @@ class NodeMaskingTrainingPlan:
         loss_callback = None
         performance_callback = None
         early_stop_callback = None
+        periodic_test_callback = None
             
         # defines optimizers, training step, val step, logged metrics
         training_plan = self._training_plan_cls(
@@ -180,9 +181,13 @@ class NodeMaskingTrainingPlan:
                     checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_pearson_corr", mode="min", ) 
                 else:
                     raise Exception("Regression must be run with MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss or SCELoss loss.")            
+        
+        # Add periodic test callback if test set exists
+        if self.train_size + self.validation_size < 1:
+            periodic_test_callback = PeriodicTestCallback(test_interval=5, datamodule=datamodule)
             
         # Create list of callbacks and filter out None values
-        callbacks = [callback for callback in [lr_monitor, performance_callback, loss_callback, self.history_, checkpoint_callback] if callback is not None]
+        callbacks = [callback for callback in [lr_monitor, performance_callback, loss_callback, self.history_, checkpoint_callback, periodic_test_callback] if callback is not None]
             
         # Set up WandB logger if requested
         logger = None

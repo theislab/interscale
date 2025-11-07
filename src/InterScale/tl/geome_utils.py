@@ -139,7 +139,6 @@ def prepare_geome_dataset(adata,
                 ]
             )
 
-
         transform = transforms.Compose(
             [
                 transforms.AddEdgeIndex(edge_index_key="edge_index", func_args=spatial_neigbors_kwargs, spatial_key="spatial", key_added=adj_matrix_loc),
