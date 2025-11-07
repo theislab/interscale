@@ -172,7 +172,7 @@ class NodeMaskingTrainingPlan:
         if self._cfg.model.save is not None:
             run_name = get_model_filename_prefix(self._cfg, self.local_component, self.global_component)
             if 'classification' in self._cfg.dataset.prediction_task:
-                checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="max", ) # save model if validation accuracy increases
+                checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) # save model if validation accuracy increases
             elif 'regression' in self._cfg.dataset.prediction_task:
                 if self._cfg.optim.loss == 'MSELoss':
                     checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_mse", mode="min", ) 

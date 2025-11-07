@@ -99,7 +99,7 @@ def get_model_filename_prefix(cfg, local_component: bool, global_component: bool
     str
         Filename prefix in format: <dataset_name>_<prediction_task[:4]>_<prediction_level>_<local_component_name>_<global_component_name>_
     """
-    file_name_prefix = f"{cfg.dataset.name}_{cfg.dataset.prediction_task[:4]}_{cfg.dataset.prediction_level}_"
+    file_name_prefix = f"{cfg.dataset.name}_{cfg.dataset.prediction_task[:4]}_{cfg.dataset.prediction_level}_{cfg.optim.seed}_"
     
     if local_component and cfg.model.local_component.name:  
         file_name_prefix = file_name_prefix + f"{cfg.model.local_component.name}_"

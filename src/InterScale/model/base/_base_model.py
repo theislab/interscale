@@ -535,6 +535,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         cfg: CN,
         local_component: bool = False,
         global_component: bool = False,
+        postfix: str | None = None,
         wandb_save: bool = False,
         enable_remapping: bool = True,
     ):
@@ -563,6 +564,9 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             Loaded model.
         """
         file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
+        
+        if postfix is not None:
+            file_name_prefix = file_name_prefix + f"{postfix}"
         
         model_save_path = os.path.join(dir_path, f"{file_name_prefix}{SAVE_KEYS.MODEL_FNAME}")
         
