@@ -8,7 +8,7 @@ import wandb
 from lightning.pytorch.loggers import WandbLogger
 
 from InterScale.train._trainingplans import TrainingPlan
-from InterScale.train._utils import MetricsHistory, PeriodicTestCallback
+from InterScale.train._utils import MetricsHistory
 from InterScale.tl.utils import get_model_filename_prefix
 from lightning.pytorch.callbacks import LearningRateMonitor, EarlyStopping, ModelCheckpoint
 from lightning.pytorch.trainer import Trainer, seed_everything
