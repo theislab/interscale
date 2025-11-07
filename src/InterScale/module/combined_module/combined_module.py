@@ -13,7 +13,7 @@ class CombinedModuleClass(BaseModuleClass):
     
     def __init__(self,
                  cfg: CN,
-                 **base_module_kwargs,):
+                 **base_module_kwargs):
         super().__init__(**base_module_kwargs)
         
         self.local_module_args = cfg.model.local_component
@@ -43,38 +43,7 @@ class CombinedModuleClass(BaseModuleClass):
                 prediction_level):
         """Predict with the decoder."""
         return self.global_module.predict(global_embedding, src_padding_mask, prediction_level)
-        
-    def _common_step(self,
-                    batch, 
-                    prediction_task, 
-                    prediction_level: Literal["node", "graph"]):
-        """Shared step between train, val and test.
-        """
-        # Mask nodes 
-        if self.pct_mask_nodes > 0:
-            batch_masked, mask_idx = apply_mask(batch)
-        else:
-            # pretend as if all nodes are masked
-            mask_idx = torch.arange(batch.x.shape[0])
-            batch_masked = batch
-            
-        local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask = self.forward(batch_masked)
-        
-        y_true, adjusted_mask_idx = self.global_module._process_batch_for_metrics(batch, 
-                                                                    prediction_task, 
-                                                                    prediction_level, 
-                                                                    pad_index_nodes, 
-                                                                    mask_idx)
-        
-        y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
-
-        if prediction_level == "node":
-            y_pred = y_pred[adjusted_mask_idx]
-            y_true = y_true[adjusted_mask_idx]
-        
-        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent" 
-        return local_embedding, global_embedding, y_pred, y_true
-        
+    
     def forward(
         self,
         batch_masked):
@@ -83,9 +52,35 @@ class CombinedModuleClass(BaseModuleClass):
         local_embedding = self.local_module.forward(batch_masked.x, batch_masked.edge_index)
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.global_module.common_step_local_to_global(batch_masked, local_embedding)
+        assert not torch.any(torch.isnan(padded_emb)), "padded_emb contains NaN values"
         global_embedding, src_padding_mask = self.global_module.forward(padded_emb, src_padding_mask, attention_mask)
+        assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
         
         return local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask
+        
+    def _common_step(self,
+                    batch, 
+                    prediction_task, 
+                    prediction_level: Literal["node", "graph"]):
+        """Shared step between train, val and test.
+        """
+        batch_masked, mask_idx = self._common_step_masking(batch)
+            
+        local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask = self.forward(batch_masked)
+        y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
+        
+        if prediction_task == 'classification' and prediction_level == 'graph':
+            y_true = batch.y[batch.ptr[:-1]]
+        else:
+            y_true, adjusted_mask_idx = self.global_module._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
+            y_pred = y_pred[adjusted_mask_idx]
+            y_true = y_true[adjusted_mask_idx]
+            
+        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
+        assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
+        assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
+
+        return local_embedding, global_embedding, y_pred, y_true
     
     def get_model_summary(self) -> str:
         """Returns a string containing the model's parameters summary.

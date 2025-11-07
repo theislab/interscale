@@ -47,7 +47,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
     def common_step_local_to_global(self, 
                                     batched_data, 
                                     emb,
-                                    eval: bool = False):
+                                    eval_step: bool = False):
         """
         Convert local node embeddings [N, E] to padded local node embeddings [max_seq_len, E] 
         with N being the number of nodes in the graph and E being the embedding dimension.
@@ -60,7 +60,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                 Whether to evaluate the transformer encoder. If True, the transformer encoder will not be masked.
         
         Returns:
-            padded_emb: torch.Tensor [max_seq_len, E]
+            padded_emb: torch.Tensor [max_seq_len, B, E]
                 Padded local node embeddings
             src_padding_mask: torch.Tensor [max_seq_len]
                 Mask indicating padding nodes
@@ -71,7 +71,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         # Layer normalization
         emb = self.norm_input(emb)
         
-        if self.masked_nodes and not eval:
+        if self.masked_nodes and not eval_step:
             keep_indices = batched_data.mask
         else:
             keep_indices = None
@@ -81,11 +81,13 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
             emb, 
             batched_data.batch, 
             self.max_seq_len, 
-            get_mask=False if eval else self.masked_nodes, 
-            keep_indices=None if eval else keep_indices  # Add parameter to ensure masked nodes are kept (not during evaluation) 
+            get_mask=False if eval_step else self.masked_nodes, 
+            keep_indices=None if eval_step else keep_indices  # Add parameter to ensure masked nodes are kept (not during evaluation) 
         )
         
         if self.long_range_attention:
+            # INSERT_YOUR_CODE
+            raise NotImplementedError("Long-range attention mask feature is currently not implemented.")
             attention_mask = create_transformer_attention_mask_from_edges(
                 batched_data.edge_index, 
                 len(batched_data.obs_names), 
@@ -106,20 +108,28 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                 mask = None, 
                 register_hook: bool = False):
         """
+        N_b_max: maximum number of nodes in the batch
+        B: batch size
+        H_d: dimension of transformer
+        
         Input: 
-            padded_h_node: [n_b x B X h_d] with n_b: dimension of batch, B: batch size, h_d: dimension of transformer
-            src_padding_mask: [B x n_b] matrix indicating the size of the padding mask to be ignored during calculation 
-            mask: [n_b x n_b] matrix indicating the long-range connections (inverse of adjacency matrix). Default: None
+            padded_h_node: [N_b_max x B X H_d] 
+                GEX embeddings of the nodes in the batch with padding (0) to the maximum number of nodes in the batch.
+            src_padding_mask: [B x N_b_max] 
+                Matrix indicating the size of the padding mask to be ignored during calculation.
+            mask: [H_d, N_b_max x N_b_max] 
+                matrix indicating the long-range connections (inverse of adjacency matrix). Default: None
         """
         if register_hook:
             for encoder in self.transformer_encoder.layers:
                 encoder.register_hook = True
 
         # append cls embedding
-        expand_cls_embedding = self.cls_embedding.expand(1, padded_h_node.size(1), -1)
-        padded_h_node = torch.cat([padded_h_node, expand_cls_embedding], dim=0)
+        expand_cls_embedding = self.cls_embedding.expand(1, padded_h_node.size(1), -1) # expand cls embedding to the same batch size (1, B, E)
+        padded_h_node = torch.cat([padded_h_node, expand_cls_embedding], dim=0) #append cls embedding at the end of the sequence
         # normalize input
         padded_h_node = self.norm_input(padded_h_node)
+        assert not torch.any(torch.isnan(padded_h_node)), "normalized padded_h_node contains NaN values"
 
         zeros = src_padding_mask.data.new(src_padding_mask.size(0), 1).fill_(0)
         src_padding_mask = torch.cat([src_padding_mask, zeros], dim=1)
@@ -144,14 +154,14 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         """
         # evaluation on single graph
         batched_data.batch = torch.Tensor(len(batched_data.obs_names)*[0])
-        transformer_in, src_padding_mask, index_nodes, _ = self.common_step_local_to_global(batched_data, embedding, eval=True)
+        transformer_in, src_padding_mask, pad_index_nodes, _ = self.common_step_local_to_global(batched_data, embedding, eval_step=True)
         
         transformer_out, src_padding_mask = self.forward(transformer_in, src_padding_mask, register_hook=True)
         I = self.self_attn_relevance.generate_relevance(transformer_out)
 
         #src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
 
-        return transformer_in, transformer_out, src_padding_mask, index_nodes, I
+        return transformer_in, transformer_out, src_padding_mask, pad_index_nodes, I
     
     def get_model_summary(self) -> str:
         """Returns a string containing the model's parameters summary.

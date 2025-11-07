@@ -4,6 +4,7 @@ import torch
 from torch import nn
 import pytorch_lightning as L
 from InterScale.nn import LinearDecoder, NonLinearDecoder, LinearLSEDecoder
+from InterScale.tl.masking import apply_mask
 
 class BaseModuleClass(L.LightningModule, ABC):
     """Abstract base class for all models defining the common training interface.
@@ -73,6 +74,27 @@ class BaseModuleClass(L.LightningModule, ABC):
             self.decoder = None
         else:
             raise ValueError(f"Decoder {self.decoder_type} not found.")
+        
+    def _common_step_masking(self, batch):
+        """Mask nodes in the batch.
+        
+        Parameters
+        ----------
+        batch: Batch
+            Batch of data.
+        Returns
+        -------
+        batch_masked: Batch
+            Batch of data with masked nodes having value MASK_VALUE.
+        mask_idx: torch.Tensor
+            Indices of masked nodes. Size: [N_masked_nodes, ]
+        """
+        if self.pct_mask_nodes > 0:
+            batch_masked, mask_idx = apply_mask(batch)
+        else:
+            mask_idx = torch.arange(batch.x.shape[0], device=batch.x.device)
+            batch_masked = batch
+        return batch_masked, mask_idx
         
     @abstractmethod
     def _common_step(self,

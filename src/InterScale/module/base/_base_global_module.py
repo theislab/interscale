@@ -31,9 +31,27 @@ class GlobalModuleClass(BaseModuleClass):
     def create_gex_embedding(self, 
                              embeddings: torch.Tensor,
                              type: Literal["PCA", "scvi"]):
-        """Generate embeddings for GEX if no local component is used."""
+        """Generate embeddings for GEX if no local component is used.
+        
+        Parameters
+        ----------
+        batch.x: torch.Tensor
+            Size: [N, F]
+        type: Literal["PCA", "scvi"]
+            Type of embedding to generate.
+        
+        Returns
+        -------
+        gex_embedding: torch.Tensor
+            Size: [N, E]
+        """
         if type == "PCA":
-            return self.pca.fit_transform(embeddings)
+            # Fit PCA only once (on first batch), then use transform for subsequent batches
+            # This avoids expensive refitting on every batch during training
+            if not hasattr(self.pca, 'components_'):
+                return self.pca.fit_transform(embeddings)
+            else:
+                return self.pca.transform(embeddings)
         # elif type == "scvi":
         #     return scvi.model.SCVI(embeddings)
         else:
@@ -62,6 +80,8 @@ class GlobalModuleClass(BaseModuleClass):
         adjusted_mask_idx: torch.Tensor
             Adjusted indices for masked nodes
         """
+        assert prediction_level == "node", "Node specific retrieval only necessary for node-level prediction."
+        
         y_true = []
         adjusted_mask_idx = []  # Track new positions of masked nodes
         current_offset = 0
@@ -82,10 +102,7 @@ class GlobalModuleClass(BaseModuleClass):
             start = end
             
             if 'classification' in prediction_task:
-                if 'node' in prediction_level:
-                    y_true += batch.y[mask][pad_index_nodes[i]].clone().detach()
-                elif 'graph' in prediction_level:
-                    y_true.append(batch.y[mask][-1].clone().detach())
+                y_true += batch.y[mask][pad_index_nodes[i]].clone().detach()
             elif 'regression' in prediction_task:
                 y_true += batch.x[mask][pad_index_nodes[i]].clone().detach()
             else:
@@ -110,11 +127,11 @@ class GlobalModuleClass(BaseModuleClass):
         prediction_level: Literal["node", "graph"]
             Level of prediction
         """
-        ## Graph-level prediction: get cls
+        ## Graph-level prediction: get cls_token from last position
         if 'graph' in prediction_level:
-            cls = global_embedding[-1,:, :] # [B, E]
-            return self.decoder(cls)
-        ## Node-level prediction: remove cls
+            cls_token = global_embedding[-1,:, :] # [B, E]
+            return self.decoder(cls_token)
+        ## Node-level prediction: remove cls_token from last position
         elif 'node' in prediction_level: 
             h_graph = global_embedding[:-1] # [E, B, C]
             h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
@@ -123,7 +140,7 @@ class GlobalModuleClass(BaseModuleClass):
             return self.decoder(masked_output)
         else:
             raise Exception('Choose a valid prediction tasks (graph or node).')
-            
+        
     def _common_step(self,
                      batch,
                      prediction_task: str, 
@@ -142,29 +159,32 @@ class GlobalModuleClass(BaseModuleClass):
             Size: [N, C] (classification) or [N, F] (regression) with SEQ_LEN_MASK for padding nodes.
         """
         # Mask nodes  - before GEX embedding because otherwise embedding contains information about masked nodes
-        if self.pct_mask_nodes > 0:
-            batch_masked, mask_idx = apply_mask(batch)
-        else:
-            mask_idx = torch.ones(batch.x.shape[0], dtype=torch.bool, device=batch.x.device)
-            batch_masked = batch
+        batch_masked, mask_idx = self._common_step_masking(batch)
         
         embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type="PCA")
         embedding = torch.tensor(embedding, dtype=torch.float32, device=batch_masked.x.device)
         
-        padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
-        global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
+        assert embedding.shape == (batch_masked.x.shape[0], self.n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}"
+        assert not torch.any(torch.isnan(embedding)), "embedding contains NaN values"
         
-        y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
+        padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
+        assert not torch.any(torch.isnan(padded_emb)), "padded_emb contains NaN values"
+        global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
+        assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
         
         y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
         
-        assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
-        
-        if prediction_level == "node":
+        if prediction_task == 'classification' and prediction_level == 'graph':
+            y_true = batch.y[batch.ptr[:-1]]
+        else:
+            y_true, adjusted_mask_idx = self._process_batch_for_metrics(batch, prediction_task, prediction_level, pad_index_nodes, mask_idx)
             y_pred = y_pred[adjusted_mask_idx]
             y_true = y_true[adjusted_mask_idx]
-        
+            
         assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
+        assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
+        assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
+        
         return None, global_embedding, y_pred, y_true
 
     def get_global_embeddings(self, x, edge_index):

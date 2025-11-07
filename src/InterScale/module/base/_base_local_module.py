@@ -49,18 +49,14 @@ class LocalModuleClass(BaseModuleClass):
             Size: [B, ] (classification) or [B, F] (regression)
         """
         # Mask nodes 
-        if self.pct_mask_nodes > 0:
-            batch_masked, mask_idx = apply_mask(batch)
-        else:
-            # pretend as if all nodes are masked
-            mask_idx = torch.arange(batch.x.shape[0])
-            batch_masked = batch
+        batch_masked, mask_idx = self._common_step_masking(batch)
         
         local_embedding = self.forward(batch_masked.x, batch_masked.edge_index)
         y_pred = self.decoder.forward(local_embedding)
         
         assert y_pred.shape[0] == len(batch.obs_names), f"Mismatch: y_pred.shape: {y_pred.shape[0]}, batch.obs_names: {len(batch.obs_names)}"
         assert y_pred.shape[1] == self.n_output, f"Mismatch: y_pred.shape: {y_pred.shape[1]}, self.n_output: {self.n_output}"
+        assert y_pred.isnan().sum() == 0, "y_pred contains NaN values"
         
         y_pred = y_pred[mask_idx]
         

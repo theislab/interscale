@@ -1,6 +1,7 @@
 from geome import transforms, ann2data, iterables
 import numpy as np
 from yacs.config import CfgNode as CN
+from InterScale.pp import apply_segmentation_noise
 
 def prepare_a2d_dataset(cfg: CN):
     """
@@ -17,7 +18,7 @@ def prepare_a2d_dataset(cfg: CN):
 
         one_hot_encode_list = [prediction_obs]
         
-        X_key = f"layers/{layer_key}" if layer_key is not None else ".X"
+        X_key = f"layers/{layer_key}" if layer_key is not None else "X"
         print(f"Load GEX from .{X_key}")
 
         if 'classification' in cfg.dataset.prediction_task:
@@ -81,6 +82,15 @@ def prepare_geome_dataset(adata,
         if key in adata.obs.columns:
             adata.obs[key] = adata.obs[key].astype('category')
 
+    # Apply segmentation noise if configured
+    if cfg.dataset.segmentation_robustness is not None:
+        node_fraction = cfg.dataset.segmentation_robustness[0]
+        overflow_fraction = cfg.dataset.segmentation_robustness[1]
+        print(f"\nApplying segmentation noise:")
+        print(f"- Node fraction: {node_fraction}")
+        print(f"- Overflow fraction: {overflow_fraction}")
+        adata = apply_segmentation_noise(adata, node_fraction, overflow_fraction)
+
     adj_matrix_loc = "adj_matrix"
     prediction_obs = cfg.dataset.prediction_obs
     category_to_iterate_list = cfg.dataset.sample_key
@@ -128,7 +138,6 @@ def prepare_geome_dataset(adata,
                     transforms.Subset(key_value = subset_dict, axis="obs"),
                 ]
             )
-
 
         transform = transforms.Compose(
             [

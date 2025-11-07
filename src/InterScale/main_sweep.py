@@ -37,7 +37,16 @@ def main_sweep(cfg_path, model_type, sweep_goal):
         cfg.defrost()
         print('sweep config: ', sweep_config)
         print('sweep run: ', sweep_run.config)
-        if sweep_goal == 'hyperparmeter':
+        if sweep_goal == 'robustness':
+            print('robustness sweep')
+            cfg.dataset.pct_mask_nodes = sweep_config['dataset.pct_mask_nodes']
+            cfg.dataset.spatial_neigbors_kwargs.radius = sweep_config['dataset.spatial_neigbors_kwargs.radius']
+            cfg.optim.seed = sweep_config['optim.seed']
+        elif sweep_goal == 'segmentation':
+            print('segmentation sweep')
+            cfg.dataset.segmentation_robustness = sweep_config['dataset.segmentation_robustness']
+            cfg.optim.seed = sweep_config['optim.seed']
+        elif sweep_goal == 'hyperparmeter':
             print('hyperparameter sweep')
             cfg.optim.lr = sweep_config['optim.lr']
             cfg.optim.n_epochs = sweep_config['optim.n_epochs']
@@ -70,6 +79,10 @@ def main_sweep(cfg_path, model_type, sweep_goal):
     print(cfg)
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
     print(adata)
+    if cfg.dataset.segmentation_robustness is not None:
+        print('Applying segmentation noise...')
+        sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
+        adata = apply_segmentation_noise(adata, cfg.dataset.segmentation_robustness)
     
     if model_type == "LocalModel":
         interscale.model.LocalModel._setup_anndata(adata = adata,
@@ -115,10 +128,10 @@ def main_sweep(cfg_path, model_type, sweep_goal):
                            pct_mask_nodes=cfg.dataset.pct_mask_nodes,
                            learning_type="node")
     
-    model.train(max_epochs = cfg.optim.n_epochs, 
+    model.train(max_epochs = cfg.optim.n_epochs,
                 datamodule = dm,
-                early_stopping = True)
-
+                early_stopping = cfg.optim.early_stopping)
+   
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GTLongRange')
 

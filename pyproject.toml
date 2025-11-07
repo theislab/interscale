@@ -128,3 +128,5 @@ skip = [
     "docs/references.md",
     "docs/notebooks/example.ipynb",
 ]
+[tool.hatch.build.targets.wheel]
+packages=["src/InterScale"]

@@ -335,7 +335,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
                                 local_embeddings_df: pd.DataFrame | None = None,
                                 global_embeddings_df: pd.DataFrame | None = None,
                                 attention_matrix_df: pd.DataFrame | None = None,
-                                cls: np.ndarray | None = None):
+                                cls_token_horizontal: np.ndarray | None = None,
+                                cls_token_vertical: np.ndarray | None = None):
         """Save the evaluation results in the adata object.
         
         Parameters
@@ -347,7 +348,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         attention_matrix_df: pd.DataFrame
         decoder_weight_df: pd.DataFrame
         y_pred_df: pd.DataFrame
-        cls: np.ndarray
+        cls_token_horizontal: np.ndarray
+        cls_token_vertical: np.ndarray
         
         returns
         -------
@@ -361,8 +363,10 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             adata.obsm[f'{prefix}_global_emb'] = global_embeddings_df.values
         if attention_matrix_df is not None:
             adata.obsm[f'{prefix}_attn_matrix'] = attention_matrix_df.values
-        if cls is not None:
-            adata.obs[f'{prefix}_cls'] = cls
+        if cls_token_horizontal is not None:
+            adata.obs[f'{prefix}_cls_horizontal'] = cls_token_horizontal
+        if cls_token_vertical is not None:
+            adata.obs[f'{prefix}_cls_vertical'] = cls_token_vertical
         if self.prediction_task == 'classification':
             adata.obsm[f'{prefix}_y_pred'] = y_pred_df.values # [cells, classes]
         else:
@@ -531,6 +535,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         cfg: CN,
         local_component: bool = False,
         global_component: bool = False,
+        postfix: str | None = None,
         wandb_save: bool = False,
         enable_remapping: bool = True,
     ):
@@ -560,10 +565,15 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         """
         file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
         
+        if postfix is not None:
+            file_name_prefix = file_name_prefix + f"{postfix}"
+        
         model_save_path = os.path.join(dir_path, f"{file_name_prefix}{SAVE_KEYS.MODEL_FNAME}")
         
         # Initialize model
         model = cls(adata, cfg)
+        
+        print(f"Loading model from {model_save_path}")
         
         # Load state dict
         state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]

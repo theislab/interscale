@@ -1,8 +1,10 @@
 from .clustering import leiden_cluster_embeddings, plot_clustering_metrics
 from .gene_rank_analysis import predict_gene_r2
+from .graph_classification import calculate_pr_auc, pr_auc_curve
 
 __all__ = [
     "leiden_cluster_embeddings",
     "plot_clustering_metrics",
-    "predict_gene_r2"
+    "predict_gene_r2",
+    "calculate_pr_auc"
 ]
