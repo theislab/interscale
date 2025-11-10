@@ -3,9 +3,11 @@ from InterScale.tl import prepare_geome_dataset
 from InterScale.geome_dataloader import GraphAnnDataModule
 from InterScale.config import load_config
 from InterScale.tl import remove_zero_expression_cells
+from InterScale.pp import apply_segmentation_noise
 
 import argparse
 import scanpy as sc
+import squidpy as sq
 
 def main(cfg_path, model_type):
 
@@ -16,7 +18,9 @@ def main(cfg_path, model_type):
     print(adata)
     
     if cfg.dataset.segmentation_robustness is not None:
-        print('Applying segmentation noise...')
+        print(f"\nApplying segmentation noise:")
+        print(f"- Node fraction: {node_fraction}")
+        print(f"- Overflow fraction: {overflow_fraction}")
         sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
         adata = apply_segmentation_noise(adata, cfg.dataset.segmentation_robustness)
     
