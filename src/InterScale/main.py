@@ -15,6 +15,11 @@ def main(cfg_path, model_type):
     adata = remove_zero_expression_cells(adata)
     print(adata)
     
+    if cfg.dataset.segmentation_robustness is not None:
+        print('Applying segmentation noise...')
+        sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
+        adata = apply_segmentation_noise(adata, cfg.dataset.segmentation_robustness)
+    
     if model_type == "LocalModel":
         interscale.model.LocalModel._setup_anndata(adata = adata,
                                                 prediction_task = cfg.dataset.prediction_task, 
