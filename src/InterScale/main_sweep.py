@@ -18,18 +18,10 @@ def main_sweep(cfg_path, model_type, sweep_goal):
     
     if model_type == 'LocalModel' or model_type == 'CombinedModel':
         local_component = True
-    elif model_type == 'GlobalModel':
+    elif model_type == 'GlobalModel' or model_type == 'CombinedModel':
         global_component = True
 
-    file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
-
-    if cfg.wandb.use:
-        print('Wandb initialize...')
-        sweep_run = wandb.init(project=cfg.wandb.project_name, 
-                         config=cfg, 
-                         name=file_name_prefix, 
-                         job_type = 'model_training')
-        sweep_config = wandb.config
+    
         
     # Update configuration with sweep parameters
     if sweep_config is not None:
@@ -71,8 +63,17 @@ def main_sweep(cfg_path, model_type, sweep_goal):
                 print('loss sweep')
                 cfg.optim.loss = sweep_config['optim.loss']
         cfg.freeze()
+    
+    file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
 
-        
+    if cfg.wandb.use:
+        print('Wandb initialize...')
+        sweep_run = wandb.init(project=cfg.wandb.project_name, 
+                         config=cfg, 
+                         name=file_name_prefix, 
+                         job_type = 'model_training')
+        sweep_config = wandb.config
+
     ####### PREPROCESSING #######
     # Load adata
     cfg = load_config(cfg_path)
