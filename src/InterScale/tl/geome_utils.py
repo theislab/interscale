@@ -82,15 +82,6 @@ def prepare_geome_dataset(adata,
         if key in adata.obs.columns:
             adata.obs[key] = adata.obs[key].astype('category')
 
-    # Apply segmentation noise if configured
-    if cfg.dataset.segmentation_robustness is not None:
-        node_fraction = cfg.dataset.segmentation_robustness[0]
-        overflow_fraction = cfg.dataset.segmentation_robustness[1]
-        print(f"\nApplying segmentation noise:")
-        print(f"- Node fraction: {node_fraction}")
-        print(f"- Overflow fraction: {overflow_fraction}")
-        adata = apply_segmentation_noise(adata, node_fraction, overflow_fraction)
-
     adj_matrix_loc = "adj_matrix"
     prediction_obs = cfg.dataset.prediction_obs
     category_to_iterate_list = cfg.dataset.sample_key

@@ -16,7 +16,9 @@ def main(cfg_path, model_type):
     print(adata)
     
     if cfg.dataset.segmentation_robustness is not None:
-        print('Applying segmentation noise...')
+        print(f"\nApplying segmentation noise:")
+        print(f"- Node fraction: {node_fraction}")
+        print(f"- Overflow fraction: {overflow_fraction}")
         sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
         adata = apply_segmentation_noise(adata, cfg.dataset.segmentation_robustness)
     
