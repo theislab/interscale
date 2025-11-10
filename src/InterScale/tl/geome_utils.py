@@ -1,7 +1,6 @@
 from geome import transforms, ann2data, iterables
 import numpy as np
 from yacs.config import CfgNode as CN
-from InterScale.pp import apply_segmentation_noise
 
 def prepare_a2d_dataset(cfg: CN):
     """
