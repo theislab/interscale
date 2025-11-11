@@ -538,6 +538,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         postfix: str | None = None,
         wandb_save: bool = False,
         enable_remapping: bool = True,
+        model_ckpt_path: str = None
     ):
         """Load a saved model.
 
@@ -557,6 +558,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             Whether this was saved via wandb.
         enable_remapping
             Whether to enable automatic state dict key remapping.
+        model_ckpt_path: str
+            Path to load model checkpoint from. If None, use name from config.
 
         Returns
         -------
@@ -567,16 +570,19 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         if postfix is not None:
             file_name_prefix = file_name_prefix + f"{postfix}"
-        
-        model_save_path = os.path.join(dir_path, f"{file_name_prefix}{SAVE_KEYS.MODEL_FNAME}")
+
+        if model_ckpt_path is None:
+            model_ckpt_path = os.path.join(dir_path, f"{file_name_prefix}{SAVE_KEYS.MODEL_FNAME}")
         
         # Initialize model
         model = cls(adata, cfg)
+
+        model_save_path = model_ckpt_path
         
         print(f"Loading model from {model_save_path}")
         
         # Load state dict
-        state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+        state_dict = torch.load(model_ckpt_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
         
         # Apply remapping if enabled
         if enable_remapping:
