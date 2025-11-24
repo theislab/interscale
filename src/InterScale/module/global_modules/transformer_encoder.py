@@ -3,7 +3,7 @@ from torch import nn
 
 from InterScale.module.base import GlobalModuleClass
 from InterScale.module.global_modules.transformer_encoder_layer import CustomTransformerEncoderLayer
-from InterScale.tl import pad_batch, create_transformer_attention_mask_from_edges, SelfAttentionRelevance
+from InterScale.tl import pad_batch, create_transformer_attention_mask_from_edges, SelfAttentionRelevance, attn_mask_diagonal
 
 class TransformerNodeEncoderHook(GlobalModuleClass):
     """
@@ -98,7 +98,16 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
             # Convert attention_mask to same dtype as src_padding_mask
             attention_mask = attention_mask.to(dtype=src_padding_mask.dtype)
         else:
-            attention_mask = None
+            #attention_mask = None
+            # default: mask diagonal with -inf; no attention to self
+            attention_mask = attn_mask_diagonal(
+                batched_data.batch, 
+                index_nodes, 
+                self.n_heads, 
+                emb.device
+            )
+        
+        attention_mask = attention_mask.to(dtype=src_padding_mask.dtype)
             
         return padded_emb, src_padding_mask, index_nodes, attention_mask
 
