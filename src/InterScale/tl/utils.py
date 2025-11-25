@@ -1,6 +1,7 @@
 import random
 import torch
 from scipy.stats import pearsonr
+import numpy as np
 
 def set_full_reproducibility(seed: int = 42) -> None:
     random.seed(seed)
