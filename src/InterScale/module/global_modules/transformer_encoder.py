@@ -163,9 +163,9 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         """
         # evaluation on single graph
         batched_data.batch = torch.Tensor(len(batched_data.obs_names)*[0])
-        transformer_in, src_padding_mask, pad_index_nodes, _ = self.common_step_local_to_global(batched_data, embedding, eval_step=True)
+        transformer_in, src_padding_mask, pad_index_nodes, attn_mask = self.common_step_local_to_global(batched_data, embedding, eval_step=True)
         
-        transformer_out, src_padding_mask = self.forward(transformer_in, src_padding_mask, register_hook=True)
+        transformer_out, src_padding_mask = self.forward(transformer_in, src_padding_mask, attn_mask, register_hook=True)
         I = self.self_attn_relevance.generate_relevance(transformer_out)
 
         #src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node

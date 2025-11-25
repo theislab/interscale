@@ -61,6 +61,28 @@ def sample_batch(num_graphs=2, num_features=5, num_classes=3, graph_level=True):
     batch = Batch.from_data_list(graphs)
     return batch
 
+
+def create_module(sample_batch, long_range_attention=False, pct_mask_nodes=0.0):
+    """Create a batch of graphs for testing."""
+    n_input = 5
+    n_output = 3
+    n_embed = 4
+    
+    batch_size = len(np.unique(sample_batch.batch))
+    
+    global_module_kwargs = create_sample_global_module_kwargs(long_range_attention=long_range_attention)
+
+    module = TransformerNodeEncoderHook(
+        n_input=n_input,
+        n_output=n_output,
+        n_embed=n_embed,
+        decoder_type='linear',
+        pct_mask_nodes=pct_mask_nodes,
+        **global_module_kwargs
+    )
+    
+    return module
+
 @pytest.mark.parametrize('pct_mask_nodes', [0.0, 0.2])
 def test_common_step_masking(sample_global_module_kwargs, sample_batch, pct_mask_nodes):
     """Test _common_step_masking."""
@@ -132,3 +154,20 @@ def test_common_step_local_to_global(sample_batch, pct_mask_nodes, prediction_le
     
     assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
     assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
+
+
+def test_evaluate(sample_batch, long_range_attention=False):
+    """Test the .evaluate() method. No masking during evaluation.
+    """
+    module = create_module(sample_batch, long_range_attention=long_range_attention)
+    
+    embedding = module.create_gex_embedding(sample_batch.x.cpu().numpy(), type="PCA")
+    embedding = torch.tensor(embedding, dtype=torch.float32, device=sample_batch.x.device)
+    transformer_in, transformer_out, eval_src_padding_mask, eval_pad_index_nodes, I = module.evaluate(sample_batch, embedding)
+
+    assert I.shape[0] == I.shape[1], f"Relevance matrix returned by evaluate() should be square, got {I.shape}"
+
+    # Check type and nan safety
+    assert isinstance(I, torch.Tensor)
+    assert not torch.any(torch.isnan(I)), "Relevance matrix I contains NaN values"
+    assert not torch.any(torch.isnan(transformer_out)), "transformer_out contains NaN values"
