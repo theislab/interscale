@@ -60,11 +60,13 @@ def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor,
     
     # Initialize with -inf (no attention allowed) 
     attention_mask = torch.full((num_batch*num_heads, max_seq_len+1, max_seq_len+1), INVALID_MASK_VALUE, device=edge_index.device)
+    # Set the diagonal to -inf (no self-attention)
+    diag_idx = torch.arange(max_seq_len, device=edge_index.device)
+    attention_mask[:, diag_idx, diag_idx] = INVALID_MASK_VALUE
     
     # Create full adjacency matrix + 1 for cls token (end of sequence)
     adj_matrix = torch.zeros((num_nodes, num_nodes), device=edge_index.device) # TODO: check if zero or ones
     adj_matrix[edge_index[0], edge_index[1]] = INVALID_MASK_VALUE
-    #TODO: also fill diagonal with INVALID_MASK_VALUE
     
     # For each batch, extract the submatrix for kept nodes
     for b in range(num_batch):
@@ -82,6 +84,8 @@ def create_transformer_attention_mask_from_edges(edge_index: torch.Tensor,
         assert attention_mask.shape[-2:] == (max_seq_len+1, max_seq_len+1), f"Mismatch: attention_mask.shape[-2:]: {attention_mask.shape[-2:]}, (seq_len+1, seq_len+1): {(seq_len+1, seq_len+1)}"
         # append inverse adjacency matrix to the end of the attention mask
         attention_mask[b*num_heads:b*num_heads+num_heads, -(seq_len+1):, -(seq_len+1):] = batch_mask
+        # add zeros for nodes that are not in the batch
+        attention_mask[b*num_heads:b*num_heads+num_heads, :seq_len, :seq_len] = float('0')
     
     assert not torch.any(torch.isnan(attention_mask)), "attention_mask contains NaN values"
     print('attention_mask', attention_mask.shape, attention_mask)
