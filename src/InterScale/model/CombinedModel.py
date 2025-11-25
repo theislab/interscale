@@ -122,8 +122,9 @@ class CombinedModel(NodeMaskingTrainingPlan,
             
             if self.module.decoder_type == 'linear':
                 W = self.module.decoder.decoder.weight
-                contribution = torch.matmul(global_embedding[:-1].squeeze(1), torch.transpose(W, 0, 1))
-                decoder_weight_df.loc[sample_mask] = contribution.detach().numpy()
+                #contribution = torch.matmul(global_embedding[:-1].squeeze(1), torch.transpose(W, 0, 1))
+                #decoder_weight_df.loc[sample_mask] = contribution.detach().numpy()
+                decoder_weight_df.loc[sample_mask] = W.detach().numpy()
                 
         adata = self.save_evaluation_results(adata, 
                                              prefix, 
