@@ -532,6 +532,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         dir_path: str,
         adata: AnnData,
         cfg: CN,
+        model_name: str | None= None,
         local_component: bool = False,
         global_component: bool = False,
         postfix: str | None = None,
@@ -548,6 +549,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             AnnData object to load the model with.
         cfg
             Configuration object.
+        model_name: str | None
+            Name of the model to load. If None, the model name is inferred from the config file.
         local_component
             Whether this is a local component model.
         global_component
@@ -562,7 +565,11 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         model
             Loaded model.
         """
-        file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
+        
+        if model_name is not None:
+            file_name_prefix = model_name
+        else:
+            file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
         
         if postfix is not None:
             file_name_prefix = file_name_prefix + f"{postfix}"
