@@ -325,7 +325,6 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             adata_manager.validate()
 
         return adata
-
     
     def save_evaluation_results(self,
                                 adata: AnnData,

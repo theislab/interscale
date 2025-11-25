@@ -84,8 +84,9 @@ class LocalModel(NodeMaskingTrainingPlan,
             
             if self.module.decoder_type == 'linear':
                 W = self.module.decoder.decoder.weight
-                contribution = torch.matmul(local_embedding, torch.transpose(W, 0, 1))
-                decoder_weight_df.loc[sample_mask] = contribution.detach().cpu().numpy()
+                #contribution = torch.matmul(local_embedding, torch.transpose(W, 0, 1))
+                #decoder_weight_df.loc[sample_mask] = contribution.detach().cpu().numpy()
+                decoder_weight_df.loc[sample_mask] = W.detach().cpu().numpy()
             
             y_pred = self.module.predict(local_embedding, self.prediction_level)
             y_pred_df.loc[sample_mask] = y_pred.detach().cpu().numpy()
