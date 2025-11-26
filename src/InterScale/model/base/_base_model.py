@@ -593,7 +593,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
                 state_dict = torch.load(model_save_path, map_location=map_location)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
             else:
                 print(f"Model file {model_save_path} not found.")
-            raise FileNotFoundError(f"Model file {model_save_path} not found.")
+                raise FileNotFoundError(f"Model file {model_save_path} not found.")
         
         # Apply remapping if enabled
         if enable_remapping:
