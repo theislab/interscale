@@ -581,8 +581,16 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         print(f"Loading model from {model_save_path}")
         
-        # Load state dict
-        state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+        if os.path.exists(model_save_path):
+            state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+        else:
+            print(f"Try with .ckpt extension.")
+            model_save_path = os.path.join(dir_path, f"{file_name_prefix}.ckpt")
+            if os.path.exists(model_save_path):
+                state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+            else:
+                print(f"Model file {model_save_path} not found.")
+            raise FileNotFoundError(f"Model file {model_save_path} not found.")
         
         # Apply remapping if enabled
         if enable_remapping:
