@@ -329,8 +329,6 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
     def save_evaluation_results(self,
                                 adata: AnnData,
                                 prefix: str,
-                                decoder_weight_df: pd.DataFrame,
-                                y_pred_df: pd.DataFrame,
                                 local_embeddings_df: pd.DataFrame | None = None,
                                 global_embeddings_df: pd.DataFrame | None = None,
                                 attention_matrix_df: pd.DataFrame | None = None,
