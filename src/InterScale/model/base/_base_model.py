@@ -581,13 +581,16 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         print(f"Loading model from {model_save_path}")
         
+        # Determine map_location based on CUDA availability
+        map_location = 'cpu' if not torch.cuda.is_available() else None
+        
         if os.path.exists(model_save_path):
-            state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+            state_dict = torch.load(model_save_path, map_location=map_location)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
         else:
             print(f"Try with .ckpt extension.")
             model_save_path = os.path.join(dir_path, f"{file_name_prefix}.ckpt")
             if os.path.exists(model_save_path):
-                state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+                state_dict = torch.load(model_save_path, map_location=map_location)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
             else:
                 print(f"Model file {model_save_path} not found.")
             raise FileNotFoundError(f"Model file {model_save_path} not found.")
