@@ -8,7 +8,7 @@ from anndata import AnnData
 def apply_segmentation_noise(adata: AnnData, 
                             node_fraction: float, 
                             overflow_fraction: float,
-                            adjacency_key: str = "adjacency_matrix_connectivities") -> AnnData:
+                            adjacency_key: str = "spatial_connectivities") -> AnnData:
     
     """
     Apply segmentation noise to the AnnData object by redistributing gene expression

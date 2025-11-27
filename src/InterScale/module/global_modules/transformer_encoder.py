@@ -17,7 +17,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                  num_layers: int = 3,
                  dim_feedforward: int = 2048,
                  dropout_global: float = 0.1,
-                 long_range_attention: bool = True,
+                 long_range_attention: bool = False,
                  **base_module_kwargs):
         
         super().__init__(**base_module_kwargs) 

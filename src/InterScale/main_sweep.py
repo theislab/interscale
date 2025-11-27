@@ -21,6 +21,16 @@ def main_sweep(cfg_path, model_type, sweep_goal):
     elif model_type == 'GlobalModel' or model_type == 'CombinedModel':
         global_component = True
         
+    file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
+
+    if cfg.wandb.use:
+        print('Wandb initialize...')
+        sweep_run = wandb.init(project=cfg.wandb.project_name, 
+                         config=cfg, 
+                         name=file_name_prefix, 
+                         job_type = 'model_training')
+        sweep_config = wandb.config
+        
     # Update configuration with sweep parameters
     if sweep_config is not None:
         cfg.set_new_allowed(True)
@@ -38,42 +48,29 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             cfg.optim.seed = sweep_config['optim.seed']
         elif sweep_goal == 'hyperparmeter':
             print('hyperparameter sweep')
-            cfg.optim.lr = sweep_config['optim.lr']
-            cfg.optim.n_epochs = sweep_config['optim.n_epochs']
-            #cfg.dataset.batch_size = sweep_run.config.dataset.batch_size
-            cfg.optim.lr_warm_up = sweep_config['optim.lr_warm_up']
-            cfg.optim.weight_decay = sweep_config['optim.weight_decay']
+            cfg.optim.lr_warmup = sweep_config['optim.lr_warmup']
+            cfg.optim.wd = sweep_config['optim.wd']
+            cfg.dataset.batch_size = sweep_config['dataset.batch_size']
+            cfg.dataset.pct_mask_nodes = sweep_config['dataset.pct_mask_nodes']
+            cfg.model.n_embed = sweep_config['model.n_embed']
             if model_type == 'LocalModel' or model_type == 'CombinedModel':
-                print('gnn configs')
+                print('LocalModel configs')
                 cfg.model.local_component.parameters.num_layers = sweep_config['model.local_component.parameters.num_layers']
                 cfg.model.local_component.parameters.hidden_dim = sweep_config['model.local_component.parameters.hidden_dim']
-                cfg.model.local_component.parameters.embed_dim = sweep_config['model.local_component.parameters.embed_dim']
-                cfg.model.local_component.parameters.dropout = sweep_config['model.local_component.parameters.dropout']
             elif model_type == 'GlobalModel' or model_type == 'CombinedModel':
                 print('transformer configs')
-                cfg.model.global_component.parameters.d_model = sweep_config['model.n_embed'] # input transformer dimension equal to gnn embed dim
                 cfg.model.global_component.parameters.dim_feedforward = sweep_config['model.global_component.parameters.dim_feedforward']
                 cfg.model.global_component.parameters.num_layers = sweep_config['model.global_component.parameters.num_layers']
                 cfg.model.global_component.parameters.n_heads = sweep_config['model.global_component.parameters.n_heads']
                 cfg.model.global_component.parameters.dropout = sweep_config['model.global_component.parameters.dropout']
                 #cfg.transformer.max_seq_len = sweep_run.config.transformer.max_seq_len
-            elif sweep_goal == 'loss':
-                print('loss sweep')
-                cfg.optim.loss = sweep_config['optim.loss']
+        elif sweep_goal == 'loss':
+            print('loss sweep')
+            cfg.optim.loss = sweep_config['optim.loss']
         cfg.freeze()
         
     set_full_reproducibility(cfg.optim.seed)
     
-    file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
-
-    if cfg.wandb.use:
-        print('Wandb initialize...')
-        sweep_run = wandb.init(project=cfg.wandb.project_name, 
-                         config=cfg, 
-                         name=file_name_prefix, 
-                         job_type = 'model_training')
-        sweep_config = wandb.config
-
     ####### PREPROCESSING #######
     # Load adata
     cfg = load_config(cfg_path)
