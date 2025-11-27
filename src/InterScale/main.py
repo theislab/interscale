@@ -4,6 +4,7 @@ from InterScale.geome_dataloader import GraphAnnDataModule
 from InterScale.config import load_config
 from InterScale.tl import remove_zero_expression_cells
 from InterScale.pp import apply_segmentation_noise
+from InterScale.tl import remove_zero_expression_cells, set_full_reproducibility
 
 import argparse
 import scanpy as sc
@@ -12,6 +13,7 @@ import squidpy as sq
 def main(cfg_path, model_type):
 
     cfg = load_config(cfg_path)
+    set_full_reproducibility(cfg.optim.seed)
     print(cfg)
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
     adata = remove_zero_expression_cells(adata)

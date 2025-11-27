@@ -84,10 +84,10 @@ class CombinedModel(NodeMaskingTrainingPlan,
             columns=range(self._cfg.model.global_component.parameters.max_seq_len)
         )
         
-        decoder_weight_df = pd.DataFrame(
-            index=obs_names_str,
-            columns=range(self.n_output)
-        )
+        # decoder_weight_df = pd.DataFrame(
+        #     index=obs_names_str,
+        #     columns=range(self.n_output)
+        # )
         
         y_pred_df = pd.DataFrame(
             index=obs_names_str,
@@ -120,14 +120,14 @@ class CombinedModel(NodeMaskingTrainingPlan,
             attention_matrix_df.loc[sample_mask] = padded_attn
             y_pred_df.loc[sample_mask] = y_pred.detach().cpu().numpy()
             
-            if self.module.decoder_type == 'linear':
-                W = self.module.decoder.decoder.weight
-                contribution = torch.matmul(global_embedding[:-1].squeeze(1), torch.transpose(W, 0, 1))
-                decoder_weight_df.loc[sample_mask] = contribution.detach().numpy()
+            # if self.module.decoder_type == 'linear':
+            #     W = self.module.decoder.decoder.weight
+                #contribution = torch.matmul(global_embedding[:-1].squeeze(1), torch.transpose(W, 0, 1))
+                #decoder_weight_df.loc[sample_mask] = contribution.detach().numpy()
                 
         adata = self.save_evaluation_results(adata, 
                                              prefix, 
-                                             decoder_weight_df = decoder_weight_df, 
+                                             #decoder_weight_df = decoder_weight_df, 
                                              y_pred_df = y_pred_df, 
                                              local_embeddings_df = local_embeddings_df, 
                                              global_embeddings_df = global_embeddings_df, 

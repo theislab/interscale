@@ -2,7 +2,7 @@ import InterScale as interscale
 from InterScale.tl import prepare_geome_dataset
 from InterScale.geome_dataloader import GraphAnnDataModule
 from InterScale.config import load_config
-from InterScale.tl.utils import get_model_filename_prefix
+from InterScale.tl.utils import get_model_filename_prefix, set_full_reproducibility
 
 import argparse
 import scanpy as sc
@@ -68,6 +68,8 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             print('loss sweep')
             cfg.optim.loss = sweep_config['optim.loss']
         cfg.freeze()
+        
+    set_full_reproducibility(cfg.optim.seed)
     
     ####### PREPROCESSING #######
     # Load adata
