@@ -19,15 +19,6 @@ def main(cfg_path, model_type):
     adata = remove_zero_expression_cells(adata)
     print(adata)
     
-    if cfg.dataset.segmentation_robustness is not None:
-        node_fraction = cfg.dataset.segmentation_robustness[0]
-        overflow_fraction = cfg.dataset.segmentation_robustness[1]
-        print(f"\nApplying segmentation noise:")
-        print(f"- Node fraction: {node_fraction}")
-        print(f"- Overflow fraction: {overflow_fraction}")
-        sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
-        adata = apply_segmentation_noise(adata, node_fraction, overflow_fraction)
-    
     if model_type == "LocalModel":
         interscale.model.LocalModel._setup_anndata(adata = adata,
                                                 prediction_task = cfg.dataset.prediction_task, 
@@ -77,10 +68,12 @@ def main(cfg_path, model_type):
                 early_stopping = cfg.optim.early_stopping)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='GTLongRange')
+    # parser = argparse.ArgumentParser(description='GTLongRange')
 
-    parser.add_argument('--cfg', dest='cfg', type=str, required=True, help='The configuration file path.')
-    parser.add_argument('--model_type', dest='model_type', type=str, required=True, help='The model type: LocalModel, GlobalModel or CombinedModel.')
-    args = parser.parse_args()
+    # parser.add_argument('--cfg', dest='cfg', type=str, required=True, help='The configuration file path.')
+    # parser.add_argument('--model_type', dest='model_type', type=str, required=True, help='The model type: LocalModel, GlobalModel or CombinedModel.')
+    # args = parser.parse_args()
+    
+    cfg = "/Users/francesca.drummer/Documents/1_Projects/A3-LongRange/config_files/Legnini_23/legnini23_genes_sample_GlobalModel.yaml"
 
-    main(args.cfg, args.model_type)
+    main(cfg, "CombinedModel")

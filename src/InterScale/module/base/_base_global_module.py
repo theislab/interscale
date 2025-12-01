@@ -6,8 +6,7 @@ from InterScale.module.base import BaseModuleClass
 from InterScale.tl import pad_batch, apply_mask
 from typing import Literal
 from sklearn.decomposition import PCA
-
-SEQ_LEN_MASK = None
+import numpy as np
 
 class GlobalModuleClass(BaseModuleClass):
     def __init__(self,
@@ -57,21 +56,24 @@ class GlobalModuleClass(BaseModuleClass):
         else:
             raise ValueError(f"Invalid embedding type: {type}")
         
-    def _process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx):
+    def _process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx_tensor):
         """Process batch to extract y_true and adjusted_mask_idx for metrics calculation.
+        
+        mask_idx = torch.tensor([0, 2, 3, 7, 8])
+        pad_index_nodes = [[0, 1, 2, 3], [0, 1], [0, 1, 2, 3]]
         
         Parameters
         ----------
         batch
             Input batch
-        prediction_task
+        prediction_task: str
             Type of prediction task ('classification' or 'regression')
-        prediction_level
+        prediction_level: str
             Level of prediction ('node' or 'graph')
-        pad_index_nodes
-            List of padded node indices
-        mask_idx
-            Indices of masked nodes
+        pad_index_nodes: List[List[int]]
+            List of padded node indices: [B, S] or [B,N] if number of nodes in graph are smaller than max_seq_len (S)
+        mask_idx_tensor: torch.Tensor
+            Indices of masked nodes of shape [N_masked_nodes] with range [0, N_nodes-1]
             
         Returns
         -------
@@ -81,25 +83,30 @@ class GlobalModuleClass(BaseModuleClass):
             Adjusted indices for masked nodes
         """
         assert prediction_level == "node", "Node specific retrieval only necessary for node-level prediction."
-        
+                
         y_true = []
         adjusted_mask_idx = []  # Track new positions of masked nodes
         current_offset = 0
         start = 0
-
+        mask_j = 0
+        
         for i in range(batch.batch[-1] + 1):
             mask = batch.batch.eq(i)
-            pad_indices = torch.tensor(pad_index_nodes[i], device=batch.x.device)
-            end = start + len(pad_indices)
+            pad_indices = torch.tensor(pad_index_nodes[i], device=batch.x.device) + start
+            end = start + torch.sum(mask)
 
             # can not assume that pad_indices is a subset of mask_idx
-            for idx in mask_idx[start:end]:
-                if idx in pad_indices:
-                    new_idx = torch.where(pad_indices == idx)[0].item()
+            #TODO: use stack and pop instead 
+            for j, mask_idx in enumerate(mask_idx_tensor[mask_j:]):
+                if mask_idx > end:
+                    break
+                if mask_idx in pad_indices:
+                    new_idx = torch.where(pad_indices == mask_idx)[0].item()
                     adjusted_mask_idx.append(new_idx + current_offset)
             
             current_offset += len(pad_indices)
             start = end
+            mask_j = j
             
             if 'classification' in prediction_task:
                 y_true += batch.y[mask][pad_index_nodes[i]].clone().detach()

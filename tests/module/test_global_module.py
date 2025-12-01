@@ -171,3 +171,65 @@ def test_evaluate(sample_batch, long_range_attention=False):
     assert isinstance(I, torch.Tensor)
     assert not torch.any(torch.isnan(I)), "Relevance matrix I contains NaN values"
     assert not torch.any(torch.isnan(transformer_out)), "transformer_out contains NaN values"
+
+def test_process_batch_for_metrics_mask_idx_exploration():
+    """Test function to explore the relationship between mask_idx and pad_index_nodes.
+    
+    This test explores whether mask_idx can be correctly sliced to match pad_index_nodes,
+    which is an assumption in _process_batch_for_metrics.
+    """
+    from InterScale.module.base._base_global_module import GlobalModuleClass
+    
+    # Create a mock batch with known structure
+    # Batch 0: 10 nodes (indices 0-9)
+    # Batch 1: 8 nodes (indices 10-17)
+    # Batch 2: 12 nodes (indices 18-29)
+    num_nodes_per_batch = [10, 8, 12]
+    total_nodes = sum(num_nodes_per_batch)
+    
+    # Create batch tensor
+    batch_tensor = torch.cat([torch.full((n,), i, dtype=torch.long) for i, n in enumerate(num_nodes_per_batch)])
+    
+    # Create mock batch object
+    class MockBatch:
+        def __init__(self):
+            self.batch = batch_tensor
+            self.x = torch.randn(total_nodes, 5)
+            self.y = torch.randint(0, 3, (total_nodes, 3)).float()
+            self.ptr = torch.tensor([0, 10, 18, 30], dtype=torch.long)
+    
+    batch = MockBatch()
+    
+    # Scenario 1: No nodes masked (pct_mask_nodes = 0.0 means no nodes are "masked" for prediction)
+    # mask_idx should be empty: []
+    mask_idx_all = torch.tensor([])
+    
+    # Scenario 2: Partial masking - some nodes masked in each batch
+    # Batch 0: mask nodes [1, 3, 5, 7, 9] (global indices)
+    # Batch 1: mask nodes [11, 13, 15] (global indices)
+    # Batch 2: mask nodes [19, 21, 23, 25, 27, 29] (global indices)
+    mask_idx_partial = torch.tensor([1, 3, 5, 7, 9, 11, 13, 15, 19, 21, 23, 25, 27, 29])
+    
+    # Scenario 3: Different number of masked nodes per batch
+    # Batch 0: mask 3 nodes [2, 4, 6]
+    # Batch 1: mask 5 nodes [10, 12, 14, 16, 17]
+    # Batch 2: mask 2 nodes [20, 24]
+    mask_idx_uneven = torch.tensor([2, 4, 6, 10, 12, 14, 16, 17, 20, 24])
+    
+    embedding = batch.x
+    
+    for mask_idx, scenario_name in zip([mask_idx_all, mask_idx_partial, mask_idx_uneven], ["All nodes masked", "Partial masking", "Different number of masked nodes per batch"]):
+        print(f"Scenario: {scenario_name}")
+        max_seq_len = 10
+        padded_emb, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
+                embedding, 
+                batch.batch, 
+                max_seq_len, 
+                get_mask=True, 
+                keep_indices=mask_idx  # Add parameter to ensure masked nodes are kept (not during evaluation) 
+            )
+        
+        y_true, adjusted_mask_idx = module._process_batch_for_metrics(batch, prediction_task, prediction_level, index_nodes, mask_idx)
+        
+    
+    
