@@ -12,7 +12,7 @@ class CustomTransformerEncoderLayer(TransformerEncoderLayer):
 
     def __init__(self, d_model: int, nhead: int, dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
-                 layer_norm_eps: float = 1e-5, batch_first: bool = False, norm_first: bool = False,
+                 layer_norm_eps: float = 1e-5, batch_first: bool = False, norm_first: bool = True,
                  bias: bool = True, device=None, dtype=None, *args, **kwargs):
         
         super(CustomTransformerEncoderLayer, self).__init__(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout,
