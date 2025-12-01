@@ -11,14 +11,14 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
     """
 
     def __init__(self,
-                 max_seq_len: int,
-                 n_heads: int = 4,
-                 act_func: nn.Module = nn.ReLU(),
-                 num_layers: int = 3,
-                 dim_feedforward: int = 2048,
-                 dropout_global: float = 0.1,
-                 long_range_attention: bool = True,
-                 **base_module_kwargs):
+                max_seq_len: int,
+                n_heads: int = 4,
+                act_func: nn.Module = nn.ReLU(),
+                num_layers: int = 3,
+                dim_feedforward: int = 2048,
+                dropout_global: float = 0.1,
+                long_range_attention: bool = True,
+                **base_module_kwargs):
         
         super().__init__(**base_module_kwargs) 
         # Save model parameters
@@ -33,7 +33,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         
         # Create Transformer Encoder
         encoder_layer = CustomTransformerEncoderLayer(
-            self.n_embed, self.n_heads, self.dim_feedforward, self.dropout_global, self.act_func
+            self.n_embed, self.n_heads, self.dim_feedforward, self.dropout_global, self.act_func, norm_first=True
         )
         encoder_norm = nn.LayerNorm(self.n_embed)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, self.num_layers, norm=encoder_norm)
@@ -142,7 +142,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
 
         zeros = src_padding_mask.data.new(src_padding_mask.size(0), 1).fill_(0)
         src_padding_mask = torch.cat([src_padding_mask, zeros], dim=1)
-
+        print(f"Padding Mask Stats: {src_padding_mask.float().mean().item():.2f}")
         transformer_out = self.transformer_encoder(padded_h_node, src_key_padding_mask=src_padding_mask, mask=mask)  # (S, B, h_d)
 
         if register_hook:
@@ -166,6 +166,37 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         transformer_in, src_padding_mask, pad_index_nodes, attn_mask = self.common_step_local_to_global(batched_data, embedding, eval_step=True)
         
         transformer_out, src_padding_mask = self.forward(transformer_in, src_padding_mask, attn_mask, register_hook=True)
+        
+        last_layer = self.transformer_encoder.layers[-1]
+        raw_attn = last_layer.get_attn_output_weights()
+        raw_attn = raw_attn.detach().cpu()
+
+        print(f"Shape raw - weights: {raw_attn.shape}")
+
+        if raw_attn.dim() == 3:
+            matrix = raw_attn[0]
+        elif raw_attn.dim() == 4:
+            matrix = raw_attn[0].mean(dim=0)
+        else:
+            matrix = raw_attn.squeeze()
+        
+        print(f"Shape matrix: {matrix.shape}")
+
+        if matrix.dim() == 2:
+            diag_val = torch.diag(matrix).mean().item()
+
+        off_diag_mask = ~torch.eye(matrix.shape[0], dtype=bool)
+        off_diag_val = matrix[off_diag_mask].mean().item()
+
+        print("\n--- DIAGNOSI REALE (Raw Probability) ---")
+        print(f"Diagonale Media: {diag_val:.6f}")
+        print(f"Off-Diagonal Media: {off_diag_val:.6f}")
+
+        print("\nPrimi 5x5 valori della matrice:")
+        print(matrix[:5, :5])
+
+        
+
         I = self.self_attn_relevance.generate_relevance(transformer_out)
 
         #src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
