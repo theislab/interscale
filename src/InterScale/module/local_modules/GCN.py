@@ -60,16 +60,15 @@ class GCN(LocalModuleClass):
         --------
             h: Embeddings (n x embed_dim)
         """
+        
+        identity = self.input_proj(x)
+        identity = self.input_norm(identity)
         for layer in self.layers:
             if isinstance(layer, MessagePassing):
                 x = layer(x, edge_index)
             else:
                 x = layer(x)
         
-        identity = self.input_proj(x_input)
-        identity = self.input_norm(identity)
-
-
         h=x + identity
 
         h=self.final_norm(h)
