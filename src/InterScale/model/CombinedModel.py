@@ -4,7 +4,7 @@ from yacs.config import CfgNode as CN
 import numpy as np
 import pandas as pd
 import torch
-
+import torch.nn.functional as F
 from InterScale.tl import prepare_a2d_dataset, SelfAttentionRelevance
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.train._training import NodeMaskingTrainingPlan
@@ -103,6 +103,12 @@ class CombinedModel(NodeMaskingTrainingPlan,
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             # no masking during evaluation
             y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
+            print(batch.x.shape, y_pred.shape)
+            
+            cosine_sim = F.cosine_similarity(batch.x, y_pred, dim=1)
+
+            print(f"Mean Cosine Similarity: {cosine_sim.mean().item()}")
+            
             ## Save model output
             # Get indices for this sample
             sample_mask = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
