@@ -58,10 +58,31 @@ class GlobalModuleClass(BaseModuleClass):
         else:
             raise ValueError(f"Invalid embedding type: {type}")
         
-    def _new_process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx_tensor):
+    def _process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx_tensor):
         """Process batch to extract y_true and adjusted_mask_idx for metrics calculation.
         
-        Optimized version with vectorized operations.
+        mask_idx = torch.tensor([0, 2, 3, 7, 8])
+        pad_index_nodes = [[0, 1, 2, 3], [0, 1], [0, 1, 2, 3]]
+        
+        Parameters
+        ----------
+        batch
+            Input batch
+        prediction_task: str
+            Type of prediction task ('classification' or 'regression')
+        prediction_level: str
+            Level of prediction ('node' or 'graph')
+        pad_index_nodes: List[List[int]]
+            List of padded node indices: [B, S] or [B,N] if number of nodes in graph are smaller than max_seq_len (S)
+        mask_idx_tensor: torch.Tensor
+            Indices of masked nodes of shape [N_masked_nodes] with range [0, N_nodes-1]
+            
+        Returns
+        -------
+        y_true: torch.Tensor [N_included_nodes, C] (classification) or [N_included_nodes, F] (regression)
+            Ground truth values
+        adjusted_mask_idx: torch.Tensor [N_masked nodes]
+            Adjusted indices for masked nodes
         """
         assert prediction_level == "node", "Node specific retrieval only necessary for node-level prediction."
         
@@ -100,7 +121,7 @@ class GlobalModuleClass(BaseModuleClass):
             # Create pad_indices tensor once
             pad_indices = torch.tensor(pad_index_nodes[i], device=device) + batch_start
             
-            # KEY OPTIMIZATION: Vectorized intersection and position finding
+            # Vectorized intersection and position finding
             # Use broadcasting: [M, 1] == [1, P] creates [M, P] boolean matrix
             matches = batch_mask_idx.unsqueeze(1) == pad_indices.unsqueeze(0)  # [M, P]
             is_in_pad = matches.any(dim=1)  # [M] - which masked nodes are in pad_indices
@@ -136,79 +157,79 @@ class GlobalModuleClass(BaseModuleClass):
         
         return y_true, adjusted_mask_idx
         
-    def _process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx_tensor):
-        """Process batch to extract y_true and adjusted_mask_idx for metrics calculation.
+    # def _process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx_tensor):
+    #     """Process batch to extract y_true and adjusted_mask_idx for metrics calculation.
         
-        mask_idx = torch.tensor([0, 2, 3, 7, 8])
-        pad_index_nodes = [[0, 1, 2, 3], [0, 1], [0, 1, 2, 3]]
+    #     mask_idx = torch.tensor([0, 2, 3, 7, 8])
+    #     pad_index_nodes = [[0, 1, 2, 3], [0, 1], [0, 1, 2, 3]]
         
-        Parameters
-        ----------
-        batch
-            Input batch
-        prediction_task: str
-            Type of prediction task ('classification' or 'regression')
-        prediction_level: str
-            Level of prediction ('node' or 'graph')
-        pad_index_nodes: List[List[int]]
-            List of padded node indices: [B, S] or [B,N] if number of nodes in graph are smaller than max_seq_len (S)
-        mask_idx_tensor: torch.Tensor
-            Indices of masked nodes of shape [N_masked_nodes] with range [0, N_nodes-1]
+    #     Parameters
+    #     ----------
+    #     batch
+    #         Input batch
+    #     prediction_task: str
+    #         Type of prediction task ('classification' or 'regression')
+    #     prediction_level: str
+    #         Level of prediction ('node' or 'graph')
+    #     pad_index_nodes: List[List[int]]
+    #         List of padded node indices: [B, S] or [B,N] if number of nodes in graph are smaller than max_seq_len (S)
+    #     mask_idx_tensor: torch.Tensor
+    #         Indices of masked nodes of shape [N_masked_nodes] with range [0, N_nodes-1]
             
-        Returns
-        -------
-        y_true: torch.Tensor [N_included_nodes, C] (classification) or [N_included_nodes, F] (regression)
-            Ground truth values
-        adjusted_mask_idx: torch.Tensor [N_masked nodes]
-            Adjusted indices for masked nodes
-        """
-        assert prediction_level == "node", "Node specific retrieval only necessary for node-level prediction."
+    #     Returns
+    #     -------
+    #     y_true: torch.Tensor [N_included_nodes, C] (classification) or [N_included_nodes, F] (regression)
+    #         Ground truth values
+    #     adjusted_mask_idx: torch.Tensor [N_masked nodes]
+    #         Adjusted indices for masked nodes
+    #     """
+    #     assert prediction_level == "node", "Node specific retrieval only necessary for node-level prediction."
                 
-        y_true = []
-        adjusted_mask_idx = []  # Track new positions of masked nodes
-        current_offset = 0
-        start = 0
-        mask_j = 0
-        nr_batches = batch.batch[-1] + 1
+    #     y_true = []
+    #     adjusted_mask_idx = []  # Track new positions of masked nodes
+    #     current_offset = 0
+    #     start = 0
+    #     mask_j = 0
+    #     nr_batches = batch.batch[-1] + 1
         
-        for i in range(nr_batches):
-            mask = batch.batch.eq(i)
-            pad_indices = torch.tensor(pad_index_nodes[i], device=batch.x.device) + start
-            end = start + torch.sum(mask)
+    #     for i in range(nr_batches):
+    #         mask = batch.batch.eq(i)
+    #         pad_indices = torch.tensor(pad_index_nodes[i], device=batch.x.device) + start
+    #         end = start + torch.sum(mask)
 
-            # can not assume that pad_indices is a subset of mask_idx
-            #TODO: use stack and pop instead 
-            for j, mask_idx in enumerate(mask_idx_tensor[mask_j:]):
-                if mask_idx > end:
-                    break
-                if mask_idx in pad_indices:
-                    new_idx = torch.where(pad_indices == mask_idx)[0].item()
-                    adjusted_mask_idx.append(new_idx + current_offset)
+    #         # can not assume that pad_indices is a subset of mask_idx
+    #         #TODO: use stack and pop instead 
+    #         for j, mask_idx in enumerate(mask_idx_tensor[mask_j:]):
+    #             if mask_idx > end:
+    #                 break
+    #             if mask_idx in pad_indices:
+    #                 new_idx = torch.where(pad_indices == mask_idx)[0].item()
+    #                 adjusted_mask_idx.append(new_idx + current_offset)
             
-            current_offset += len(pad_indices)
-            start = end
-            mask_j = j
+    #         current_offset += len(pad_indices)
+    #         start = end
+    #         mask_j = j
             
-            # only return y_true for included nodes
-            if 'classification' in prediction_task:
-                y_true += batch.y[mask][pad_index_nodes[i]].clone().detach()
-            elif 'regression' in prediction_task:
-                y_true += batch.x[mask][pad_index_nodes[i]].clone().detach()
-            else:
-                raise Exception('Choose a valid prediction tasks (graph or node).')
-            assert len(mask) >= len(pad_indices) >= len(adjusted_mask_idx), "mask, pad_indices, adjusted_mask_idx are not consistent"
+    #         # only return y_true for included nodes
+    #         if 'classification' in prediction_task:
+    #             y_true += batch.y[mask][pad_index_nodes[i]].clone().detach()
+    #         elif 'regression' in prediction_task:
+    #             y_true += batch.x[mask][pad_index_nodes[i]].clone().detach()
+    #         else:
+    #             raise Exception('Choose a valid prediction tasks (graph or node).')
+    #         assert len(mask) >= len(pad_indices) >= len(adjusted_mask_idx), "mask, pad_indices, adjusted_mask_idx are not consistent"
             
-        y_true = torch.stack(y_true)
-        adjusted_mask_idx = torch.tensor(adjusted_mask_idx, device=y_true.device)
+    #     y_true = torch.stack(y_true)
+    #     adjusted_mask_idx = torch.tensor(adjusted_mask_idx, device=y_true.device)
         
-        assert max(adjusted_mask_idx) < len(y_true), f"Mismatch: max(adjusted_mask_idx): {max(adjusted_mask_idx)}, len(y_true): {len(y_true)}"
-        if nr_batches > 1:
-            assert  max(adjusted_mask_idx) > len(pad_index_nodes[0]), f"No masked node included from all batches: first batch has {len(pad_index_nodes[0])} nodes, but {max(adjusted_mask_idx)} nodes were included"
+    #     assert max(adjusted_mask_idx) < len(y_true), f"Mismatch: max(adjusted_mask_idx): {max(adjusted_mask_idx)}, len(y_true): {len(y_true)}"
+    #     if nr_batches > 1:
+    #         assert  max(adjusted_mask_idx) > len(pad_index_nodes[0]), f"No masked node included from all batches: first batch has {len(pad_index_nodes[0])} nodes, but {max(adjusted_mask_idx)} nodes were included"
 
-        assert torch.equal(y_true_new, y_true), "y_true_new and y_true are not consistent"
-        assert torch.equal(adjusted_mask_idx_new, adjusted_mask_idx), "adjusted_mask_idx_new and adjusted_mask_idx are not consistent"
+    #     assert torch.equal(y_true_new, y_true), "y_true_new and y_true are not consistent"
+    #     assert torch.equal(adjusted_mask_idx_new, adjusted_mask_idx), "adjusted_mask_idx_new and adjusted_mask_idx are not consistent"
         
-        return y_true, adjusted_mask_idx
+    #     return y_true, adjusted_mask_idx
     
     def predict(self,
                 global_embedding,
