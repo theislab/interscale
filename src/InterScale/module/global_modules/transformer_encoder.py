@@ -142,7 +142,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
 
         zeros = src_padding_mask.data.new(src_padding_mask.size(0), 1).fill_(0)
         src_padding_mask = torch.cat([src_padding_mask, zeros], dim=1)
-        print(f"Padding Mask Stats: {src_padding_mask.float().mean().item():.2f}")
+        #print(f"Padding Mask Stats: {src_padding_mask.float().mean().item():.2f}")
         transformer_out = self.transformer_encoder(padded_h_node, src_key_padding_mask=src_padding_mask, mask=mask)  # (S, B, h_d)
 
         if register_hook:
@@ -171,7 +171,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         raw_attn = last_layer.get_attn_output_weights()
         raw_attn = raw_attn.detach().cpu()
 
-        print(f"Shape raw - weights: {raw_attn.shape}")
+        #print(f"Shape raw - weights: {raw_attn.shape}")
 
         if raw_attn.dim() == 3:
             matrix = raw_attn[0]
@@ -180,7 +180,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         else:
             matrix = raw_attn.squeeze()
         
-        print(f"Shape matrix: {matrix.shape}")
+        #print(f"Shape matrix: {matrix.shape}")
 
         if matrix.dim() == 2:
             diag_val = torch.diag(matrix).mean().item()
@@ -188,12 +188,12 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         off_diag_mask = ~torch.eye(matrix.shape[0], dtype=bool)
         off_diag_val = matrix[off_diag_mask].mean().item()
 
-        print("\n--- DIAGNOSI REALE (Raw Probability) ---")
-        print(f"Diagonale Media: {diag_val:.6f}")
-        print(f"Off-Diagonal Media: {off_diag_val:.6f}")
+        # print("\n--- DIAGNOSI REALE (Raw Probability) ---")
+        # print(f"Diagonale Media: {diag_val:.6f}")
+        # print(f"Off-Diagonal Media: {off_diag_val:.6f}")
 
-        print("\nPrimi 5x5 valori della matrice:")
-        print(matrix[:5, :5])
+        # print("\nPrimi 5x5 valori della matrice:")
+        # print(matrix[:5, :5])
 
         
 
