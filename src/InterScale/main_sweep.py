@@ -71,8 +71,6 @@ def main_sweep(cfg_path, model_type, sweep_goal):
     
     ####### PREPROCESSING #######
     # Load adata
-    cfg = load_config(cfg_path)
-    print(cfg)
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
     print(adata)
     if cfg.dataset.segmentation_robustness is not None:
