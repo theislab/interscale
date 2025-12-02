@@ -77,7 +77,7 @@ class GCN(LocalModuleClass):
         #     print(f"SCALE CHECK:")
         #     print(f"  GCN Path      -> Mean: {x.mean().item():.4f}, Std: {x.std().item():.4f}")
         #     print(f"  Identity Path -> Mean: {identity.mean().item():.4f}, Std: {identity.std().item():.4f}")
-		#h = F.gelu(x)
+        #h = F.gelu(x)
         return h
     
     def get_model_summary(self) -> str:
