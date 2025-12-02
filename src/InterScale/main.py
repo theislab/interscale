@@ -2,10 +2,13 @@ import InterScale as interscale
 from InterScale.tl import prepare_geome_dataset
 from InterScale.geome_dataloader import GraphAnnDataModule
 from InterScale.config import load_config
+from InterScale.tl import remove_zero_expression_cells
+from InterScale.pp import apply_segmentation_noise
 from InterScale.tl import remove_zero_expression_cells, set_full_reproducibility
 
 import argparse
 import scanpy as sc
+import squidpy as sq
 
 def main(cfg_path, model_type):
 
@@ -15,6 +18,15 @@ def main(cfg_path, model_type):
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
     adata = remove_zero_expression_cells(adata)
     print(adata)
+    
+    if cfg.dataset.segmentation_robustness is not None:
+        node_fraction = cfg.dataset.segmentation_robustness[0]
+        overflow_fraction = cfg.dataset.segmentation_robustness[1]
+        print(f"\nApplying segmentation noise:")
+        print(f"- Node fraction: {node_fraction}")
+        print(f"- Overflow fraction: {overflow_fraction}")
+        sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
+        adata = apply_segmentation_noise(adata, node_fraction, overflow_fraction)
     
     if model_type == "LocalModel":
         interscale.model.LocalModel._setup_anndata(adata = adata,

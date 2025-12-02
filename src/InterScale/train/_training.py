@@ -35,7 +35,7 @@ class NodeMaskingTrainingPlan:
         shuffle_set_split: bool = True,
         load_sparse_tensor: bool = False,
         early_stopping: bool = True,
-        patience: int = 2,
+        patience: int = 5,
         datasplitter_kwargs: dict | None = None,
         plan_kwargs: dict | None = None,
         datamodule: L.LightningDataModule | None = None,
@@ -163,9 +163,9 @@ class NodeMaskingTrainingPlan:
             #         mode="min"
             #     )
             if 'classification' in self.prediction_task:
-                performance_callback = EarlyStopping(monitor="val_loss", min_delta=0.005, patience=patience*steps_per_epoch, verbose=False, mode="min")
+                performance_callback = EarlyStopping(monitor="val_loss", min_delta=0.005, patience=patience, verbose=False, mode="min")
             elif 'regression' in self.prediction_task:
-                performance_callback = EarlyStopping(monitor="val_mse", min_delta=0.005, patience=patience*steps_per_epoch, verbose=False, mode="min")
+                performance_callback = EarlyStopping(monitor="val_mse", min_delta=0.005, patience=patience, verbose=False, mode="min")
             else:
                 raise Exception("Training must be classification or regression based.")
             
@@ -211,6 +211,7 @@ class NodeMaskingTrainingPlan:
             log_every_n_steps=1,
             logger=logger,
             deterministic=True, # ensure reproducibility
+            accelerator="cpu",  # Default to CPU (can be overridden via trainer_kwargs)
             **trainer_kwargs
         )
         

@@ -325,12 +325,10 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             adata_manager.validate()
 
         return adata
-
     
     def save_evaluation_results(self,
                                 adata: AnnData,
                                 prefix: str,
-                                decoder_weight_df: pd.DataFrame,
                                 y_pred_df: pd.DataFrame,
                                 local_embeddings_df: pd.DataFrame | None = None,
                                 global_embeddings_df: pd.DataFrame | None = None,
@@ -356,7 +354,6 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         adata: AnnData
             AnnData object with the evaluation results saved in the obsm and layers.
         """
-        adata.obsm[f'{prefix}_decoder_weight'] = decoder_weight_df.values
         if local_embeddings_df is not None:
             adata.obsm[f'{prefix}_local_emb'] = local_embeddings_df.values
         if global_embeddings_df is not None:
@@ -533,6 +530,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         dir_path: str,
         adata: AnnData,
         cfg: CN,
+        model_name: str | None= None,
         local_component: bool = False,
         global_component: bool = False,
         postfix: str | None = None,
@@ -549,6 +547,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             AnnData object to load the model with.
         cfg
             Configuration object.
+        model_name: str | None
+            Name of the model to load. If None, the model name is inferred from the config file.
         local_component
             Whether this is a local component model.
         global_component
@@ -563,7 +563,11 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         model
             Loaded model.
         """
-        file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
+        
+        if model_name is not None:
+            file_name_prefix = model_name
+        else:
+            file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
         
         if postfix is not None:
             file_name_prefix = file_name_prefix + f"{postfix}"
@@ -575,8 +579,19 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         print(f"Loading model from {model_save_path}")
         
-        # Load state dict
-        state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+        # Determine map_location based on CUDA availability
+        map_location = 'cpu' if not torch.cuda.is_available() else None
+        
+        if os.path.exists(model_save_path):
+            state_dict = torch.load(model_save_path, map_location=map_location)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+        else:
+            print(f"Try with .ckpt extension.")
+            model_save_path = os.path.join(dir_path, f"{file_name_prefix}.ckpt")
+            if os.path.exists(model_save_path):
+                state_dict = torch.load(model_save_path, map_location=map_location)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+            else:
+                print(f"Model file {model_save_path} not found.")
+                raise FileNotFoundError(f"Model file {model_save_path} not found.")
         
         # Apply remapping if enabled
         if enable_remapping:

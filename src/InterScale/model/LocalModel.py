@@ -66,10 +66,10 @@ class LocalModel(NodeMaskingTrainingPlan,
             index=obs_names_str,
             columns=range(self.n_embed)
         )
-        decoder_weight_df = pd.DataFrame(
-            index=obs_names_str,
-            columns=range(self.n_output)
-        )
+        # decoder_weight_df = pd.DataFrame(
+        #     index=obs_names_str,
+        #     columns=range(self.n_output)
+        # )
         y_pred_df = pd.DataFrame(
             index=obs_names_str,
             columns=range(self.n_output)
@@ -82,10 +82,11 @@ class LocalModel(NodeMaskingTrainingPlan,
             # Fill embeddings directly into the DataFrame
             local_embeddings_df.loc[sample_mask] = local_embedding.detach().cpu().numpy()
             
-            if self.module.decoder_type == 'linear':
-                W = self.module.decoder.decoder.weight
-                contribution = torch.matmul(local_embedding, torch.transpose(W, 0, 1))
-                decoder_weight_df.loc[sample_mask] = contribution.detach().cpu().numpy()
+            # if self.module.decoder_type == 'linear':
+            #     W = self.module.decoder.decoder.weight
+            #     #contribution = torch.matmul(local_embedding, torch.transpose(W, 0, 1))
+            #     #decoder_weight_df.loc[sample_mask] = contribution.detach().cpu().numpy()
+            #     decoder_weight_df.loc[sample_mask] = W.detach().cpu().numpy()
             
             y_pred = self.module.predict(local_embedding, self.prediction_level)
             y_pred_df.loc[sample_mask] = y_pred.detach().cpu().numpy()
@@ -94,7 +95,7 @@ class LocalModel(NodeMaskingTrainingPlan,
         adata = self.save_evaluation_results(adata, 
                                              prefix, 
                                              local_embeddings_df = local_embeddings_df, 
-                                             decoder_weight_df = decoder_weight_df, 
+                                             #decoder_weight_df = decoder_weight_df, 
                                              y_pred_df = y_pred_df)
 
         
