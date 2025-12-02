@@ -8,6 +8,8 @@ from typing import Literal
 from sklearn.decomposition import PCA
 import numpy as np
 
+import time
+
 class GlobalModuleClass(BaseModuleClass):
     def __init__(self,
                  **base_module_kwargs):
@@ -56,6 +58,84 @@ class GlobalModuleClass(BaseModuleClass):
         else:
             raise ValueError(f"Invalid embedding type: {type}")
         
+    def _new_process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx_tensor):
+        """Process batch to extract y_true and adjusted_mask_idx for metrics calculation.
+        
+        Optimized version with vectorized operations.
+        """
+        assert prediction_level == "node", "Node specific retrieval only necessary for node-level prediction."
+        
+        nr_batches = batch.batch[-1] + 1
+        device = batch.x.device
+        
+        # Pre-compute batch boundaries (O(B×N) total)
+        batch_sizes = torch.tensor([batch.batch.eq(i).sum().item() for i in range(nr_batches)], device=device)
+        batch_starts = torch.cat([torch.tensor([0], device=device), batch_sizes.cumsum(0)[:-1]])
+        batch_ends = batch_starts + batch_sizes
+        
+        # Pre-compute cumulative offsets for adjusted indices
+        pad_lengths = torch.tensor([len(pad) for pad in pad_index_nodes], device=device)
+        cumulative_offsets = torch.cat([torch.tensor([0], device=device), pad_lengths.cumsum(0)[:-1]])
+        
+        adjusted_mask_idx_list = []
+        y_true_list = []
+        
+        for i in range(nr_batches):
+            batch_start = batch_starts[i].item()
+            batch_end = batch_ends[i].item()
+            
+            # Find masked indices in this batch range (vectorized)
+            mask_in_batch = (mask_idx_tensor >= batch_start) & (mask_idx_tensor < batch_end)
+            batch_mask_idx = mask_idx_tensor[mask_in_batch]
+            
+            if len(batch_mask_idx) == 0:
+                # Extract y_true even if no masked nodes
+                mask = batch.batch.eq(i)
+                if 'classification' in prediction_task:
+                    y_true_list.append(batch.y[mask][pad_index_nodes[i]])
+                elif 'regression' in prediction_task:
+                    y_true_list.append(batch.x[mask][pad_index_nodes[i]])
+                continue
+            
+            # Create pad_indices tensor once
+            pad_indices = torch.tensor(pad_index_nodes[i], device=device) + batch_start
+            
+            # KEY OPTIMIZATION: Vectorized intersection and position finding
+            # Use broadcasting: [M, 1] == [1, P] creates [M, P] boolean matrix
+            matches = batch_mask_idx.unsqueeze(1) == pad_indices.unsqueeze(0)  # [M, P]
+            is_in_pad = matches.any(dim=1)  # [M] - which masked nodes are in pad_indices
+            
+            if is_in_pad.any():
+                # Get positions of matches in pad_indices (first occurrence)
+                positions_in_pad = matches.long().argmax(dim=1)[is_in_pad]  # [M_valid]
+                
+                # Adjust indices with cumulative offset
+                adjusted_indices = positions_in_pad + cumulative_offsets[i]
+                adjusted_mask_idx_list.append(adjusted_indices)
+            
+            # Extract y_true for included nodes
+            mask = batch.batch.eq(i)
+            if 'classification' in prediction_task:
+                y_true_list.append(batch.y[mask][pad_index_nodes[i]])
+            elif 'regression' in prediction_task:
+                y_true_list.append(batch.x[mask][pad_index_nodes[i]])
+            else:
+                raise Exception('Choose a valid prediction task (classification or regression).')
+        
+        # Concatenate results
+        y_true = torch.cat(y_true_list, dim=0)
+        adjusted_mask_idx = torch.cat(adjusted_mask_idx_list, dim=0) if adjusted_mask_idx_list else torch.tensor([], device=device, dtype=torch.long)
+        
+        # Assertions
+        if len(adjusted_mask_idx) > 0:
+            assert adjusted_mask_idx.max() < len(y_true), \
+                f"Mismatch: max(adjusted_mask_idx): {adjusted_mask_idx.max()}, len(y_true): {len(y_true)}"
+            if nr_batches > 1:
+                assert adjusted_mask_idx.max() > len(pad_index_nodes[0]), \
+                    f"No masked node included from all batches"
+        
+        return y_true, adjusted_mask_idx
+        
     def _process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx_tensor):
         """Process batch to extract y_true and adjusted_mask_idx for metrics calculation.
         
@@ -77,9 +157,9 @@ class GlobalModuleClass(BaseModuleClass):
             
         Returns
         -------
-        y_true: torch.Tensor
+        y_true: torch.Tensor [N_included_nodes, C] (classification) or [N_included_nodes, F] (regression)
             Ground truth values
-        adjusted_mask_idx: torch.Tensor
+        adjusted_mask_idx: torch.Tensor [N_masked nodes]
             Adjusted indices for masked nodes
         """
         assert prediction_level == "node", "Node specific retrieval only necessary for node-level prediction."
@@ -89,8 +169,9 @@ class GlobalModuleClass(BaseModuleClass):
         current_offset = 0
         start = 0
         mask_j = 0
+        nr_batches = batch.batch[-1] + 1
         
-        for i in range(batch.batch[-1] + 1):
+        for i in range(nr_batches):
             mask = batch.batch.eq(i)
             pad_indices = torch.tensor(pad_index_nodes[i], device=batch.x.device) + start
             end = start + torch.sum(mask)
@@ -108,6 +189,7 @@ class GlobalModuleClass(BaseModuleClass):
             start = end
             mask_j = j
             
+            # only return y_true for included nodes
             if 'classification' in prediction_task:
                 y_true += batch.y[mask][pad_index_nodes[i]].clone().detach()
             elif 'regression' in prediction_task:
@@ -118,6 +200,13 @@ class GlobalModuleClass(BaseModuleClass):
             
         y_true = torch.stack(y_true)
         adjusted_mask_idx = torch.tensor(adjusted_mask_idx, device=y_true.device)
+        
+        assert max(adjusted_mask_idx) < len(y_true), f"Mismatch: max(adjusted_mask_idx): {max(adjusted_mask_idx)}, len(y_true): {len(y_true)}"
+        if nr_batches > 1:
+            assert  max(adjusted_mask_idx) > len(pad_index_nodes[0]), f"No masked node included from all batches: first batch has {len(pad_index_nodes[0])} nodes, but {max(adjusted_mask_idx)} nodes were included"
+
+        assert torch.equal(y_true_new, y_true), "y_true_new and y_true are not consistent"
+        assert torch.equal(adjusted_mask_idx_new, adjusted_mask_idx), "adjusted_mask_idx_new and adjusted_mask_idx are not consistent"
         
         return y_true, adjusted_mask_idx
     

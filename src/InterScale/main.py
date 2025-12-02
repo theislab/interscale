@@ -76,4 +76,4 @@ if __name__ == '__main__':
     
     cfg = "/Users/francesca.drummer/Documents/1_Projects/A3-LongRange/config_files/Legnini_23/legnini23_genes_sample_GlobalModel.yaml"
 
-    main(cfg, "CombinedModel")
+    main(cfg, "GlobalModel")
