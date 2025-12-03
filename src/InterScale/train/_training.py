@@ -165,7 +165,7 @@ class NodeMaskingTrainingPlan:
             if 'classification' in self.prediction_task:
                 performance_callback = EarlyStopping(monitor="val_loss", min_delta=0.005, patience=patience, verbose=False, mode="min")
             elif 'regression' in self.prediction_task:
-                performance_callback = EarlyStopping(monitor="val_mse", min_delta=0.005, patience=patience, verbose=False, mode="min")
+                performance_callback = EarlyStopping(monitor="val_loss", min_delta=0.005, patience=patience, verbose=False, mode="min")
             else:
                 raise Exception("Training must be classification or regression based.")
             
@@ -175,9 +175,9 @@ class NodeMaskingTrainingPlan:
                 checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) # save model if validation accuracy increases
             elif 'regression' in self._cfg.dataset.prediction_task:
                 if self._cfg.optim.loss == 'MSELoss':
-                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_mse", mode="min", ) 
+                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) 
                 elif self._cfg.optim.loss == 'GaussianNLL' or self._cfg.optim.loss == 'SmoothL1' or self._cfg.optim.loss == 'BalancedPearsonCorrelationLoss' or self._cfg.optim.loss == 'SCELoss':
-                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_pearson_corr", mode="min", ) 
+                    checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) 
                 else:
                     raise Exception("Regression must be run with MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss or SCELoss loss.")            
     
