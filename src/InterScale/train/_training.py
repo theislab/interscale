@@ -211,7 +211,7 @@ class NodeMaskingTrainingPlan:
             log_every_n_steps=1,
             logger=logger,
             deterministic=True, # ensure reproducibility
-            accelerator="cpu",  # Default to CPU (can be overridden via trainer_kwargs)
+            #accelerator="cpu",  # Default to CPU (can be overridden via trainer_kwargs)
             **trainer_kwargs
         )
         
