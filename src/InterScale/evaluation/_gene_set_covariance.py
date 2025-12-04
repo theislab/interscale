@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import math
 import scanpy as sc
 from typing import Union, Sequence
+import squidpy as sq
 
 def gene_set_covariance(
     adata: ad.AnnData,
@@ -225,13 +226,21 @@ def spatial_covariance_plot(
         obs_key = f"{set_name}_{int_length}"
         adata.obs[obs_key] = local_or_global_emb.iloc[:, dim_to_plot].values
 
-        sc.pl.embedding(
-            adata,
-            basis="spatial",
-            color=obs_key,
-            title=f"Gene set: {set_name} - {title_tag} (dim {dim_to_plot})",
-            cmap=cmap,
-            show=True,
-        )
+        #sc.pl.embedding(
+        #    adata,
+        #    basis="spatial",
+        #    color=obs_key,
+        #    title=f"Gene set: {set_name} - {title_tag} (dim {dim_to_plot})",
+        #    cmap=cmap,
+        #    show=True,
+        #)
+
+        sq.pl.spatial_scatter(adata, 
+                      color = obs_key,
+                      cmap = cmap,
+                      shape= None,
+                      title=f"Gene set: {set_name} - {title_tag} (dim {dim_to_plot})",
+                      #show=True,
+                     )
 
     return dims_used
