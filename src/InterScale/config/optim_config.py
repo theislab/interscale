@@ -11,6 +11,7 @@ def get_optim_cfg(cfg):
   """
   cfg.optim = CN()
 
+  cfg.optim.accelerator = "gpu"
   cfg.optim.lr = 0.001 
   cfg.optim.lr_scheduler = "CosineWarmupScheduler" # "ReduceLROnPlateau" or "CosineWarmupScheduler"
   cfg.optim.lr_warmup = 20
