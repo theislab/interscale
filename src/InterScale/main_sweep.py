@@ -48,6 +48,7 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             cfg.optim.seed = sweep_config['optim.seed']
         elif sweep_goal == 'hyperparmeter':
             print('hyperparameter sweep')
+            cfg.optim.lr = sweep_config['optim.lr']
             cfg.optim.lr_warmup = sweep_config['optim.lr_warmup']
             cfg.optim.wd = sweep_config['optim.wd']
             cfg.dataset.batch_size = sweep_config['dataset.batch_size']
