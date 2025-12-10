@@ -119,40 +119,35 @@ class GlobalModel(NodeMaskingTrainingPlan,
                 import matplotlib.pyplot as plt
                 import seaborn as sns
 
-                print("\n--- DIAGNOSTICA ATTENZIONE (Primo Batch) ---")
-                
-                # Convertiamo in tensore per fare calcoli veloci con torch
-                # attn_matrix qui è numpy array [N_nodi, N_nodi]
+                print("\n--- First Batch Diagnosis ---")
                 curr_attn = torch.tensor(attn_matrix) 
                 
-                # 1. Statistiche base
-                print(f"Shape matrice: {curr_attn.shape}")
-                print(f"Valore Massimo: {curr_attn.max().item():.6f}")
-                print(f"Valore Medio: {curr_attn.mean().item():.6f}")
-                print(f"Somma media per riga (dovrebbe essere circa 1 se CLS è escluso o <1 se CLS assorbe tutto): {curr_attn.sum(dim=1).mean().item():.4f}")
+                # 1. Statistics
+                print(f"Matrix shape: {curr_attn.shape}")
+                print(f"Max: {curr_attn.max().item():.6f}")
+                print(f"Mean: {curr_attn.mean().item():.6f}")
+                print(f"Mean by row: {curr_attn.sum(dim=1).mean().item():.4f}")
 
-                # 2. Entropia (Nitidezza)
-                # Normalizziamo per riga per trattarla come probabilità
+                # 2. Entropy
                 row_sums = curr_attn.sum(dim=1, keepdim=True) + 1e-9
                 prob = curr_attn / row_sums
                 entropy = -torch.sum(prob * torch.log(prob + 1e-9), dim=-1)
-                print(f"Entropia media (Bassa=Nitida, Alta=Confusa): {entropy.mean().item():.4f}")
+                print(f"Mean Entropy: {entropy.mean().item():.4f}")
 
-                # 3. Visualizzazione Heatmap
-                # Prendiamo solo i primi 50 nodi per leggibilità
-                limit = min(1000, curr_attn.shape[0])
+                # 3. Viz
+                limit = min(2000, curr_attn.shape[0])
                 attn_matrix1=attn_matrix
 
                 np.fill_diagonal(attn_matrix1, 0)
 
                 plt.figure(figsize=(10, 8))
                 sns.heatmap(attn_matrix1[:limit, :limit], cmap="viridis")
-                plt.title("Attention Matrix (Primi 50 nodi - Senza CLS)")
+                plt.title("Attention Matrix")
                 plt.xlabel("Key Node")
                 plt.ylabel("Query Node")
                 plt.show()
                 
-                debug_plotted = True # Impostiamo a True così non lo fa più
+                debug_plotted = True
             # Pad attention matrix to match max_seq_len with NaN
             padded_attn = np.full((attn_matrix.shape[0], self._cfg.model.global_component.parameters.max_seq_len), np.nan)
             padded_attn[:, :attn_matrix.shape[1]] = attn_matrix

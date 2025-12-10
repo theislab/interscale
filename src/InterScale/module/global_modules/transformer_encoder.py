@@ -203,13 +203,6 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         off_diag_mask = ~torch.eye(matrix.shape[0], dtype=bool)
         off_diag_val = matrix[off_diag_mask].mean().item()
 
-        # print("\n--- DIAGNOSI REALE (Raw Probability) ---")
-        # print(f"Diagonale Media: {diag_val:.6f}")
-        # print(f"Off-Diagonal Media: {off_diag_val:.6f}")
-
-        # print("\nPrimi 5x5 valori della matrice:")
-        # print(matrix[:5, :5])
-
         
 
         I = self.self_attn_relevance.generate_relevance(transformer_out)
