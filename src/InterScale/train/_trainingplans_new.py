@@ -9,13 +9,13 @@ from InterScale.tl import CosineWarmupScheduler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.module.base._base_module import BaseModuleClass
-from .losses import BalancedPearsonCorrelationLoss, GaussianLoss, SCELoss
+from .losses import BalancedPearsonCorrelationLoss, GaussianLoss, SCELoss,SCE_EntropyATT_Loss
 
 import torchmetrics
 from torchmetrics import MetricCollection
 
 CLASSIFICATION_LOSSES = ["CrossEntropy", "WeightedCE"]
-REGRESSION_LOSSES = ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss", "SCELoss"]
+REGRESSION_LOSSES = ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss", "SCELoss","SCE_EntropyATT_Loss" ]
 
 
 # adjusted from scvi-tools
@@ -130,6 +130,9 @@ class TrainingPlan(pl.LightningModule):
             return BalancedPearsonCorrelationLoss(None)
         elif loss == "SCELoss":
             return SCELoss()
+        elif loss == "SCE_EntropyATT_Loss":
+            return SCE_EntropyATT_Loss()
+        
         
     @staticmethod
     def _setup_classification_metrics(num_outputs: int):

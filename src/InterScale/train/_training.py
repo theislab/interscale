@@ -176,10 +176,10 @@ class NodeMaskingTrainingPlan:
             elif 'regression' in self._cfg.dataset.prediction_task:
                 if self._cfg.optim.loss == 'MSELoss':
                     checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) 
-                elif self._cfg.optim.loss == 'GaussianNLL' or self._cfg.optim.loss == 'SmoothL1' or self._cfg.optim.loss == 'BalancedPearsonCorrelationLoss' or self._cfg.optim.loss == 'SCELoss':
+                elif self._cfg.optim.loss == 'GaussianNLL' or self._cfg.optim.loss == 'SmoothL1' or self._cfg.optim.loss == 'BalancedPearsonCorrelationLoss' or self._cfg.optim.loss == 'SCELoss' or self._cfg.optim.loss == 'SCE_EntropyATT_Loss':
                     checkpoint_callback = ModelCheckpoint(dirpath=self._cfg.model.save, filename=run_name, monitor="val_loss", mode="min", ) 
                 else:
-                    raise Exception("Regression must be run with MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss or SCELoss loss.")            
+                    raise Exception(f"Regression must be run with MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss or SCELoss loss. instead of {self._cfg.optim.loss}")            
     
             
         # Create list of callbacks and filter out None values
@@ -206,7 +206,7 @@ class NodeMaskingTrainingPlan:
         trainer = pl.Trainer(
             min_epochs=1, 
             max_epochs=int(max_epochs),
-            enable_progress_bar=False,
+            enable_progress_bar=True,
             callbacks=callbacks,
             log_every_n_steps=1,
             logger=logger,

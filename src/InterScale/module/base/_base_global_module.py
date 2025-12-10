@@ -280,13 +280,14 @@ class GlobalModuleClass(BaseModuleClass):
         
         embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type="PCA")
         embedding = torch.tensor(embedding, dtype=torch.float32, device=batch_masked.x.device)
-        
         assert embedding.shape == (batch_masked.x.shape[0], self.n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}"
         assert not torch.any(torch.isnan(embedding)), "embedding contains NaN values"
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
         assert not torch.any(torch.isnan(padded_emb)), "padded_emb contains NaN values"
-        global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
+        
+        global_embedding, src_padding_mask, attn_matrix = self.forward(padded_emb, src_padding_mask, attention_mask)
+        #global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
         assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
         
         y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
@@ -302,7 +303,7 @@ class GlobalModuleClass(BaseModuleClass):
         assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
         assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
         
-        return None, global_embedding, y_pred, y_true
+        return None, global_embedding, y_pred, y_true, attn_matrix 
 
     def get_global_embeddings(self, x, edge_index):
         return self.forward(x, edge_index)

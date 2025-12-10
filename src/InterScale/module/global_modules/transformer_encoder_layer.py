@@ -66,6 +66,8 @@ class CustomTransformerEncoderLayer(TransformerEncoderLayer):
         )
         self.save_attn_output(attn_output)
         self.save_attn_output_weights(attn_output_weights)
-        if self.register_hook:
-            attn_output_weights.register_hook(self.save_attn_gradients) # Note: Source code modification in MultiHeadAttention Module (F.multi_head_attention_forward function) to calculate gradient on weights
+        if self.register_hook and attn_output_weights.requires_grad:
+            attn_output_weights.register_hook(self.save_attn_gradients)
+        # if self.register_hook:
+        #     attn_output_weights.register_hook(self.save_attn_gradients) # Note: Source code modification in MultiHeadAttention Module (F.multi_head_attention_forward function) to calculate gradient on weights
         return self.dropout1(attn_output)

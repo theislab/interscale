@@ -5,6 +5,8 @@ import numpy as np
 import pandas as pd
 import torch
 
+from torch.nn import functional as F
+
 from InterScale.tl import prepare_a2d_dataset, SelfAttentionRelevance
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.train._training import NodeMaskingTrainingPlan
@@ -89,6 +91,9 @@ class GlobalModel(NodeMaskingTrainingPlan,
         cls_token_horizontal = np.full(len(adata.obs_names), np.nan)
         cls_token_vertical = np.full(len(adata.obs_names), np.nan)
         self_attention_relevance = SelfAttentionRelevance(self.module)
+        
+        debug_plotted = False
+
                 
         for batch in pyg:
             embedding = self.module.create_gex_embedding(batch.x, type="PCA")
@@ -96,6 +101,13 @@ class GlobalModel(NodeMaskingTrainingPlan,
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.evaluate(batch, embedding)
             # no masking during evaluation
             y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
+
+            print(batch.x.shape, y_pred.shape)
+            
+            cosine_sim = F.cosine_similarity(batch.x, y_pred, dim=1)
+
+            print(f"Mean Cosine Similarity: {cosine_sim.mean().item()}")
+
             #I = self_attention_relevance.generate_relevance(transformer_in, src_padding_mask)
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[pad_index_nodes[0]]
             sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
@@ -103,6 +115,44 @@ class GlobalModel(NodeMaskingTrainingPlan,
             cls_token_horizontal[sample_mask] = I[-1, :-1].squeeze().cpu().detach().numpy() 
             cls_token_vertical[sample_mask] = I[:-1, -1].squeeze().cpu().detach().numpy() 
             attn_matrix = I[:-1, :-1].cpu().detach().numpy()
+            if not debug_plotted:
+                import matplotlib.pyplot as plt
+                import seaborn as sns
+
+                print("\n--- DIAGNOSTICA ATTENZIONE (Primo Batch) ---")
+                
+                # Convertiamo in tensore per fare calcoli veloci con torch
+                # attn_matrix qui è numpy array [N_nodi, N_nodi]
+                curr_attn = torch.tensor(attn_matrix) 
+                
+                # 1. Statistiche base
+                print(f"Shape matrice: {curr_attn.shape}")
+                print(f"Valore Massimo: {curr_attn.max().item():.6f}")
+                print(f"Valore Medio: {curr_attn.mean().item():.6f}")
+                print(f"Somma media per riga (dovrebbe essere circa 1 se CLS è escluso o <1 se CLS assorbe tutto): {curr_attn.sum(dim=1).mean().item():.4f}")
+
+                # 2. Entropia (Nitidezza)
+                # Normalizziamo per riga per trattarla come probabilità
+                row_sums = curr_attn.sum(dim=1, keepdim=True) + 1e-9
+                prob = curr_attn / row_sums
+                entropy = -torch.sum(prob * torch.log(prob + 1e-9), dim=-1)
+                print(f"Entropia media (Bassa=Nitida, Alta=Confusa): {entropy.mean().item():.4f}")
+
+                # 3. Visualizzazione Heatmap
+                # Prendiamo solo i primi 50 nodi per leggibilità
+                limit = min(1000, curr_attn.shape[0])
+                attn_matrix1=attn_matrix
+
+                np.fill_diagonal(attn_matrix1, 0)
+
+                plt.figure(figsize=(10, 8))
+                sns.heatmap(attn_matrix1[:limit, :limit], cmap="viridis")
+                plt.title("Attention Matrix (Primi 50 nodi - Senza CLS)")
+                plt.xlabel("Key Node")
+                plt.ylabel("Query Node")
+                plt.show()
+                
+                debug_plotted = True # Impostiamo a True così non lo fa più
             # Pad attention matrix to match max_seq_len with NaN
             padded_attn = np.full((attn_matrix.shape[0], self._cfg.model.global_component.parameters.max_seq_len), np.nan)
             padded_attn[:, :attn_matrix.shape[1]] = attn_matrix

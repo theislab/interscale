@@ -115,7 +115,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                 padded_h_node, 
                 src_padding_mask, 
                 mask = None, 
-                register_hook: bool = False):
+                register_hook: bool = True):
         """
         N_b_max: maximum number of nodes in the batch
         B: batch size
@@ -145,11 +145,26 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         #print(f"Padding Mask Stats: {src_padding_mask.float().mean().item():.2f}")
         transformer_out = self.transformer_encoder(padded_h_node, src_key_padding_mask=src_padding_mask, mask=mask)  # (S, B, h_d)
 
+        attn_matrices = []
         if register_hook:
-            for encoder in self.transformer_encoder.layers:
+            for i, encoder in enumerate(self.transformer_encoder.layers):
+                if hasattr(encoder, 'get_attn_output_weights'):
+                    attn_matrices.append(encoder.get_attn_output_weights())
+                elif hasattr(encoder, 'attention_map'):
+                    attn_matrices.append(encoder.attention_map)
+                elif hasattr(encoder, 'attn'):
+                    attn_matrices.append(encoder.attn)
+                
+                # Resetta il flag
                 encoder.register_hook = False
+                
+        if len(attn_matrices) > 0:
+            # Assumiamo che attn_matrices contenga tensori [Batch, Heads, Seq, Seq]
+            final_attn = torch.stack(attn_matrices) 
+        else:
+            final_attn = None
 
-        return transformer_out, src_padding_mask
+        return transformer_out, src_padding_mask, final_attn
     
     def evaluate(self, batched_data, embedding):
         """Evaluates transformer encoder on a batch of data without masking and registering hook.
@@ -165,7 +180,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         batched_data.batch = torch.Tensor(len(batched_data.obs_names)*[0])
         transformer_in, src_padding_mask, pad_index_nodes, attn_mask = self.common_step_local_to_global(batched_data, embedding, eval_step=True)
         
-        transformer_out, src_padding_mask = self.forward(transformer_in, src_padding_mask, attn_mask, register_hook=True)
+        transformer_out, src_padding_mask, _ = self.forward(transformer_in, src_padding_mask, attn_mask, register_hook=True)
         
         last_layer = self.transformer_encoder.layers[-1]
         raw_attn = last_layer.get_attn_output_weights()
