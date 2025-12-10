@@ -70,11 +70,13 @@ class GlobalModel(NodeMaskingTrainingPlan,
         # Create empty DataFrame with correct shape
         global_embeddings_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self.n_embed)
+            columns=range(self.n_embed),
+            dtype=np.float32
         )
         attention_matrix_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self._cfg.model.global_component.parameters.max_seq_len)
+            columns=range(self._cfg.model.global_component.parameters.max_seq_len),
+            dtype=np.float32
         )
 
         # decoder_weight_df = pd.DataFrame(
@@ -83,7 +85,8 @@ class GlobalModel(NodeMaskingTrainingPlan,
         # )
         y_pred_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self.n_output)
+            columns=range(self.n_output),
+            dtype=np.float32
         )
         
         cls_token_horizontal = np.full(len(adata.obs_names), np.nan)

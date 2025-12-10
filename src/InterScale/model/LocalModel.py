@@ -64,7 +64,8 @@ class LocalModel(NodeMaskingTrainingPlan,
         # Create empty DataFrame with correct shape
         local_embeddings_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self.n_embed)
+            columns=range(self.n_embed),
+            dtype=np.float32
         )
         # decoder_weight_df = pd.DataFrame(
         #     index=obs_names_str,
@@ -72,7 +73,8 @@ class LocalModel(NodeMaskingTrainingPlan,
         # )
         y_pred_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self.n_output)
+            columns=range(self.n_output),
+            dtype=np.float32
         )
         
         for batch in pyg:
