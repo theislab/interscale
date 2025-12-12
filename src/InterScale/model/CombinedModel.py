@@ -61,6 +61,9 @@ class CombinedModel(NodeMaskingTrainingPlan,
         adata.obs_names = [str(i) for i in range(1, len(adata.obs_names) + 1)] # ensure that no duplicate observation names are present
         assert len(adata.obs_names) == len(adata.obs_names.unique()), f"Duplicate observation names found. Expected {len(adata.obs_names)} unique names but found {len(adata.obs_names.unique())}"
         
+        assert "spatial" in adata.obsm, "Missing spatial coordinates"
+        assert adata.obsm["spatial"].shape[0] > 0, "No spatial coordinates found"
+        
         a2d = prepare_a2d_dataset(self._cfg)
         pyg, _ = list(a2d(adata))
         

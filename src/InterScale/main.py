@@ -84,3 +84,5 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     main(args.cfg, args.model_type)
+    
+    #main("/Users/francesca.drummer/Documents/1_Projects/A3-LongRange/GT-long-range-niches/src/config_files/legnini_test.yaml", "GlobalModel")

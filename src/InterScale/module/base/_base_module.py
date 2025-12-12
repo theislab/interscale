@@ -19,6 +19,7 @@ class BaseModuleClass(L.LightningModule, ABC):
         dropout_decoder: float = 0.2,
         decoder_hidden_dims: List[int] = [128, 128],
         pct_mask_nodes: float = 0.0,
+        type_gex_embedding: Literal["PCA", "NMF","scvi"] | None = None,
     ):
         """
         Parameters
@@ -36,8 +37,10 @@ class BaseModuleClass(L.LightningModule, ABC):
             Dropout rate for the decoder only if decoder_type is "nonlinear".
         decoder_hidden_dims: List[int]
             Hidden dimensions for the decoder only if decoder_type is "nonlinear".
-        mask_nodes: bool
-            Whether to mask nodes.
+        pct_mask_nodes: float
+            percentage of nodes to mask.
+        type_gex_embedding: Literal["PCA", "NMF","scvi"] | None
+            Type of GEX embedding to use.
         """
         super().__init__()
         
@@ -50,6 +53,7 @@ class BaseModuleClass(L.LightningModule, ABC):
         self.decoder_type = decoder_type
         self.decoder_hidden_dims = decoder_hidden_dims
         self.pct_mask_nodes = pct_mask_nodes
+        self.type_gex_embedding = type_gex_embedding
         if self.pct_mask_nodes > 0:
             self.masked_nodes = True
         else:

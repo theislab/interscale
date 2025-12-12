@@ -8,5 +8,11 @@ def get_local_component_cfg(cfg, local_component_name):
         cfg.model.local_component.parameters.hidden_dim = 256
         cfg.model.local_component.parameters.num_layers = 2
         cfg.model.local_component.parameters.dropout_local = 0.1
+    elif local_component_name == "GIN":
+        cfg.model.local_component.parameters.hidden_dim = 256
+        cfg.model.local_component.parameters.num_layers = 2
+        cfg.model.local_component.parameters.dropout_local = 0.1
+    else:
+        raise ValueError(f"Local component name {local_component_name} not found.")
     
     return cfg

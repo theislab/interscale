@@ -5,7 +5,7 @@ import torch
 from InterScale.module.base import BaseModuleClass
 from InterScale.tl import pad_batch, apply_mask
 from typing import Literal
-from sklearn.decomposition import PCA
+from sklearn.decomposition import PCA, NMF
 import numpy as np
 
 import time
@@ -19,7 +19,12 @@ class GlobalModuleClass(BaseModuleClass):
         self.registered_local_component = False
         self.registered_global_component = True
         
-        self.pca = PCA(n_components=self.n_embed)
+        if self.type_gex_embedding == "PCA":
+            self.pca = PCA(n_components=self.n_embed)
+        elif self.type_gex_embedding == "NMF":
+            self.nmf = NMF(n_components=self.n_embed, init='random', random_state=0)
+        else:
+            raise ValueError(f"Invalid embedding type: {self.type_gex_embedding}")
     
     @abstractmethod
     def forward(self, embeddings: torch.Tensor):
@@ -31,7 +36,7 @@ class GlobalModuleClass(BaseModuleClass):
         
     def create_gex_embedding(self, 
                              embeddings: torch.Tensor,
-                             type: Literal["PCA", "scvi"]):
+                             type: Literal["PCA", "NMF","scvi"]):
         """Generate embeddings for GEX if no local component is used.
         
         Parameters
@@ -53,6 +58,11 @@ class GlobalModuleClass(BaseModuleClass):
                 return self.pca.fit_transform(embeddings)
             else:
                 return self.pca.transform(embeddings)
+        elif type == "NMF":
+            if not hasattr(self.nmf, 'components_'):
+                return self.nmf.fit_transform(embeddings)
+            else:
+                return self.nmf.transform(embeddings)
         # elif type == "scvi":
         #     return scvi.model.SCVI(embeddings)
         else:
@@ -278,7 +288,7 @@ class GlobalModuleClass(BaseModuleClass):
         # Mask nodes  - before GEX embedding because otherwise embedding contains information about masked nodes
         batch_masked, mask_idx = self._common_step_masking(batch)
         
-        embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type="PCA")
+        embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type=self.type_gex_embedding)
         embedding = torch.tensor(embedding, dtype=torch.float32, device=batch_masked.x.device)
         
         assert embedding.shape == (batch_masked.x.shape[0], self.n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}"
