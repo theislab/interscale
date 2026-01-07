@@ -8,7 +8,7 @@ import torch
 from InterScale.tl import prepare_a2d_dataset, SelfAttentionRelevance
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.train._training import NodeMaskingTrainingPlan
-from InterScale.module import CombinedModuleClass
+from InterScale.module import CombinedModuleClass, DualDecoderCombinedModuleClass
 
 class CombinedModel(NodeMaskingTrainingPlan,
                  BaseModelClass):
@@ -26,17 +26,29 @@ class CombinedModel(NodeMaskingTrainingPlan,
         self.global_component = True
 
         # Initialize the combined module with both local and global components
-        self.module = CombinedModuleClass(
-            cfg=self._cfg,
-            n_input=self.n_input,
-            n_output=self.n_output,
-            n_embed=self.n_embed,
-            decoder_type=self._cfg.model.decoder.type,
-            dropout_decoder=self._cfg.model.decoder.dropout_decoder,
-            decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
-            pct_mask_nodes=self._cfg.dataset.pct_mask_nodes
-        )
-        
+        if self._cfg.model.decoder.dual_decoder == True:
+            self.module = DualDecoderCombinedModuleClass(
+                cfg=self._cfg,
+                n_input=self.n_input,
+                n_output=self.n_output,
+                n_embed=self.n_embed,
+                decoder_type=self._cfg.model.decoder.type,
+                dropout_decoder=self._cfg.model.decoder.dropout_decoder,
+                decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
+                pct_mask_nodes=self._cfg.dataset.pct_mask_nodes
+            )
+        else:
+            self.module = CombinedModuleClass(
+                cfg=self._cfg,
+                n_input=self.n_input,
+                n_output=self.n_output,
+                n_embed=self.n_embed,
+                decoder_type=self._cfg.model.decoder.type,
+                dropout_decoder=self._cfg.model.decoder.dropout_decoder,
+                decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
+                pct_mask_nodes=self._cfg.dataset.pct_mask_nodes
+            )
+            
         self._model_summary_string = self._model_summary_string + self.module.get_model_summary()
         
     def get_model_output(self,

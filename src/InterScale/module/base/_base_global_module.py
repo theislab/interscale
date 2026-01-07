@@ -23,9 +23,12 @@ class GlobalModuleClass(BaseModuleClass):
             self.pca = PCA(n_components=self.n_embed)
         elif self.type_gex_embedding == "NMF":
             self.nmf = NMF(n_components=self.n_embed, init='random', random_state=0)
+        elif self.type_gex_embedding is None:
+            # No GEX embedding needed when using CombinedModuleClass (local module provides embeddings)
+            pass
         else:
             raise ValueError(f"Invalid embedding type: {self.type_gex_embedding}")
-    
+
     @abstractmethod
     def forward(self, embeddings: torch.Tensor):
         """
