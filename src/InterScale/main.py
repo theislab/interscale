@@ -77,12 +77,12 @@ def main(cfg_path, model_type):
                 early_stopping = cfg.optim.early_stopping)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='GTLongRange')
+    # parser = argparse.ArgumentParser(description='GTLongRange')
 
-    parser.add_argument('--cfg', dest='cfg', type=str, required=True, help='The configuration file path.')
-    parser.add_argument('--model_type', dest='model_type', type=str, required=True, help='The model type: LocalModel, GlobalModel or CombinedModel.')
-    args = parser.parse_args()
+    # parser.add_argument('--cfg', dest='cfg', type=str, required=True, help='The configuration file path.')
+    # parser.add_argument('--model_type', dest='model_type', type=str, required=True, help='The model type: LocalModel, GlobalModel or CombinedModel.')
+    # args = parser.parse_args()
 
-    main(args.cfg, args.model_type)
+    # main(args.cfg, args.model_type)
     
-    #main("/Users/francesca.drummer/Documents/1_Projects/A3-LongRange/GT-long-range-niches/src/config_files/legnini_test.yaml", "GlobalModel")
+    main("/Users/francesca.drummer/Documents/1_Projects/A3-LongRange/GT-long-range-niches/src/config_files/legnini_test.yaml", "CombinedModel")
