@@ -206,7 +206,7 @@ class NodeMaskingTrainingPlan:
         trainer = pl.Trainer(
             min_epochs=1, 
             max_epochs=int(max_epochs),
-            enable_progress_bar=True,
+            #enable_progress_bar=True,
             callbacks=callbacks,
             log_every_n_steps=1,
             logger=logger,

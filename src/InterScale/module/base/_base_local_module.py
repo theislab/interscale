@@ -2,6 +2,8 @@ from InterScale.module.base._base_module import BaseModuleClass
 from abc import abstractmethod
 from typing import Literal
 from InterScale.tl import apply_mask
+from scvi.nn import Encoder
+import torch.nn as nn
 
 import torch
 
@@ -87,6 +89,86 @@ class LocalModuleClass(BaseModuleClass):
                        hidden_dim = params['hidden_dim'],
                        dropout_local = params['dropout_local'],
                        **kwargs)
-        # Add more elifs for other modules
-        else:
-            raise ValueError(f"Unknown local module name: {module_name}")
+        # # Add more elifs for other modules
+        # else:
+        #     raise ValueError(f"Unknown local module name: {module_name}")
+
+class SCVILocalModule(LocalModuleClass):
+    def __init__(self, 
+                 n_input: int,
+                 n_latent: int,
+                 n_layers: int = 2,
+                 n_hidden: int = 128,
+                 dropout_rate: float = 0.1,
+                 **base_module_kwargs):
+        """
+        Wrapper for scVI Encoder to act as a LocalModule.
+        """
+
+        base_module_kwargs['n_input'] = n_input
+        base_module_kwargs['n_embed'] = n_latent
+        super().__init__(**base_module_kwargs)
+        
+        # scVI Encoder: maps input counts to latent space
+        # Reference: https://docs.scvi-tools.org/en/stable/api/reference/scvi.nn.Encoder.html
+        self.encoder = Encoder(
+            n_input=n_input,
+            n_output=n_latent, # n_latent corresponds to your n_embed
+            n_layers=n_layers,
+            n_hidden=n_hidden,
+            dropout_rate=dropout_rate,
+            distribution="normal" # Standard VAE approach
+        )
+
+    def forward(self, x: torch.Tensor, edge_index: torch.Tensor = None):
+        """
+        Forward pass. edge_index is accepted for compatibility but ignored.
+        
+        Parameters
+        ----------
+        x: torch.Tensor
+            Input features (e.g. raw counts or normalized data).
+        edge_index: torch.Tensor
+            Graph connectivity (ignored by scVI encoder).
+        """
+        # scVI encoder returns (mean, variance, latent_sample)
+        # We take the mean (q_m) or the sample (z) as the embedding.
+        # Usually, for downstream tasks, the mean is more stable.
+        q_m, q_v, z = self.encoder(x)
+        return q_m 
+
+    def get_model_summary(self) -> str:
+        """
+        Overrides the base method to provide scVI-specific details.
+        """
+        # Accessing internal scVI encoder attributes for the summary
+        # Note: scVI stores dimensions in specific attributes, usually accessible via the module
+        try:
+            latent_dim = self.encoder.mean_encoder.out_features
+        except AttributeError:
+            latent_dim = "Unknown"
+
+        return (
+            f"scVI Encoder Wrapper:\n"
+            f"  - Latent Dim (n_embed): {latent_dim}\n"
+            f"  - Full Architecture:\n{str(self.encoder)}" 
+        )
+
+    @staticmethod
+    def from_config(cfg, **kwargs):
+        """
+        Factory method to instantiate the SCVI-based local module.
+        """
+        params = cfg.model.local_component.parameters
+
+        n_input = kwargs.pop('n_input')
+        n_embed = kwargs.pop('n_embed')
+        
+        return SCVILocalModule(
+            n_input=n_input,
+            n_latent=n_embed,
+            n_layers=params.get('num_layers', 2),
+            n_hidden=params.get('hidden_dim', 128),
+            dropout_rate=params.get('dropout_local', 0.1),
+            **kwargs
+        )

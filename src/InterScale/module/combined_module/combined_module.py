@@ -2,11 +2,17 @@ from abc import abstractmethod
 import torch
 from typing import Optional
 
-from InterScale.module.base import BaseModuleClass, LocalModuleClass, GlobalModuleClass
+from InterScale.module.base import BaseModuleClass, LocalModuleClass, GlobalModuleClass, SCVILocalModule
 from yacs.config import CfgNode as CN
 
 from InterScale.tl import apply_mask
 from typing import Literal
+
+
+MODULE_REGISTRY = {
+    "GCN": LocalModuleClass,
+    'scVI': SCVILocalModule
+}
 
 
 class CombinedModuleClass(BaseModuleClass):
@@ -19,10 +25,16 @@ class CombinedModuleClass(BaseModuleClass):
         self.local_module_args = cfg.model.local_component
         self.global_module_args = cfg.model.global_component
         
+        module_name = cfg.model.local_component.name
+        local_class = MODULE_REGISTRY.get(module_name)
+
+        if local_class is None:
+            raise ValueError(f"Module {module_name} not found in MODULE_REGISTRY")
+        
         self.registered_local_component = True
         self.registered_global_component = True
         
-        self.local_module = LocalModuleClass.from_config(cfg,
+        self.local_module = local_class.from_config(cfg,
                                                          n_input=self.n_input,
                                                          n_output=self.n_output,
                                                          n_embed=self.n_embed,
