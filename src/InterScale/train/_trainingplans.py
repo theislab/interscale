@@ -254,17 +254,86 @@ class TrainingPlan(pl.LightningModule):
             loss: torch.nn.Module
         """
         local_embedding, global_embedding, y_pred, y_true,attn = self.module._common_step(batch, self.prediction_task, self.prediction_level)
-        return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics, attn=attn)
+        
+		        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModuleClass)
+        if hasattr(self.module, 'compute_separate_losses'):
+            separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
+            
+            
+            # Log separate losses (on_step=False, on_epoch=True to match existing pattern)
+            if separate_losses.get('local_loss') is not None:
+                self.log('train_local_loss', separate_losses['local_loss'], 
+                        on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
+            if separate_losses.get('global_loss') is not None:
+                self.log('train_global_loss', separate_losses['global_loss'], 
+                        on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
+            if separate_losses.get('combined_loss') is not None:
+                self.log('train_combined_loss', separate_losses['combined_loss'], 
+                        on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
+            
+            #  compute and log metrics using combined predictions
+            loss = self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics)
+            
+            assert not torch.isnan(loss), "loss is NaN"
+            return loss
+        else:
+            return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics, attn=attn)
+        #return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics, attn=attn)
 
     def validation_step(self, batch):
         """Validation step for the model."""
         local_embedding, global_embedding, y_pred, y_true,attn = self.module._common_step(batch, self.prediction_task, self.prediction_level)
-        return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics, attn=attn)
+
+        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModuleClass)
+        if hasattr(self.module, 'compute_separate_losses'):
+            separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
+            
+            # Log separate losses (on_step=False, on_epoch=True to match existing pattern)
+            if separate_losses.get('local_loss') is not None:
+                self.log('val_local_loss', separate_losses['local_loss'], 
+                        on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
+            if separate_losses.get('global_loss') is not None:
+                self.log('val_global_loss', separate_losses['global_loss'], 
+                        on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
+            
+            #  compute and log metrics using combined predictions
+            loss = self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
+            
+            assert not torch.isnan(loss), "loss is NaN"
+            return loss
+        else:
+            return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics, attn=attn)
+    
+
+        #return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics, attn=attn)
     
     def test_step(self, batch):
         """Test step for the model."""
         local_embedding, global_embedding, y_pred, y_true,attn = self.module._common_step(batch, self.prediction_task, self.prediction_level)
-        return self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
+        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModuleClass)
+        if hasattr(self.module, 'compute_separate_losses'):
+            separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
+            
+            
+            # Log separate losses (on_step=False, on_epoch=True to match existing pattern, sync_dist=True for test)
+            if separate_losses.get('local_loss') is not None:
+                self.log('test_local_loss', separate_losses['local_loss'], 
+                        on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=True)
+            if separate_losses.get('global_loss') is not None:
+                self.log('test_global_loss', separate_losses['global_loss'], 
+                        on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=True)
+            if separate_losses.get('combined_loss') is not None:
+                self.log('test_combined_loss', separate_losses['combined_loss'], 
+                        on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=True)
+            
+            #  compute and log metrics using combined predictions
+            loss = self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics)
+            
+            assert not torch.isnan(loss), "loss is NaN"
+            return loss
+        else:
+            return self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
+        #return self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
 
     def configure_optimizers(self):
         params = []
