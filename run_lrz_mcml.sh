@@ -1,5 +1,6 @@
 #!/bin/bash
-#SBATCH --partition=lrz-v100x2
+#SBATCH --partition=mcml-hgx-a100-80x4-mig
+#SBATCH --qos=mcml
 #SBATCH --gres=gpu:1
 #SBATCH --nodes=1
 #SBATCH --output=/dev/null
