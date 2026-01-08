@@ -48,7 +48,7 @@ class CombinedModuleClass(BaseModuleClass):
                                                            n_input=self.n_input,
                                                            n_output=self.n_output,
                                                            n_embed=self.n_embed,
-                                                           decoder_type="linear",
+                                                           decoder_type=cfg.model.decoder.type,
                                                            pct_mask_nodes=self.pct_mask_nodes)
         
     def predict(self,
