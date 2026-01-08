@@ -149,6 +149,7 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             y_true, adjusted_mask_idx = self.global_module._process_batch_for_metrics(
                 batch, prediction_task, prediction_level, pad_index_nodes, mask_idx
             )
+            y_true_masked = y_true[adjusted_mask_idx]
             
             # Filter global predictions to masked nodes (same indices as y_true)
             y_pred_global_masked = y_pred_global[adjusted_mask_idx]
@@ -162,15 +163,16 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             # Both should have the same number of masked nodes
             assert len(y_pred_local) == len(y_pred_global_masked), \
                 f"Local and global predictions have different lengths: {len(y_pred_local)} vs {len(y_pred_global_masked)}"
+            assert len(y_true_masked) == len(y_pred_local), \
+                f"Ground truth and local predictions have different lengths: {len(y_true_masked)} vs {len(y_pred_local)}"
+            assert len(y_true_masked) == len(y_pred_global_masked), \
+                f"Ground truth and global predictions have different lengths: {len(y_true_masked)} vs {len(y_pred_global_masked)}"
             
             # Concatenate predictions: [N_masked, C] + [N_masked, C] -> [2*N_masked, C]
             # This allows the loss function to compute loss on both predictions
             y_pred_combined = torch.cat([y_pred_local, y_pred_global_masked], dim=0)
-            y_true_combined = torch.cat([y_true, y_true], dim=0)
+            y_true_combined = torch.cat([y_true_masked, y_true_masked], dim=0)
             
-            
-        print(f"y_pred_combined: {y_pred_combined.shape}")
-        print(f"y_true_combined: {y_true_combined.shape}")
             
         assert len(y_pred_combined) == len(y_true_combined), "y_pred and y_true are not consistent"
         assert not torch.any(torch.isnan(y_pred_combined)), "y_pred contains NaN values"
