@@ -318,7 +318,7 @@ class GlobalModuleClass(BaseModuleClass):
         # Mask nodes  - before GEX embedding because otherwise embedding contains information about masked nodes
         batch_masked, mask_idx = self._common_step_masking(batch)
         
-        embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type='precomputed')
+        embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type='PCA')
         embedding = torch.tensor(embedding, dtype=torch.float32, device=batch_masked.x.device)
         assert embedding.shape == (batch_masked.x.shape[0], self.n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}"
         assert not torch.any(torch.isnan(embedding)), "embedding contains NaN values"
