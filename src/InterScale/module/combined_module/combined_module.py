@@ -2,7 +2,7 @@ from abc import abstractmethod
 import torch
 from typing import Optional
 
-from InterScale.module.base import BaseModuleClass, LocalModuleClass, GlobalModuleClass, SCVILocalModule
+from InterScale.module.base import BaseModuleClass, LocalModuleClass, GlobalModuleClass, SCVILocalModule, PrecomputedEmbeddingModule
 from yacs.config import CfgNode as CN
 
 from InterScale.tl import apply_mask
@@ -11,7 +11,8 @@ from typing import Literal
 
 MODULE_REGISTRY = {
     "GCN": LocalModuleClass,
-    'scVI': SCVILocalModule
+    'scVI': SCVILocalModule,
+    "Precomputed": PrecomputedEmbeddingModule
 }
 
 
@@ -62,8 +63,9 @@ class CombinedModuleClass(BaseModuleClass):
         self,
         batch_masked):
         """Forward pass through the model"""
+        local_input = getattr(batch_masked, 'embeddings', batch_masked.x)
         
-        local_embedding = self.local_module.forward(batch_masked.x, batch_masked.edge_index)
+        local_embedding = self.local_module.forward(local_input, batch_masked.edge_index)
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.global_module.common_step_local_to_global(batch_masked, local_embedding)
         assert not torch.any(torch.isnan(padded_emb)), "padded_emb contains NaN values"

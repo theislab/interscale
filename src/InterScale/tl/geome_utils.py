@@ -95,12 +95,16 @@ def prepare_geome_dataset(adata,
     datas_train, datas_val, datas_test = list(), list(), list()
     
     for category_to_iterate in category_to_iterate_list:
+
         cfg.dataset.spatial_neigbors_kwargs.merge_from_list(['library_key', category_to_iterate])
         spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
 
         one_hot_encode_list = [prediction_obs]
         X_key = f"layers/{layer_key}" if layer_key is not None else "X"
 
+        obsm_key = None
+        if cfg.model.local_component.name == "Precomputed":
+            obsm_key = cfg.model.dataset.precomputed
         if 'classification' in cfg.dataset.prediction_task:
             fields = {
                 "x": [X_key],
@@ -128,8 +132,11 @@ def prepare_geome_dataset(adata,
                     transforms.Subset(key_value = subset_dict, axis="obs"),
                 ]
             )
-
-        transform = transforms.Compose(
+        if obsm_key is not None:
+            if obsm_key not in adata.obsm:
+                raise ValueError(f"Precomputed embeddings key '{obsm_key}' not found in adata.obsm")
+            fields["embeddings"] = [f"obsm/{obsm_key}"]
+            transform = transforms.Compose(
             [
                 transforms.AddEdgeIndex(edge_index_key="edge_index", func_args=spatial_neigbors_kwargs, spatial_key="spatial", key_added=adj_matrix_loc),
             ]
