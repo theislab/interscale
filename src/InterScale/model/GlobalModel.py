@@ -92,7 +92,7 @@ class GlobalModel(NodeMaskingTrainingPlan,
         cls_token_vertical = np.full(len(adata.obs_names), np.nan)
         self_attention_relevance = SelfAttentionRelevance(self.module)
         
-        debug_plotted = False
+        debug_plotted = True
 
                 
         for batch in pyg:
@@ -135,7 +135,7 @@ class GlobalModel(NodeMaskingTrainingPlan,
                 print(f"Mean Entropy: {entropy.mean().item():.4f}")
 
                 # 3. Viz
-                limit = min(2000, curr_attn.shape[0])
+                limit = min(5000, curr_attn.shape[0])
                 attn_matrix1=attn_matrix
 
                 np.fill_diagonal(attn_matrix1, 0)
