@@ -31,6 +31,8 @@ class CombinedModuleClass(BaseModuleClass):
         if local_class is None:
             raise ValueError(f"Module {module_name} not found in MODULE_REGISTRY")
         
+        print(local_class)
+        
         self.registered_local_component = True
         self.registered_global_component = True
         
@@ -65,10 +67,10 @@ class CombinedModuleClass(BaseModuleClass):
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.global_module.common_step_local_to_global(batch_masked, local_embedding)
         assert not torch.any(torch.isnan(padded_emb)), "padded_emb contains NaN values"
-        global_embedding, src_padding_mask = self.global_module.forward(padded_emb, src_padding_mask, attention_mask)
+        global_embedding, src_padding_mask, attn_matrix = self.global_module.forward(padded_emb, src_padding_mask, attention_mask)
         assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
         
-        return local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask
+        return local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask, attn_matrix
         
     def _common_step(self,
                     batch, 
@@ -78,7 +80,7 @@ class CombinedModuleClass(BaseModuleClass):
         """
         batch_masked, mask_idx = self._common_step_masking(batch)
             
-        local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask = self.forward(batch_masked)
+        local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask, attn_matrix = self.forward(batch_masked)
         y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
         
         if prediction_task == 'classification' and prediction_level == 'graph':
@@ -92,7 +94,7 @@ class CombinedModuleClass(BaseModuleClass):
         assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
         assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
 
-        return local_embedding, global_embedding, y_pred, y_true
+        return local_embedding, global_embedding, y_pred, y_true, attn_matrix
     
     def get_model_summary(self) -> str:
         """Returns a string containing the model's parameters summary.
