@@ -219,7 +219,7 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             'global': global_pred
         }
     
-    def compute_separate_losses(self, loss_fn, y_pred_combined, y_true_combined):
+    def compute_separate_losses(self, loss_fn, loss_type, y_pred_combined, y_true_combined):
         """Compute separate losses for local and global predictions.
         
         Parameters
@@ -227,6 +227,8 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         loss_fn: callable
             Loss function that takes (y_pred, y_true) and returns a scalar loss.
             Should be compatible with the prediction task (classification or regression).
+        loss_type: Literal["GaussianNLL", "MSELoss", "CrossEntropy", "WeightedCE"]
+            Type of loss function to use.
         y_pred_combined: torch.Tensor
             Combined predictions from _common_step. For node-level: [2*N_masked, C],
             for graph-level: [B, C] where B is batch size.
@@ -260,14 +262,16 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             y_pred_global = y_pred_combined[self._n_masked_nodes:]
             y_true_local = y_true_combined[:self._n_masked_nodes]
             y_true_global = y_true_combined[self._n_masked_nodes:]
-            
-            local_loss = loss_fn(y_pred_local, y_true_local)
-            global_loss = loss_fn(y_pred_global, y_true_global)
+            if loss_type == 'GaussianNLL':
+                sd_local = torch.std(y_true_local, dim=1, keepdim=True)
+                sd_global = torch.std(y_true_global, dim=1, keepdim=True)
+                local_loss = loss_fn(y_pred_local, y_true_local, sd_local)
+                global_loss = loss_fn(y_pred_global, y_true_global, sd_global)
+            else:
+                local_loss = loss_fn(y_pred_local, y_true_local)
+                global_loss = loss_fn(y_pred_global, y_true_global)
             losses['local_loss'] = local_loss
             losses['global_loss'] = global_loss
-            
-            # Compute combined loss as average
-            losses['combined_loss'] = (local_loss + global_loss) / 2.0
         
         return losses
     

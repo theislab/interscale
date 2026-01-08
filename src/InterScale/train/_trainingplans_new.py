@@ -227,6 +227,7 @@ class TrainingPlan(pl.LightningModule):
         """        
         assert y_true.shape == y_pred.shape, "y_true and y_pred must have the same shape"
         
+        
         if 'classification' in self.prediction_task:
             loss, metrics_dict = self._classification_metrics(y_pred, y_true, mode, metrics)
             if mode == 'train':
@@ -260,6 +261,7 @@ class TrainingPlan(pl.LightningModule):
             loss: torch.nn.Module
         """
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
+        
         return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics)
     
     def on_train_epoch_end(self):
