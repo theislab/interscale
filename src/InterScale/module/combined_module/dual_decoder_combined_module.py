@@ -1,8 +1,15 @@
 import torch
 from typing import Literal
 
-from InterScale.module.base import BaseModuleClass, LocalModuleClass, GlobalModuleClass
+from InterScale.module.base import BaseModuleClass, LocalModuleClass, GlobalModuleClass, SCVILocalModule
 from yacs.config import CfgNode as CN
+
+
+MODULE_REGISTRY = {
+    "GCN": LocalModuleClass,
+    'scVI': SCVILocalModule
+}
+
 
 
 class DualDecoderCombinedModuleClass(BaseModuleClass):
@@ -21,11 +28,19 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         self.local_module_args = cfg.model.local_component
         self.global_module_args = cfg.model.global_component
         
+        module_name = cfg.model.local_component.name
+        local_class = MODULE_REGISTRY.get(module_name)
+
+        if local_class is None:
+            raise ValueError(f"Module {module_name} not found in MODULE_REGISTRY")
+        
+        print(local_class)
+        
         self.registered_local_component = True
         self.registered_global_component = True
         
         # Local module with decoder
-        self.local_module = LocalModuleClass.from_config(cfg,
+        self.local_module = local_class.from_config(cfg,
                                                          n_input=self.n_input,
                                                          n_output=self.n_output,
                                                          n_embed=self.n_embed,
@@ -67,10 +82,11 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             Size: [N_masked_nodes, C] or [N_masked_nodes, F]
         """
         # Predict on all nodes
-        y_pred_all = self.local_module.decoder.forward(local_embedding)
-        # Filter to masked nodes
-        y_pred_local = y_pred_all[mask_idx]
-        return y_pred_local
+        if hasattr(self.local_module, 'decoder'):
+            y_pred_all = self.local_module.decoder.forward(local_embedding)
+        else:
+            y_pred_all = self.local_module.predict(local_embedding) 
+        return y_pred_all[mask_idx]
     
     def predict_global(self,
                       global_embedding,
@@ -101,14 +117,21 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         batch_masked):
         """Forward pass through the model"""
         
-        local_embedding = self.local_module.forward(batch_masked.x, batch_masked.edge_index)
+        local_out = self.local_module.forward(batch_masked.x, batch_masked.edge_index)
+
+        if isinstance(local_out, dict):
+            local_embedding = local_out['embedding']
+            self._current_local_latent_params = local_out 
+        else:
+            local_embedding = local_out
+            self._current_local_latent_params = None
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.global_module.common_step_local_to_global(batch_masked, local_embedding)
         assert not torch.any(torch.isnan(padded_emb)), "padded_emb contains NaN values"
-        global_embedding, src_padding_mask = self.global_module.forward(padded_emb, src_padding_mask, attention_mask)
+        global_embedding, src_padding_mask, attn = self.global_module.forward(padded_emb, src_padding_mask, attention_mask)
         assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
         
-        return local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask
+        return local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask, attn
         
     def _common_step(self,
                     batch, 
@@ -121,7 +144,7 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         """
         batch_masked, mask_idx = self._common_step_masking(batch)
             
-        local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask = self.forward(batch_masked)
+        local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask, attn = self.forward(batch_masked)
         
         # Predict from local embedding on masked nodes
         y_pred_local = self.predict_local(local_embedding, mask_idx)
@@ -178,7 +201,7 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         assert not torch.any(torch.isnan(y_pred_combined)), "y_pred contains NaN values"
         assert not torch.any(torch.isnan(y_true_combined)), "y_true contains NaN values"
 
-        return local_embedding, global_embedding, y_pred_combined, y_true_combined
+        return local_embedding, global_embedding, y_pred_combined, y_true_combined, attn
     
     def get_separate_predictions(self, y_pred_combined, y_true_combined):
         """Get separate predictions and ground truth for local and global decoders.
@@ -245,7 +268,8 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         losses = {
             'local_loss': None,
             'global_loss': None,
-            'combined_loss': None
+            'combined_loss': None,
+            'kl_loss': None
         }
         
         local_loss = None
@@ -272,7 +296,11 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
                 global_loss = loss_fn(y_pred_global, y_true_global)
             losses['local_loss'] = local_loss
             losses['global_loss'] = global_loss
-        
+            
+        if self._current_local_latent_params is not None:
+            losses['kl_loss'] = self.local_module.loss_kl(self._current_local_latent_params)
+            self._current_local_latent_params = None
+
         return losses
     
     def get_model_summary(self) -> str:

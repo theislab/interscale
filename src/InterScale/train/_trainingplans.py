@@ -274,6 +274,20 @@ class TrainingPlan(pl.LightningModule):
             #  compute and log metrics using combined predictions
             loss = self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics, attn=attn)
             
+            if separate_losses.get('kl_loss') is not None:
+                kl_loss = separate_losses['kl_loss']
+                
+                # KL Annealing/Weighting (beta)
+                # You can use a fixed weight or a scheduler (e.g., self.current_epoch)
+                kl_weight = getattr(self.hparams, 'kl_weight', 1.0) 
+                weighted_kl = kl_weight * kl_loss
+                
+                self.log('train_kl_loss', kl_loss, on_step=False, on_epoch=True, 
+                        batch_size=int(self.batch_size), sync_dist=False)
+                
+                # Add KL to the final loss to be backpropagated
+                loss += weighted_kl
+            
             assert not torch.isnan(loss), "loss is NaN"
             return loss
         else:
@@ -298,6 +312,20 @@ class TrainingPlan(pl.LightningModule):
             
             #  compute and log metrics using combined predictions
             loss = self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics, attn=attn)
+
+            if separate_losses.get('kl_loss') is not None:
+                kl_loss = separate_losses['kl_loss']
+                
+                # KL Annealing/Weighting (beta)
+                # You can use a fixed weight or a scheduler (e.g., self.current_epoch)
+                kl_weight = getattr(self.hparams, 'kl_weight', 1.0) 
+                weighted_kl = kl_weight * kl_loss
+                
+                self.log('val_kl_loss', kl_loss, on_step=False, on_epoch=True, 
+                        batch_size=int(self.batch_size), sync_dist=False)
+                
+                # Add KL to the final loss to be backpropagated
+                loss += weighted_kl
             
             assert not torch.isnan(loss), "loss is NaN"
             return loss
@@ -328,6 +356,20 @@ class TrainingPlan(pl.LightningModule):
             
             #  compute and log metrics using combined predictions
             loss = self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
+
+            if separate_losses.get('kl_loss') is not None:
+                kl_loss = separate_losses['kl_loss']
+                
+                # KL Annealing/Weighting (beta)
+                # You can use a fixed weight or a scheduler (e.g., self.current_epoch)
+                kl_weight = getattr(self.hparams, 'kl_weight', 1.0) 
+                weighted_kl = kl_weight * kl_loss
+                
+                self.log('test_kl_loss', kl_loss, on_step=False, on_epoch=True, 
+                        batch_size=int(self.batch_size), sync_dist=False)
+                
+                # Add KL to the final loss to be backpropagated
+                loss += weighted_kl
             
             assert not torch.isnan(loss), "loss is NaN"
             return loss

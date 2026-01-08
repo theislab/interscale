@@ -135,14 +135,39 @@ class SCVILocalModule(LocalModuleClass):
         # We take the mean (q_m) or the sample (z) as the embedding.
         # Usually, for downstream tasks, the mean is more stable.
         q_m, q_v, z = self.encoder(x)
-        return q_m 
+        
+        return {
+            'embedding': z, 
+            'q_m': q_m,
+            'q_v': q_v
+        }
+    
+    def loss_kl(self, outputs_dict: dict) -> torch.Tensor:
+        """
+        Calculates the analytical KL Divergence for the normal distribution.
+        """
+        q_m = outputs_dict['q_m']
+        q_v = outputs_dict['q_v'] # This is the variance from scvi.nn.Encoder
+        
+        # Formula for KL divergence between N(mu, sigma^2) and N(0, 1):
+        # KL = 0.5 * sum(sigma^2 + mu^2 - 1 - log(sigma^2))
+        # Note: scvi.nn.Encoder returns variance (q_v), not log-variance.
+        kl_element = 0.5 * (q_v + q_m.pow(2) - 1 - torch.log(q_v + 1e-8))
+        
+        return torch.mean(torch.sum(kl_element, dim=1))    
+
+    def predict(self, z: torch.Tensor) -> torch.Tensor:
+        """
+        Predict method to act as a placeholder for the local decoder.
+        If your local module has a specific decoder (e.g. for ZINB), 
+        implement the reconstruction logic here.
+        """
+        if hasattr(self, 'decoder'):
+            return self.decoder(z)
+        # If no internal decoder, we assume it's handled by the CombinedModule's loss_fn
+        return z
 
     def get_model_summary(self) -> str:
-        """
-        Overrides the base method to provide scVI-specific details.
-        """
-        # Accessing internal scVI encoder attributes for the summary
-        # Note: scVI stores dimensions in specific attributes, usually accessible via the module
         try:
             latent_dim = self.encoder.mean_encoder.out_features
         except AttributeError:
@@ -153,6 +178,24 @@ class SCVILocalModule(LocalModuleClass):
             f"  - Latent Dim (n_embed): {latent_dim}\n"
             f"  - Full Architecture:\n{str(self.encoder)}" 
         )
+
+
+    # def get_model_summary(self) -> str:
+    #     """
+    #     Overrides the base method to provide scVI-specific details.
+    #     """
+    #     # Accessing internal scVI encoder attributes for the summary
+    #     # Note: scVI stores dimensions in specific attributes, usually accessible via the module
+    #     try:
+    #         latent_dim = self.encoder.mean_encoder.out_features
+    #     except AttributeError:
+    #         latent_dim = "Unknown"
+
+    #     return (
+    #         f"scVI Encoder Wrapper:\n"
+    #         f"  - Latent Dim (n_embed): {latent_dim}\n"
+    #         f"  - Full Architecture:\n{str(self.encoder)}" 
+    #     )
 
     @staticmethod
     def from_config(cfg, **kwargs):
