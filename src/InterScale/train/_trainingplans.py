@@ -272,7 +272,7 @@ class TrainingPlan(pl.LightningModule):
                         on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
             
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics)
+            loss = self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics, attn=attn)
             
             assert not torch.isnan(loss), "loss is NaN"
             return loss
@@ -297,7 +297,7 @@ class TrainingPlan(pl.LightningModule):
                         on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
             
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
+            loss = self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics, attn=attn)
             
             assert not torch.isnan(loss), "loss is NaN"
             return loss
@@ -327,7 +327,7 @@ class TrainingPlan(pl.LightningModule):
                         on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=True)
             
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics)
+            loss = self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
             
             assert not torch.isnan(loss), "loss is NaN"
             return loss

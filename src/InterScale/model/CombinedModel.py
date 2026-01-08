@@ -24,7 +24,6 @@ class CombinedModel(NodeMaskingTrainingPlan,
         
         self.local_component = True
         self.global_component = True
-
         # Initialize the combined module with both local and global components
         if self._cfg.model.decoder.dual_decoder == True:
             self.module = DualDecoderCombinedModuleClass(
