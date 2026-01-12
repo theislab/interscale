@@ -104,7 +104,7 @@ def prepare_geome_dataset(adata,
 
         obsm_key = None
         if cfg.model.local_component.name == "Precomputed":
-            obsm_key = cfg.model.dataset.precomputed
+            obsm_key = cfg.dataset.precomputed
         if 'classification' in cfg.dataset.prediction_task:
             fields = {
                 "x": [X_key],

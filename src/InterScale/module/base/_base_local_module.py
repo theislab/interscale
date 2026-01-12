@@ -237,6 +237,5 @@ class PrecomputedEmbeddingModule(LocalModuleClass):
     @staticmethod
     def from_config(cfg, **kwargs):
         return PrecomputedEmbeddingModule(
-            n_embed=kwargs.get('n_embed'),
             **kwargs
         )
