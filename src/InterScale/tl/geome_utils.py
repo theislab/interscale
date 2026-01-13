@@ -136,10 +136,10 @@ def prepare_geome_dataset(adata,
             if obsm_key not in adata.obsm:
                 raise ValueError(f"Precomputed embeddings key '{obsm_key}' not found in adata.obsm")
             fields["embeddings"] = [f"obsm/{obsm_key}"]
-            transform = transforms.Compose(
-            [
-                transforms.AddEdgeIndex(edge_index_key="edge_index", func_args=spatial_neigbors_kwargs, spatial_key="spatial", key_added=adj_matrix_loc),
-            ]
+        transform = transforms.Compose(
+        [
+            transforms.AddEdgeIndex(edge_index_key="edge_index", func_args=spatial_neigbors_kwargs, spatial_key="spatial", key_added=adj_matrix_loc),
+        ]
         )
 
         a2d = ann2data.Ann2DataBasic(
