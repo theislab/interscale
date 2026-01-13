@@ -110,10 +110,19 @@ class CombinedModel(NodeMaskingTrainingPlan,
         
         for batch in pyg:
             ## Get model output
-            local_embedding = self.module.local_module.forward(batch.x, batch.edge_index)
+            local_out = self.module.local_module.forward(batch.x, batch.edge_index)
+            if isinstance(local_out, dict):
+                local_embedding = local_out['embedding']
+                self._current_local_latent_params = local_out 
+            else:
+                local_embedding = local_out
+                self._current_local_latent_params = None
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             # no masking during evaluation
-            y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
+            if isinstance(self.module, DualDecoderCombinedModuleClass):
+                y_pred = self.module.predict_global(global_embedding, src_padding_mask, self.prediction_level)
+            else:
+                y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
             print(batch.x.shape, y_pred.shape)
             
             cosine_sim = F.cosine_similarity(batch.x, y_pred, dim=1)
