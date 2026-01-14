@@ -110,7 +110,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
         
         for batch in pyg:
             ## Get model output
-            local_out = self.module.local_module.forward(batch.x, batch.edge_index)
+            local_input = getattr(batch, 'embeddings', batch.x)
+            local_out = self.module.local_module.forward(local_input, batch.edge_index)
             if isinstance(local_out, dict):
                 local_embedding = local_out['embedding']
                 self._current_local_latent_params = local_out 
