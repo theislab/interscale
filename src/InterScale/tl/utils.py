@@ -64,6 +64,11 @@ def get_model_filename_prefix(cfg, local_component: bool, global_component: bool
         file_name_prefix = file_name_prefix + f"{cfg.model.local_component.name}_"
     if global_component and cfg.model.global_component.name:
         file_name_prefix = file_name_prefix + f"{cfg.model.global_component.name}_"
+    if local_component and global_component and cfg.model.decoder.dual_decoder:
+        file_name_prefix = f'dual_' + file_name_prefix
+
+    else:
+        raise ValueError(f"Invalid combination of local and global components: {local_component} and {global_component}")
         
     return file_name_prefix
 
