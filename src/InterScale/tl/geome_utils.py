@@ -19,7 +19,9 @@ def prepare_a2d_dataset(cfg: CN):
         
         X_key = f"layers/{layer_key}" if layer_key is not None else "X"
         print(f"Load GEX from .{X_key}")
-
+        obsm_key = None
+        if cfg.model.local_component.name == "Precomputed":
+            obsm_key = cfg.dataset.precomputed
         if 'classification' in cfg.dataset.prediction_task:
             fields = {
                 "x": [X_key],
@@ -43,7 +45,8 @@ def prepare_a2d_dataset(cfg: CN):
             }
             
             preprocess = None
-
+        if obsm_key is not None:
+            fields["embeddings"] = [f"obsm/{obsm_key}"]
 
         transform = transforms.Compose(
             [
