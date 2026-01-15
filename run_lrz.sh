@@ -23,7 +23,7 @@ DEFAULT_CONFIG_LRZ="/dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches/src
 #LEGNINI_CONFIG="Legnini23/legnini23_regr_node_Combined_genes.yaml"
 LEGNINI_CONFIG="Legnini23/legnini23_class_graph_Combined_condition.yaml"
 SCHUERCH_CONFIG="Schuerch20/schuerch20_graph_sample_GlobalModel.yaml"
-COSMX_PANCREAS_CONFIG="Cosmx_pancreas/clas_graph.yaml"
+COSMX_PANCREAS_CONFIG="Cosmx_pancreas/regr_dual_combined.yaml"
 XENIUM_PIG_CONFIG="/Xenium_pig/pig_genes_sw_combined.yaml"
 
 echo "Current working directory: $(pwd)"

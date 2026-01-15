@@ -20,6 +20,6 @@ MELTON_SWEEP="melton25/robustness_sweep.yaml"
 MELTON_CFG="melton25/graph_clas_combined.yaml"
 
 # Legnini graph sweep for Local, Global and Combined Model
-#python src/InterScale/main_sweep.py --cfg "$DEFAULT_CONFIG_ICB$MELTON_CFG" --sweep_cfg "$DEFAULT_CONFIG_ICB$MELTON_SWEEP" --model_type LocalModel --sweep_goal robustness --prediction_task classification
+python src/InterScale/main_sweep.py --cfg "$DEFAULT_CONFIG_ICB$MELTON_CFG" --sweep_cfg "$DEFAULT_CONFIG_ICB$MELTON_SWEEP" --model_type LocalModel --sweep_goal robustness --prediction_task classification
 python src/InterScale/main_sweep.py --cfg "$DEFAULT_CONFIG_ICB$MELTON_CFG" --sweep_cfg "$DEFAULT_CONFIG_ICB$MELTON_SWEEP" --model_type GlobalModel --sweep_goal robustness --prediction_task classification
-python src/InterScale/main_sweep.py --cfg "$DEFAULT_CONFIG_ICB$MELTON_CFG" --sweep_cfg "$DEFAULT_CONFIG_ICB$MELTON_SWEEP" --model_type CombinedModel --sweep_goal robustness --prediction_task classification
+#python src/InterScale/main_sweep.py --cfg "$DEFAULT_CONFIG_ICB$MELTON_CFG" --sweep_cfg "$DEFAULT_CONFIG_ICB$MELTON_SWEEP" --model_type CombinedModel --sweep_goal robustness --prediction_task classification
