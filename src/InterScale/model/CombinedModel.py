@@ -32,7 +32,7 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 n_input=self.n_input,
                 n_output=self.n_output,
                 n_embed=self.n_embed,
-                decoder_type=self._cfg.model.decoder.type,
+                decoder_type=None,  # Container doesn't need its own decoder, only submodules do
                 dropout_decoder=self._cfg.model.decoder.dropout_decoder,
                 decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
                 pct_mask_nodes=self._cfg.dataset.pct_mask_nodes
@@ -43,7 +43,7 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 n_input=self.n_input,
                 n_output=self.n_output,
                 n_embed=self.n_embed,
-                decoder_type=self._cfg.model.decoder.type,
+                decoder_type=None,  # Container doesn't need its own decoder, only global module does
                 dropout_decoder=self._cfg.model.decoder.dropout_decoder,
                 decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
                 pct_mask_nodes=self._cfg.dataset.pct_mask_nodes

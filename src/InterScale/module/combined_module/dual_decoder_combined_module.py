@@ -92,9 +92,23 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         y_pred_global: torch.Tensor
             Size: [N, C] or [N, F] where N depends on prediction_level
         """
-        # Get predictions from global decoder
-        y_pred = self.global_module.predict(global_embedding, src_padding_mask, prediction_level)
-        return y_pred
+        ## Graph-level prediction: get cls_token from last position
+        if 'graph' in prediction_level:
+            cls_token = global_embedding[-1,:, :] # [B, E]
+            return self.global_module.decoder(cls_token)
+        ## Node-level prediction: remove cls_token from last position
+        elif 'node' in prediction_level: 
+            h_graph = global_embedding[:-1] # [E, B, C]
+            h_graph = torch.permute(h_graph, (1, 0, 2)) #[B, S, E]
+            src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
+            masked_output = h_graph[~ src_padding_mask] # [N, E]
+            return self.global_module.decoder(masked_output)
+        else:
+            raise Exception('Choose a valid prediction tasks (graph or node).')
+    
+    def predict(self):
+        """Predict with the dual decoder for evaluation purposes."""
+        pass #need to implement this
     
     def forward(
         self,

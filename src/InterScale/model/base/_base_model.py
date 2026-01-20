@@ -167,7 +167,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             anndata_fields.append(fields.CategoricalObsField(registry_key = 'prediction_obs', attr_key = prediction_obs))
         
         if group_key is not None:
-            anndata_fields.append(fields.CategoricalObsField(registry_key = 'group_key', attr_key = group_key))    
+            anndata_fields.append(fields.CategoricalObsField(registry_key = 'group_label', attr_key = group_key))    
         else:
             anndata_fields.append(fields.CategoricalObsField(registry_key = 'split_key', attr_key = split_key))
         # Check that split_key contains required values
