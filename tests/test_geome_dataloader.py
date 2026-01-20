@@ -5,51 +5,7 @@ import numpy as np
 from InterScale.geome_dataloader import GraphAnnDataModule
 from typing import Tuple, List
 from sklearn.model_selection import train_test_split
-
-def create_test_data():
-    """Creates a list of four PyG objects with different sizes and class distribution."""
-    # Create data objects of different sizes
-    sizes = [10, 20, 40, 100]
-    data_list = []
-    
-    # Define class distribution
-    class_distribution = {
-        0: 0.50,  # 50% class 1
-        1: 0.25,  # 25% class 2
-        2: 0.20,  # 20% class 3
-        3: 0.05   # 5% class 4
-    }
-    
-    for size in sizes:
-        # Create random features
-        x = torch.randn(size, 10)  # 10 features per node
-        
-        # Create random edges (fully connected for simplicity)
-        edge_index = []
-        for i in range(size):
-            for j in range(size):
-                if i != j:
-                    edge_index.append([i, j])
-        edge_index = torch.tensor(edge_index).t()
-        
-        # Create labels according to distribution
-        num_nodes_per_class = {
-            cls: int(size * prob) for cls, prob in class_distribution.items()
-        }
-        # Adjust for rounding errors
-        remaining = size - sum(num_nodes_per_class.values())
-        num_nodes_per_class[0] += remaining
-        
-        y = []
-        for cls, num in num_nodes_per_class.items():
-            y.extend([cls] * num)
-        y = torch.tensor(y)
-        
-        # Create PyG data object
-        data = Data(x=x, edge_index=edge_index, y=y)
-        data_list.append(data)
-    
-    return data_list
+from tests._model_test_utils import create_test_pyg_data
 
 def split_data(data_list: List[Data], 
                train_size: float = 0.7, 
@@ -158,7 +114,7 @@ def is_approximately_equal(a: int, b: int, tolerance: int = 1) -> bool:
 
 def test_data_splitting():
     # Create test data
-    data_list = create_test_data()
+    data_list = create_test_pyg_data()
     print("Original data list:", data_list)
     
     # Split data
@@ -201,7 +157,7 @@ def test_data_splitting():
 
 def test_geome_dataloader():
     # Create test data
-    data_list = create_test_data()
+    data_list = create_test_pyg_data()
     
     # Split data
     train_data, val_data, test_data = split_data(data_list)
