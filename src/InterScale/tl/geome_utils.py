@@ -106,7 +106,9 @@ def prepare_geome_dataset(adata,
         X_key = f"layers/{layer_key}" if layer_key is not None else "X"
 
         obsm_key = None
-        if cfg.model.local_component.name == "Precomputed":
+        # if cfg.model.local_component.name == "Precomputed":
+        #     obsm_key = cfg.dataset.precomputed
+        if cfg.dataset.precomputed is not None:
             obsm_key = cfg.dataset.precomputed
         if 'classification' in cfg.dataset.prediction_task:
             fields = {

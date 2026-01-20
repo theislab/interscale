@@ -96,7 +96,10 @@ class GlobalModel(NodeMaskingTrainingPlan,
 
                 
         for batch in pyg:
-            embedding = self.module.create_gex_embedding(batch.x, type="PCA")
+            if hasattr(batch, 'embeddings'):
+                embedding=batch.embeddings
+            else:
+                embedding = self.module.create_gex_embedding(batch.x, type="PCA")
             embedding = torch.tensor(embedding, dtype=torch.float32, device=batch.x.device)
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.evaluate(batch, embedding)
             # no masking during evaluation
