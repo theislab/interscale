@@ -136,9 +136,9 @@ class CombinedModel(NodeMaskingTrainingPlan,
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             # no masking during evaluation
             if isinstance(self.module, DualDecoderCombinedModuleClass):
-                y_pred = self.module.predict_global(global_embedding, src_padding_mask, self.prediction_level)
+                y_pred_global = self.module.predict_global(global_embedding, src_padding_mask, self.prediction_level)
             else:
-                y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
+                y_pred_global = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
             
             ## Save model output
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[pad_index_nodes[0]]
