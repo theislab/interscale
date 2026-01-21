@@ -20,7 +20,7 @@ class LocalModuleClass(BaseModuleClass):
             
     def predict(self,
                 local_embedding,
-                prediction_level: Literal["node", "graph"]):
+                prediction_level: Literal["node", "graph"] | None = None):
         """Predict with the decoder.
         
         Parameters
