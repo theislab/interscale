@@ -105,11 +105,9 @@ class GlobalModel(NodeMaskingTrainingPlan,
             # no masking during evaluation
             y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
 
-            print(batch.x.shape, y_pred.shape)
             
             cosine_sim = F.cosine_similarity(batch.x, y_pred, dim=1)
 
-            print(f"Mean Cosine Similarity: {cosine_sim.mean().item()}")
 
             #I = self_attention_relevance.generate_relevance(transformer_in, src_padding_mask)
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[pad_index_nodes[0]]

@@ -124,11 +124,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 y_pred = self.module.predict_global(global_embedding, src_padding_mask, self.prediction_level)
             else:
                 y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
-            print(batch.x.shape, y_pred.shape)
             
             cosine_sim = F.cosine_similarity(batch.x, y_pred, dim=1)
-
-            print(f"Mean Cosine Similarity: {cosine_sim.mean().item()}")
             
             ## Save model output
             # Get indices for this sample
