@@ -5,9 +5,7 @@ import torch
 from InterScale.module.base import BaseModuleClass
 from InterScale.tl import pad_batch, apply_mask
 from typing import Literal
-from sklearn.decomposition import PCA
-import scvi
-import anndata as ad
+from sklearn.decomposition import PCA, NMF
 import numpy as np
 import logging
 import warnings
@@ -23,8 +21,16 @@ class GlobalModuleClass(BaseModuleClass):
         self.registered_local_component = False
         self.registered_global_component = True
         
-        self.pca = PCA(n_components=self.n_embed)
-    
+        if self.type_gex_embedding == "PCA":
+            self.pca = PCA(n_components=self.n_embed)
+        elif self.type_gex_embedding == "NMF":
+            self.nmf = NMF(n_components=self.n_embed, init='random', random_state=0)
+        elif self.type_gex_embedding is None:
+            # No GEX embedding needed when using CombinedModuleClass (local module provides embeddings)
+            pass
+        else:
+            raise ValueError(f"Invalid embedding type: {self.type_gex_embedding}")
+
     @abstractmethod
     def forward(self, embeddings: torch.Tensor):
         """
@@ -35,7 +41,7 @@ class GlobalModuleClass(BaseModuleClass):
         
     def create_gex_embedding(self, 
                              embeddings: torch.Tensor,
-                             type: Literal["PCA", "scvi"]):
+                             type: Literal["PCA", "NMF","scvi"]):
         """Generate embeddings for GEX if no local component is used.
         
         Parameters
@@ -57,44 +63,13 @@ class GlobalModuleClass(BaseModuleClass):
                 return self.pca.fit_transform(embeddings)
             else:
                 return self.pca.transform(embeddings)
-        elif type == "scvi":
-
-            scvi.settings.verbosity = logging.ERROR
-
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", UserWarning)
-                ### INSERT CODE TO CREATE SCVI EMBEDDINGS ###
-                # 1. Convert torch Tensor to AnnData object
-                # scVI requires raw count data in an AnnData container
-                
-                if isinstance(embeddings, torch.Tensor):
-                    embeddings = embeddings.cpu().numpy()
-                
-                
-                if not hasattr(self, 'scvi_model'):
-                    # Convert to AnnData for initial training
-                    adata = ad.AnnData(embeddings)
-                    scvi.model.SCVI.setup_anndata(adata)
-                    
-                    # Initialize and train ONLY the first time
-                    self.scvi_model = scvi.model.SCVI(
-                        adata, 
-                        n_latent=self.n_embed, 
-                        n_layers=2
-                    )
-                    # Disable progress bar to avoid the tqdm _lock error
-                    self.scvi_model.train(max_epochs=100, enable_progress_bar=False)
-                    
-                    latent_repr = self.scvi_model.get_latent_representation()
-                else:
-                    # 2. For subsequent calls, we don't 'train' again. 
-                    # We just get the latent representation of the new data.
-                    new_adata = ad.AnnData(embeddings)
-                    # We use the existing model to 'predict' the embedding (inference)
-                    latent_repr = self.scvi_model.get_latent_representation(new_adata)
-                return torch.from_numpy(latent_repr).to('cuda')
-        elif type == 'precomputed':
-            return embeddings
+        elif type == "NMF":
+            if not hasattr(self.nmf, 'components_'):
+                return self.nmf.fit_transform(embeddings)
+            else:
+                return self.nmf.transform(embeddings)
+        # elif type == "scvi":
+        #     return scvi.model.SCVI(embeddings)
         else:
             raise ValueError(f"Invalid embedding type: {type}")
         
@@ -320,7 +295,7 @@ class GlobalModuleClass(BaseModuleClass):
         if hasattr(batch_masked, 'embeddings'):
             embedding=batch_masked.embeddings
         else:
-            embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type='PCA')
+            embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type=self.type_gex_embedding)
             
         embedding = torch.tensor(embedding, dtype=torch.float32, device=batch_masked.x.device)
         assert embedding.shape == (batch_masked.x.shape[0], self.n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}"

@@ -20,6 +20,7 @@ class BaseModuleClass(L.LightningModule, ABC):
         decoder_hidden_dims: List[int] = [128, 128],
         dual_decoder: bool = False,
         pct_mask_nodes: float = 0.0,
+        type_gex_embedding: Literal["PCA", "NMF","scvi"] | None = None,
     ):
         """
         Parameters
@@ -56,6 +57,7 @@ class BaseModuleClass(L.LightningModule, ABC):
         self.decoder_hidden_dims = decoder_hidden_dims
         self.dual_decoder = dual_decoder
         self.pct_mask_nodes = pct_mask_nodes
+        self.type_gex_embedding = type_gex_embedding
         if self.pct_mask_nodes > 0:
             self.masked_nodes = True
         else:

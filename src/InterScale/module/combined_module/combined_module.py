@@ -10,6 +10,7 @@ from typing import Literal
 
 
 MODULE_REGISTRY = {
+    "GIN": LocalModuleClass,
     "GCN": LocalModuleClass,
     'scVI': SCVILocalModule,
     "Precomputed": PrecomputedEmbeddingModule
@@ -52,7 +53,12 @@ class CombinedModuleClass(BaseModuleClass):
                                                            decoder_type=cfg.model.decoder.type,
                                                            pct_mask_nodes=self.pct_mask_nodes)
         
-    def predict(self,
+    def predict_local(self,
+                      local_embedding):
+        """Predict with the decoder."""
+        raise Exception("For CombinedModel the local module does not have a decoder")
+        
+    def predict_global(self,
                 global_embedding,
                 src_padding_mask,
                 prediction_level):

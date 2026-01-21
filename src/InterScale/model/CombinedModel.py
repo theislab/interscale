@@ -31,7 +31,7 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 n_input=self.n_input,
                 n_output=self.n_output,
                 n_embed=self.n_embed,
-                decoder_type=self._cfg.model.decoder.type,
+                decoder_type=None,  # Container doesn't need its own decoder, only submodules do
                 dropout_decoder=self._cfg.model.decoder.dropout_decoder,
                 decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
                 pct_mask_nodes=self._cfg.dataset.pct_mask_nodes
@@ -42,7 +42,7 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 n_input=self.n_input,
                 n_output=self.n_output,
                 n_embed=self.n_embed,
-                decoder_type=self._cfg.model.decoder.type,
+                decoder_type=None,  # Container doesn't need its own decoder, only global module does
                 dropout_decoder=self._cfg.model.decoder.dropout_decoder,
                 decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
                 pct_mask_nodes=self._cfg.dataset.pct_mask_nodes
@@ -72,6 +72,9 @@ class CombinedModel(NodeMaskingTrainingPlan,
         adata.obs_names = [str(i) for i in range(1, len(adata.obs_names) + 1)] # ensure that no duplicate observation names are present
         assert len(adata.obs_names) == len(adata.obs_names.unique()), f"Duplicate observation names found. Expected {len(adata.obs_names)} unique names but found {len(adata.obs_names.unique())}"
         
+        assert "spatial" in adata.obsm, "Missing spatial coordinates"
+        assert adata.obsm["spatial"].shape[0] > 0, "No spatial coordinates found"
+        
         a2d = prepare_a2d_dataset(self._cfg)
         pyg, _ = list(a2d(adata))
         
@@ -83,26 +86,38 @@ class CombinedModel(NodeMaskingTrainingPlan,
         # Create empty DataFrame with correct shape
         local_embeddings_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self.n_embed)
+            columns=range(self.n_embed),
+            dtype=np.float32
         )
 
         global_embeddings_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self.n_embed)
+            columns=range(self.n_embed),
+            dtype=np.float32
         )
         attention_matrix_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self._cfg.model.global_component.parameters.max_seq_len)
+            columns=range(self._cfg.model.global_component.parameters.max_seq_len),
+            dtype=np.float32
         )
         
         # decoder_weight_df = pd.DataFrame(
         #     index=obs_names_str,
-        #     columns=range(self.n_output)
+        #     columns=range(self.n_output),
+        #     dtype=np.float32
         # )
         
-        y_pred_df = pd.DataFrame(
+        if self._cfg.model.decoder.dual_decoder == True:
+            y_pred_local_df = pd.DataFrame(
+                index=obs_names_str,
+                columns=range(self.n_output),
+                dtype=np.float32
+            )
+        
+        y_pred_global_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self.n_output)
+            columns=range(self.n_output),
+            dtype=np.float32    
         )
         
         cls_token_horizontal = np.full(len(adata.obs_names), np.nan)
@@ -125,13 +140,7 @@ class CombinedModel(NodeMaskingTrainingPlan,
             else:
                 y_pred = self.module.predict(global_embedding, src_padding_mask, self.prediction_level)
             
-            cosine_sim = F.cosine_similarity(batch.x, y_pred, dim=1)
-            
             ## Save model output
-            # Get indices for this sample
-            sample_mask = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
-            # Fill embeddings directly into the DataFrame
-            local_embeddings_df.loc[sample_mask] = local_embedding.detach().cpu().numpy()
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[pad_index_nodes[0]]
             sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
             global_embeddings_df.loc[sample_mask] = global_embedding[:-1].squeeze(1).detach().cpu().numpy()
@@ -142,7 +151,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
             padded_attn = np.full((attn_matrix.shape[0], self._cfg.model.global_component.parameters.max_seq_len), np.nan)
             padded_attn[:, :attn_matrix.shape[1]] = attn_matrix
             attention_matrix_df.loc[sample_mask] = padded_attn
-            y_pred_df.loc[sample_mask] = y_pred.detach().cpu().numpy()
+            
+            y_pred_global_df.loc[sample_mask] = y_pred_global.detach().cpu().numpy()
             
             # if self.module.decoder_type == 'linear':
             #     W = self.module.decoder.decoder.weight
@@ -151,8 +161,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 
         adata = self.save_evaluation_results(adata, 
                                              prefix, 
-                                             #decoder_weight_df = decoder_weight_df, 
-                                             y_pred_df = y_pred_df, 
+                                             y_pred_local_df = y_pred_local_df,
+                                             y_pred_global_df = y_pred_global_df, 
                                              local_embeddings_df = local_embeddings_df, 
                                              global_embeddings_df = global_embeddings_df, 
                                              attention_matrix_df = attention_matrix_df, 

@@ -11,6 +11,7 @@ __pycache__/
 *.log
 *.txt
 *.pyc
+*.cpython-310
 
 # ignore ALL files in ANY directory named 
 figures/

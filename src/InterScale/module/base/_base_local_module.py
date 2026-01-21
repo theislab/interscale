@@ -22,7 +22,7 @@ class LocalModuleClass(BaseModuleClass):
             
     def predict(self,
                 local_embedding,
-                prediction_level: Literal["node", "graph"]):
+                prediction_level: Literal["node", "graph"] | None = None):
         """Predict with the decoder.
         
         Parameters
@@ -89,6 +89,15 @@ class LocalModuleClass(BaseModuleClass):
                        hidden_dim = params['hidden_dim'],
                        dropout_local = params['dropout_local'],
                        **kwargs)
+        elif module_name == 'GIN':
+            from InterScale.module.local_modules import GIN
+            return GIN(n_layers = params['num_layers'],
+                       hidden_dim = params['hidden_dim'],
+                       dropout_local = params['dropout_local'],
+                       **kwargs)
+        # Add more elifs for other modules
+        else:
+            raise ValueError(f"Unknown local module name: {module_name}")
         # # Add more elifs for other modules
         # else:
         #     raise ValueError(f"Unknown local module name: {module_name}")

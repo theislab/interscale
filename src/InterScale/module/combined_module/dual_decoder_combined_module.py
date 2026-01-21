@@ -6,6 +6,7 @@ from yacs.config import CfgNode as CN
 
 
 MODULE_REGISTRY = {
+    "GIN": LocalModuleClass,
     "GCN": LocalModuleClass,
     'scVI': SCVILocalModule
 }
@@ -33,8 +34,6 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
 
         if local_class is None:
             raise ValueError(f"Module {module_name} not found in MODULE_REGISTRY")
-        
-        print(local_class)
         
         self.registered_local_component = True
         self.registered_global_component = True
