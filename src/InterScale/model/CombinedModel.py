@@ -129,7 +129,6 @@ class CombinedModel(NodeMaskingTrainingPlan,
             local_embedding = self.module.local_module.forward(batch.x, batch.edge_index)
             if self._cfg.model.decoder.dual_decoder == True:
                 y_pred_local = self.module.predict_local(local_embedding)
-                y_pred_local_df.loc[sample_mask] = y_pred_local.detach().cpu().numpy()
             ## Get Global model output
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             # no masking during evaluation
@@ -149,6 +148,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
             padded_attn = np.full((attn_matrix.shape[0], self._cfg.model.global_component.parameters.max_seq_len), np.nan)
             padded_attn[:, :attn_matrix.shape[1]] = attn_matrix
             attention_matrix_df.loc[sample_mask] = padded_attn
+            if self._cfg.model.decoder.dual_decoder == True:
+                y_pred_local_df.loc[sample_mask] = y_pred_local.detach().cpu().numpy()
             y_pred_global_df.loc[sample_mask] = y_pred_global.detach().cpu().numpy()
             
             # if self.module.decoder_type == 'linear':
