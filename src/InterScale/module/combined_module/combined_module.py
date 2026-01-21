@@ -37,7 +37,12 @@ class CombinedModuleClass(BaseModuleClass):
                                                            decoder_type=cfg.model.decoder.type,
                                                            pct_mask_nodes=self.pct_mask_nodes)
         
-    def predict(self,
+    def predict_local(self,
+                      local_embedding):
+        """Predict with the decoder."""
+        raise Exception("For CombinedModel the local module does not have a decoder")
+        
+    def predict_global(self,
                 global_embedding,
                 src_padding_mask,
                 prediction_level):
@@ -67,7 +72,7 @@ class CombinedModuleClass(BaseModuleClass):
         batch_masked, mask_idx = self._common_step_masking(batch)
             
         local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask = self.forward(batch_masked)
-        y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
+        y_pred = self.predict_global(global_embedding, src_padding_mask, prediction_level)
         
         if prediction_task == 'classification' and prediction_level == 'graph':
             y_true = batch.y[batch.ptr[:-1]]
