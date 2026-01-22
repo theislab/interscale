@@ -35,7 +35,8 @@ class GlobalModel(NodeMaskingTrainingPlan,
             decoder_type=self._cfg.model.decoder.type,
             dropout_decoder=self._cfg.model.decoder.dropout_decoder,
             decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
-            pct_mask_nodes=self._cfg.dataset.pct_mask_nodes
+            pct_mask_nodes=self._cfg.dataset.pct_mask_nodes,
+            type_gex_embedding=self._cfg.model.global_component.parameters.type_gex_embedding
         )
         
         
@@ -122,7 +123,7 @@ class GlobalModel(NodeMaskingTrainingPlan,
         adata = self.save_evaluation_results(adata, 
                                              prefix, 
                                              #decoder_weight_df = decoder_weight_df, 
-                                             y_pred_df = y_pred_df, 
+                                             y_pred_global_df = y_pred_df, 
                                              global_embeddings_df = global_embeddings_df, 
                                              attention_matrix_df = attention_matrix_df, 
                                              cls_token_horizontal = cls_token_horizontal,

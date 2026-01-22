@@ -60,10 +60,26 @@ def get_model_filename_prefix(cfg, local_component: bool, global_component: bool
     """
     file_name_prefix = f"{cfg.dataset.name}_{cfg.dataset.prediction_task[:4]}_{cfg.dataset.prediction_level}_{cfg.optim.seed}_"
     
-    if local_component and cfg.model.local_component.name:  
-        file_name_prefix = file_name_prefix + f"{cfg.model.local_component.name}_"
-    if global_component and cfg.model.global_component.name:
-        file_name_prefix = file_name_prefix + f"{cfg.model.global_component.name}_"
+    # Valid combinations: local only, global only, or both
+    if local_component and not global_component:
+        # LocalModel: only local component
+        if cfg.model.local_component.name:  
+            file_name_prefix = file_name_prefix + f"{cfg.model.local_component.name}_"
+    elif global_component and not local_component:
+        # GlobalModel: only global component
+        if cfg.model.global_component.name:
+            file_name_prefix = file_name_prefix + f"{cfg.model.global_component.name}_"
+    elif local_component and global_component:
+        # CombinedModel: both components
+        if cfg.model.local_component.name:  
+            file_name_prefix = file_name_prefix + f"{cfg.model.local_component.name}_"
+        if cfg.model.global_component.name:
+            file_name_prefix = file_name_prefix + f"{cfg.model.global_component.name}_"
+        if cfg.model.decoder.dual_decoder:
+            file_name_prefix = f'dual_' + file_name_prefix
+    else:
+        # Invalid: neither local nor global component
+        raise ValueError(f"Invalid combination of local and global components: {local_component} and {global_component}")
         
     return file_name_prefix
 

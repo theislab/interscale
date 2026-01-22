@@ -27,6 +27,7 @@ SCHUERCH_CONFIG="Schuerch20/schuerch20_graph_sample_GlobalModel.yaml"
 COSMX_PANCREAS_CONFIG="Cosmx_pancreas/clas_graph.yaml"
 XENIUM_PIG_CONFIG="/Xenium_pig/pig_genes_sw_combined.yaml"
 DAMOND_CONFIG="Damond19/damond19_class_graph_Combined_condition.yaml"
+VISIUM_CONFIG="Visium_breast_cancer/class_node_Combined_condition.yaml"
 
 echo "Current working directory: $(pwd)"
 ls -l /dss/dssfs03/tumdss/pn36po/pn36po-dss-0002/di93tig/Projects/A3_InterScale/data/schuerch20.h5ad
@@ -41,7 +42,7 @@ echo "=========================="
 
 srun -N1 --ntasks-per-node=1 --container-mounts=/dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches:/workspace,/dss/dssfs03:/dss/dssfs03 \
 	             --container-image='/dss/dssfs03/tumdss/pn36po/pn36po-dss-0002/di93tig/custom-enroot-image/InterScale.sqsh' \
-                          python src/InterScale/main.py  --cfg "$DEFAULT_CONFIG_LRZ$DAMOND_CONFIG" --model_type "CombinedModel"
+                          python src/InterScale/main.py  --cfg "$DEFAULT_CONFIG_LRZ$VISIUM_CONFIG" --model_type "CombinedModel"
 
 #srun -N1 --ntasks-per-node=1 --container-mounts=/dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches:/workspace,/dss/dssfs03:/dss/dssfs03 \
 	           #  --container-image='/dss/dssfs03/tumdss/pn36po/pn36po-dss-0002/di93tig/custom-enroot-image/InterScale.sqsh'

@@ -98,7 +98,7 @@ class LocalModel(NodeMaskingTrainingPlan,
                                              prefix, 
                                              local_embeddings_df = local_embeddings_df, 
                                              #decoder_weight_df = decoder_weight_df, 
-                                             y_pred_df = y_pred_df)
+                                             y_pred_local_df = y_pred_df)
 
         
         return adata

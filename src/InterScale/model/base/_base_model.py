@@ -167,7 +167,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             anndata_fields.append(fields.CategoricalObsField(registry_key = 'prediction_obs', attr_key = prediction_obs))
         
         if group_key is not None:
-            anndata_fields.append(fields.CategoricalObsField(registry_key = 'group_key', attr_key = group_key))    
+            anndata_fields.append(fields.CategoricalObsField(registry_key = 'group_label', attr_key = group_key))    
         else:
             anndata_fields.append(fields.CategoricalObsField(registry_key = 'split_key', attr_key = split_key))
         # Check that split_key contains required values
@@ -329,7 +329,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
     def save_evaluation_results(self,
                                 adata: AnnData,
                                 prefix: str,
-                                y_pred_df: pd.DataFrame,
+                                y_pred_local_df: pd.DataFrame,
+                                y_pred_global_df: pd.DataFrame,
                                 local_embeddings_df: pd.DataFrame | None = None,
                                 global_embeddings_df: pd.DataFrame | None = None,
                                 attention_matrix_df: pd.DataFrame | None = None,
@@ -344,8 +345,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         local_embeddings_df: pd.DataFrame
         global_embeddings_df: pd.DataFrame
         attention_matrix_df: pd.DataFrame
-        decoder_weight_df: pd.DataFrame
-        y_pred_df: pd.DataFrame
+        y_pred_local_df: pd.DataFrame
+        y_pred_global_df: pd.DataFrame
         cls_token_horizontal: np.ndarray
         cls_token_vertical: np.ndarray
         
@@ -364,10 +365,16 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             adata.obs[f'{prefix}_cls_horizontal'] = cls_token_horizontal
         if cls_token_vertical is not None:
             adata.obs[f'{prefix}_cls_vertical'] = cls_token_vertical
-        if self.prediction_task == 'classification':
-            adata.obsm[f'{prefix}_y_pred'] = y_pred_df.values # [cells, classes]
-        else:
-            adata.layers[f'{prefix}_y_pred'] = y_pred_df.values # [cells, genes]   
+            
+        if self.prediction_task == 'classification' and y_pred_local_df is not None:
+            adata.obsm[f'{prefix}_y_pred_local'] = y_pred_local_df.values # [cells, classes]
+        elif y_pred_local_df is not None:
+            adata.layers[f'{prefix}_y_pred_local'] = y_pred_local_df.values # [cells, genes]   
+            
+        if self.prediction_task == 'classification' and y_pred_global_df is not None:
+            adata.obsm[f'{prefix}_y_pred_global'] = y_pred_global_df.values # [cells, classes]
+        elif y_pred_global_df is not None:
+            adata.layers[f'{prefix}_y_pred_global'] = y_pred_global_df.values # [cells, genes]   
         
         return adata
     
