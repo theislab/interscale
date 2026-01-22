@@ -340,20 +340,12 @@ def multi_head_attention_forward_with_gradients(
         B, Nt, E = q.shape
         q_scaled = q / math.sqrt(E)
 
-        #q_scaled = q 
-
         assert not (is_causal and attn_mask is None), "FIXME: is_causal not implemented for need_weights"
 
         if attn_mask is not None:
             attn_output_weights = torch.baddbmm(attn_mask, q_scaled, k.transpose(-2, -1))
         else:
             attn_output_weights = torch.bmm(q_scaled, k.transpose(-2, -1))
-
-
-        # abs_mean = attn_output_weights.abs().mean().item()
-        # max_val = attn_output_weights.max().item()
-        # std_val = attn_output_weights.std().item()
-        # print(f"LOGIT STATS: MeanAbs: {abs_mean:.6f} | Max: {max_val:.6f} | Std: {std_val:.6f}")
 
 
         attn_output_weights = softmax(attn_output_weights, dim=-1)
