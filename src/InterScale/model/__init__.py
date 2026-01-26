@@ -3,6 +3,7 @@ from .LocalModel import LocalModel
 from .GlobalModel import GlobalModel
 from .CombinedModel import CombinedModel
 
+
 __all__ = ["BaseModelClass", 
            "LocalModel",
            "GlobalModel",
