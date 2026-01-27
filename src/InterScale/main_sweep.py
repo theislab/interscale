@@ -2,23 +2,67 @@ import InterScale as interscale
 from InterScale.tl import prepare_geome_dataset
 from InterScale.geome_dataloader import GraphAnnDataModule
 from InterScale.config import load_config
-from InterScale.tl.utils import get_model_filename_prefix, set_full_reproducibility
+from InterScale.tl.utils import get_model_filename_prefix
 
 import argparse
 import scanpy as sc
 import wandb
 import yaml
+import psutil
+import os
+
+def print_memory_usage(stage=""):
+    """Print current memory usage for both CPU and GPU"""
+    process = psutil.Process(os.getpid())
+    memory_gb = process.memory_info().rss / 1024 / 1024 / 1024
+    print(f"[MEMORY] {stage}: {memory_gb:.2f} GB")
+    
+    # Add GPU memory monitoring
+    try:
+        import torch
+        if torch.cuda.is_available():
+            gpu_allocated = torch.cuda.memory_allocated() / 1024 / 1024 / 1024
+            gpu_reserved = torch.cuda.memory_reserved() / 1024 / 1024 / 1024
+            print(f"[GPU MEMORY] {stage}: Allocated: {gpu_allocated:.2f} GB, Reserved: {gpu_reserved:.2f} GB")
+    except ImportError:
+        pass
+
+def print_memory_debug():
+    """Debug function to see what's consuming memory"""
+    try:
+        import gc
+        import sys
+        
+        # Get object counts by type
+        objects = gc.get_objects()
+        type_counts = {}
+        for obj in objects:
+            obj_type = type(obj).__name__
+            type_counts[obj_type] = type_counts.get(obj_type, 0) + 1
+        
+        # Print top memory consumers
+        print("\n[MEMORY DEBUG] Top object types:")
+        sorted_types = sorted(type_counts.items(), key=lambda x: x[1], reverse=True)
+        for obj_type, count in sorted_types[:10]:
+            print(f"  {obj_type}: {count} objects")
+            
+    except Exception as e:
+        print(f"Memory debug failed: {e}")
 
 def main_sweep(cfg_path, model_type, sweep_goal):
     
+    print_memory_usage("Start of main_sweep")
+    
     cfg = load_config(cfg_path)  
+    
+    assert cfg.wandb.use, "Wandb is not enabled in the configuration file. Necessary for sweep."
     
     local_component = False
     global_component = False
     
     if model_type == 'LocalModel' or model_type == 'CombinedModel':
         local_component = True
-    elif model_type == 'GlobalModel' or model_type == 'CombinedModel':
+    if model_type == 'GlobalModel' or model_type == 'CombinedModel':
         global_component = True
         
     file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
@@ -48,6 +92,7 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             cfg.optim.seed = sweep_config['optim.seed']
         elif sweep_goal == 'hyperparmeter':
             print('hyperparameter sweep')
+            cfg.optim.lr = sweep_config['optim.lr']
             cfg.optim.lr_warmup = sweep_config['optim.lr_warmup']
             cfg.optim.wd = sweep_config['optim.wd']
             cfg.dataset.batch_size = sweep_config['dataset.batch_size']
@@ -68,14 +113,11 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             print('loss sweep')
             cfg.optim.loss = sweep_config['optim.loss']
         cfg.freeze()
-        
-    set_full_reproducibility(cfg.optim.seed)
     
     ####### PREPROCESSING #######
     # Load adata
-    cfg = load_config(cfg_path)
-    print(cfg)
     adata = sc.read_h5ad(cfg.dataset.h5ad_data)
+    print_memory_usage("After loading h5ad")
     print(adata)
     if cfg.dataset.segmentation_robustness is not None:
         print('Applying segmentation noise...')
@@ -83,48 +125,61 @@ def main_sweep(cfg_path, model_type, sweep_goal):
         adata = apply_segmentation_noise(adata, cfg.dataset.segmentation_robustness)
     
     if model_type == "LocalModel":
+        print_memory_usage("Before LocalModel setup")
         interscale.model.LocalModel._setup_anndata(adata = adata,
                                                 prediction_task = cfg.dataset.prediction_task, 
                                                 layer_key = cfg.dataset.layer_key, 
                                                 sample_key_list = cfg.dataset.sample_key, 
                                                 prediction_obs = cfg.dataset.prediction_obs, 
                                                 group_key = cfg.dataset.group_label)
+        print_memory_usage("After LocalModel setup")
         
         model = interscale.model.LocalModel(
             adata,
             cfg = cfg
         )
+        print_memory_usage("After LocalModel creation")
     elif model_type == "GlobalModel":
+        print_memory_usage("Before GlobalModel setup")
         interscale.model.GlobalModel._setup_anndata(adata = adata,
                                                 prediction_task = cfg.dataset.prediction_task, 
                                                 layer_key = cfg.dataset.layer_key, 
                                                 sample_key_list = cfg.dataset.sample_key, 
                                                 prediction_obs = cfg.dataset.prediction_obs, 
                                                 group_key = cfg.dataset.group_label)
+        print_memory_usage("After GlobalModel setup")
         
         model = interscale.model.GlobalModel(
             adata,
             cfg = cfg
         )
+        print_memory_usage("After GlobalModel creation")
     elif model_type == "CombinedModel":
+        print_memory_usage("Before CombinedModel setup")
         interscale.model.CombinedModel._setup_anndata(adata = adata,
                                                 prediction_task = cfg.dataset.prediction_task, 
                                                 layer_key = cfg.dataset.layer_key, 
                                                 sample_key_list = cfg.dataset.sample_key, 
                                                 prediction_obs = cfg.dataset.prediction_obs, 
                                                 group_key = cfg.dataset.group_label)
+        print_memory_usage("After CombinedModel setup")
         
         model = interscale.model.CombinedModel(
             adata,
             cfg = cfg
         )
+        print_memory_usage("After CombinedModel creation")
 
+    print_memory_usage("Before prepare_geome_dataset")
     pyg_data_list, _ = prepare_geome_dataset(adata, cfg)
+    print_memory_usage("After prepare_geome_dataset")
+    
     dm = GraphAnnDataModule(datas=pyg_data_list, 
                            num_workers=1, 
                            batch_size=int(cfg.dataset.batch_size), 
                            pct_mask_nodes=cfg.dataset.pct_mask_nodes,
                            learning_type="node")
+    print_memory_usage("After datamodule creation")
     
     model.train(max_epochs = cfg.optim.n_epochs,
                 datamodule = dm,
@@ -141,6 +196,7 @@ if __name__ == '__main__':
                        choices=['regression', 'classification'],
                        help='Type of prediction task (regression or classification)')
     args = parser.parse_args()
+
     
     # Load both base config and sweep config from yaml
     with open(args.sweep_cfg, 'r') as f:  

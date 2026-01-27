@@ -35,7 +35,8 @@ class GlobalModel(NodeMaskingTrainingPlan,
             decoder_type=self._cfg.model.decoder.type,
             dropout_decoder=self._cfg.model.decoder.dropout_decoder,
             decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
-            pct_mask_nodes=self._cfg.dataset.pct_mask_nodes
+            pct_mask_nodes=self._cfg.dataset.pct_mask_nodes,
+            type_gex_embedding=self._cfg.model.global_component.parameters.type_gex_embedding
         )
         
         
@@ -70,11 +71,13 @@ class GlobalModel(NodeMaskingTrainingPlan,
         # Create empty DataFrame with correct shape
         global_embeddings_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self.n_embed)
+            columns=range(self.n_embed),
+            dtype=np.float32
         )
         attention_matrix_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self._cfg.model.global_component.parameters.max_seq_len)
+            columns=range(self._cfg.model.global_component.parameters.max_seq_len),
+            dtype=np.float32
         )
 
         # decoder_weight_df = pd.DataFrame(
@@ -83,7 +86,8 @@ class GlobalModel(NodeMaskingTrainingPlan,
         # )
         y_pred_df = pd.DataFrame(
             index=obs_names_str,
-            columns=range(self.n_output)
+            columns=range(self.n_output),
+            dtype=np.float32
         )
         
         cls_token_horizontal = np.full(len(adata.obs_names), np.nan)
@@ -119,7 +123,7 @@ class GlobalModel(NodeMaskingTrainingPlan,
         adata = self.save_evaluation_results(adata, 
                                              prefix, 
                                              #decoder_weight_df = decoder_weight_df, 
-                                             y_pred_df = y_pred_df, 
+                                             y_pred_global_df = y_pred_df, 
                                              global_embeddings_df = global_embeddings_df, 
                                              attention_matrix_df = attention_matrix_df, 
                                              cls_token_horizontal = cls_token_horizontal,
