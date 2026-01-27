@@ -22,7 +22,6 @@ def get_dataset_cfg(cfg):
     cfg.dataset.sample_key = []
     cfg.dataset.group_label = ""
     cfg.dataset.split_key = "split"
-    cfg.dataset.precomputed = None
 
     cfg.dataset.spatial_neigbors_kwargs = CN()
     cfg.dataset.spatial_neigbors_kwargs.radius = 50

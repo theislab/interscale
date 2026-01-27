@@ -120,39 +120,7 @@ class GlobalModel(NodeMaskingTrainingPlan,
             cls_token_horizontal[sample_mask] = I[-1, :-1].squeeze().cpu().detach().numpy() 
             cls_token_vertical[sample_mask] = I[:-1, -1].squeeze().cpu().detach().numpy() 
             attn_matrix = I[:-1, :-1].cpu().detach().numpy()
-            if not debug_plotted:
-                import matplotlib.pyplot as plt
-                import seaborn as sns
-
-                print("\n--- First Batch Diagnosis ---")
-                curr_attn = torch.tensor(attn_matrix) 
-                
-                # 1. Statistics
-                print(f"Matrix shape: {curr_attn.shape}")
-                print(f"Max: {curr_attn.max().item():.6f}")
-                print(f"Mean: {curr_attn.mean().item():.6f}")
-                print(f"Mean by row: {curr_attn.sum(dim=1).mean().item():.4f}")
-
-                # 2. Entropy
-                row_sums = curr_attn.sum(dim=1, keepdim=True) + 1e-9
-                prob = curr_attn / row_sums
-                entropy = -torch.sum(prob * torch.log(prob + 1e-9), dim=-1)
-                print(f"Mean Entropy: {entropy.mean().item():.4f}")
-
-                # 3. Viz
-                limit = min(5000, curr_attn.shape[0])
-                attn_matrix1=attn_matrix
-
-                np.fill_diagonal(attn_matrix1, 0)
-
-                plt.figure(figsize=(10, 8))
-                sns.heatmap(attn_matrix1[:limit, :limit], cmap="viridis")
-                plt.title("Attention Matrix")
-                plt.xlabel("Key Node")
-                plt.ylabel("Query Node")
-                plt.show()
-                
-                debug_plotted = True
+            
             # Pad attention matrix to match max_seq_len with NaN
             padded_attn = np.full((attn_matrix.shape[0], self._cfg.model.global_component.parameters.max_seq_len), np.nan)
             padded_attn[:, :attn_matrix.shape[1]] = attn_matrix

@@ -613,7 +613,6 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         new_state_dict = OrderedDict()
         for k, v in state_dict.items():
             # Replace 'global_module.module.' with 'global_module.'
-            # This fixes the specific error seen in your logs.
             new_key = k.replace('global_module.module.', 'global_module.')
             
             # Also handle generic 'module.' prefix if present at the start (legacy DataParallel)

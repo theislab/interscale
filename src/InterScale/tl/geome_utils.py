@@ -20,8 +20,8 @@ def prepare_a2d_dataset(cfg: CN):
         X_key = f"layers/{layer_key}" if layer_key is not None else "X"
         print(f"Load GEX from .{X_key}")
         obsm_key = None
-        if cfg.model.local_component.name == "Precomputed":
-            obsm_key = cfg.dataset.precomputed
+        if cfg.model.global_component.parameters.type_gex_embedding == "Precomputed":
+            obsm_key = cfg.model.global_component.latent_obsm_key
         if 'classification' in cfg.dataset.prediction_task:
             fields = {
                 "x": [X_key],
@@ -106,10 +106,8 @@ def prepare_geome_dataset(adata,
         X_key = f"layers/{layer_key}" if layer_key is not None else "X"
 
         obsm_key = None
-        # if cfg.model.local_component.name == "Precomputed":
-        #     obsm_key = cfg.dataset.precomputed
-        if cfg.dataset.precomputed is not None:
-            obsm_key = cfg.dataset.precomputed
+        if cfg.model.global_component.parameters.type_gex_embedding == "Precomputed":
+            obsm_key = cfg.model.global_component.latent_obsm_key
         if 'classification' in cfg.dataset.prediction_task:
             fields = {
                 "x": [X_key],

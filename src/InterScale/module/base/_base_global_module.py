@@ -25,6 +25,8 @@ class GlobalModuleClass(BaseModuleClass):
             self.pca = PCA(n_components=self.n_embed)
         elif self.type_gex_embedding == "NMF":
             self.nmf = NMF(n_components=self.n_embed, init='random', random_state=0)
+        elif self.type_gex_embedding == "Precomputed":
+            pass
         elif self.type_gex_embedding is None:
             # No GEX embedding needed when using CombinedModuleClass (local module provides embeddings)
             pass
@@ -68,8 +70,6 @@ class GlobalModuleClass(BaseModuleClass):
                 return self.nmf.fit_transform(embeddings)
             else:
                 return self.nmf.transform(embeddings)
-        # elif type == "scvi":
-        #     return scvi.model.SCVI(embeddings)
         else:
             raise ValueError(f"Invalid embedding type: {type}")
         
