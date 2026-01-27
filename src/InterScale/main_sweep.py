@@ -62,7 +62,7 @@ def main_sweep(cfg_path, model_type, sweep_goal):
     
     if model_type == 'LocalModel' or model_type == 'CombinedModel':
         local_component = True
-    elif model_type == 'GlobalModel' or model_type == 'CombinedModel':
+    if model_type == 'GlobalModel' or model_type == 'CombinedModel':
         global_component = True
         
     file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
