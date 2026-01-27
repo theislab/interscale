@@ -102,12 +102,13 @@ def main_sweep(cfg_path, model_type, sweep_goal):
                 print('LocalModel configs')
                 cfg.model.local_component.parameters.num_layers = sweep_config['model.local_component.parameters.num_layers']
                 cfg.model.local_component.parameters.hidden_dim = sweep_config['model.local_component.parameters.hidden_dim']
+                cfg.model.local_component.parameters.dropout_local = sweep_config['model.local_component.parameters.dropout_local']
             elif model_type == 'GlobalModel' or model_type == 'CombinedModel':
                 print('transformer configs')
                 cfg.model.global_component.parameters.dim_feedforward = sweep_config['model.global_component.parameters.dim_feedforward']
                 cfg.model.global_component.parameters.num_layers = sweep_config['model.global_component.parameters.num_layers']
                 cfg.model.global_component.parameters.n_heads = sweep_config['model.global_component.parameters.n_heads']
-                cfg.model.global_component.parameters.dropout = sweep_config['model.global_component.parameters.dropout']
+                cfg.model.global_component.parameters.dropout_global = sweep_config['model.global_component.parameters.dropout_global']
                 #cfg.transformer.max_seq_len = sweep_run.config.transformer.max_seq_len
         elif sweep_goal == 'loss':
             print('loss sweep')
