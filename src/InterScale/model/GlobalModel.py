@@ -95,15 +95,13 @@ class GlobalModel(NodeMaskingTrainingPlan,
         cls_token_horizontal = np.full(len(adata.obs_names), np.nan)
         cls_token_vertical = np.full(len(adata.obs_names), np.nan)
         self_attention_relevance = SelfAttentionRelevance(self.module)
-        
-        debug_plotted = True
 
                 
         for batch in pyg:
             if hasattr(batch, 'embeddings'):
                 embedding=batch.embeddings
             else:
-                embedding = self.module.create_gex_embedding(batch.x, type="PCA")
+                embedding = self.module.create_gex_embedding(batch.x, type=self._cfg.model.global_component.parameters.type_gex_embedding)
             embedding = torch.tensor(embedding, dtype=torch.float32, device=batch.x.device)
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.evaluate(batch, embedding)
             # no masking during evaluation
