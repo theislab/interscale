@@ -2,19 +2,19 @@ from abc import abstractmethod
 import torch
 from typing import Optional
 
-from InterScale.module.base import BaseModuleClass, LocalModuleClass, GlobalModuleClass, SCVILocalModule, PrecomputedEmbeddingModule
+from InterScale.module.base import BaseModuleClass, LocalModuleClass, GlobalModuleClass
 from yacs.config import CfgNode as CN
 
 from InterScale.tl import apply_mask
 from typing import Literal
 
 
-MODULE_REGISTRY = {
-    "GIN": LocalModuleClass,
-    "GCN": LocalModuleClass,
-    'scVI': SCVILocalModule,
-    "Precomputed": PrecomputedEmbeddingModule
-}
+# MODULE_REGISTRY = {
+#     "GIN": LocalModuleClass,
+#     "GCN": LocalModuleClass,
+#     'scVI': SCVILocalModule,
+#     "Precomputed": PrecomputedEmbeddingModule
+# }
 
 
 class CombinedModuleClass(BaseModuleClass):
@@ -27,18 +27,18 @@ class CombinedModuleClass(BaseModuleClass):
         self.local_module_args = cfg.model.local_component
         self.global_module_args = cfg.model.global_component
         
-        module_name = cfg.model.local_component.name
-        local_class = MODULE_REGISTRY.get(module_name)
+        # module_name = cfg.model.local_component.name
+        # local_class = MODULE_REGISTRY.get(module_name)
 
-        if local_class is None:
-            raise ValueError(f"Module {module_name} not found in MODULE_REGISTRY")
+        # if local_class is None:
+        #     raise ValueError(f"Module {module_name} not found in MODULE_REGISTRY")
         
-        print(local_class)
+        # print(local_class)
         
         self.registered_local_component = True
         self.registered_global_component = True
         
-        self.local_module = local_class.from_config(cfg,
+        self.local_module = LocalModuleClass.from_config(cfg,
                                                          n_input=self.n_input,
                                                          n_output=self.n_output,
                                                          n_embed=self.n_embed,
@@ -89,7 +89,7 @@ class CombinedModuleClass(BaseModuleClass):
         batch_masked, mask_idx = self._common_step_masking(batch)
             
         local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask, attn_matrix = self.forward(batch_masked)
-        y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
+        y_pred = self.predict_global(global_embedding, src_padding_mask, prediction_level)
         
         if prediction_task == 'classification' and prediction_level == 'graph':
             y_true = batch.y[batch.ptr[:-1]]
