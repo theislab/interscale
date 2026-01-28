@@ -7,6 +7,8 @@ from InterScale.tl import pad_batch, apply_mask
 from typing import Literal
 from sklearn.decomposition import PCA, NMF
 import numpy as np
+import logging
+import warnings
 
 import time
 
@@ -23,6 +25,8 @@ class GlobalModuleClass(BaseModuleClass):
             self.pca = PCA(n_components=self.n_embed)
         elif self.type_gex_embedding == "NMF":
             self.nmf = NMF(n_components=self.n_embed, init='random', random_state=0)
+        elif self.type_gex_embedding == "Precomputed":
+            pass
         elif self.type_gex_embedding is None:
             # No GEX embedding needed when using CombinedModuleClass (local module provides embeddings)
             pass
@@ -66,8 +70,6 @@ class GlobalModuleClass(BaseModuleClass):
                 return self.nmf.fit_transform(embeddings)
             else:
                 return self.nmf.transform(embeddings)
-        # elif type == "scvi":
-        #     return scvi.model.SCVI(embeddings)
         else:
             raise ValueError(f"Invalid embedding type: {type}")
         
@@ -290,16 +292,20 @@ class GlobalModuleClass(BaseModuleClass):
         """
         # Mask nodes  - before GEX embedding because otherwise embedding contains information about masked nodes
         batch_masked, mask_idx = self._common_step_masking(batch)
-        
-        embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type=self.type_gex_embedding)
+        if hasattr(batch_masked, 'embeddings'):
+            embedding=batch_masked.embeddings
+        else:
+            embedding = self.create_gex_embedding(batch_masked.x.cpu().numpy(), type=self.type_gex_embedding)
+            
         embedding = torch.tensor(embedding, dtype=torch.float32, device=batch_masked.x.device)
-        
         assert embedding.shape == (batch_masked.x.shape[0], self.n_embed), f"Mismatch: embedding.shape: {embedding.shape}, batch_masked.x.shape: {batch_masked.x.shape}"
         assert not torch.any(torch.isnan(embedding)), "embedding contains NaN values"
         
         padded_emb, src_padding_mask, pad_index_nodes, attention_mask = self.common_step_local_to_global(batch_masked, embedding)
         assert not torch.any(torch.isnan(padded_emb)), "padded_emb contains NaN values"
-        global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
+        
+        global_embedding, src_padding_mask, attn_matrix = self.forward(padded_emb, src_padding_mask, attention_mask)
+        #global_embedding, src_padding_mask = self.forward(padded_emb, src_padding_mask, attention_mask)
         assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
         
         y_pred = self.predict(global_embedding, src_padding_mask, prediction_level)
@@ -315,7 +321,7 @@ class GlobalModuleClass(BaseModuleClass):
         assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
         assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
         
-        return None, global_embedding, y_pred, y_true
+        return None, global_embedding, y_pred, y_true, attn_matrix 
 
     def get_global_embeddings(self, x, edge_index):
         return self.forward(x, edge_index)
