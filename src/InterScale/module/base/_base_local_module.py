@@ -108,12 +108,12 @@ class LocalModuleClass(BaseModuleClass):
                 dropout_rate=params.get('dropout_local', 0.1),
                 **kwargs
             )
-        elif module_name == 'Precomputed':
-            print(f"Creating Precomputed Embedding Module from {cfg.dataset.precomputed}")
-            from InterScale.module.local_modules import PrecomputedEmbeddingModule
-            return PrecomputedEmbeddingModule(
-                **kwargs
-            )
+        # elif module_name == 'Precomputed':
+        #     print(f"Creating Precomputed Embedding Module from {cfg.dataset.precomputed}")
+        #     from InterScale.module.local_modules import PrecomputedEmbeddingModule
+        #     return PrecomputedEmbeddingModule(
+        #         **kwargs
+        #     )
         # Add more elifs for other modules
         else:
             raise ValueError(f"Unknown local module name: {module_name}")
