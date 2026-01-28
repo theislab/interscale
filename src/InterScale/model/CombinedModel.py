@@ -113,6 +113,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 columns=range(self.n_output),
                 dtype=np.float32
             )
+        else: 
+            y_pred_local_df = None
         
         y_pred_global_df = pd.DataFrame(
             index=obs_names_str,
