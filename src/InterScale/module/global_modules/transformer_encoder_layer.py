@@ -12,7 +12,7 @@ class CustomTransformerEncoderLayer(TransformerEncoderLayer):
 
     def __init__(self, d_model: int, nhead: int, dim_feedforward: int = 2048, dropout: float = 0.1,
                  activation: Union[str, Callable[[Tensor], Tensor]] = F.relu,
-                 layer_norm_eps: float = 1e-5, batch_first: bool = False, norm_first: bool = False,
+                 layer_norm_eps: float = 1e-5, batch_first: bool = False, norm_first: bool = True,
                  bias: bool = True, device=None, dtype=None, *args, **kwargs):
         
         super(CustomTransformerEncoderLayer, self).__init__(d_model=d_model, nhead=nhead, dim_feedforward=dim_feedforward, dropout=dropout,
@@ -66,6 +66,8 @@ class CustomTransformerEncoderLayer(TransformerEncoderLayer):
         )
         self.save_attn_output(attn_output)
         self.save_attn_output_weights(attn_output_weights)
-        if self.register_hook:
-            attn_output_weights.register_hook(self.save_attn_gradients) # Note: Source code modification in MultiHeadAttention Module (F.multi_head_attention_forward function) to calculate gradient on weights
+        if self.register_hook and attn_output_weights.requires_grad:
+            attn_output_weights.register_hook(self.save_attn_gradients)
+        # if self.register_hook:
+        #     attn_output_weights.register_hook(self.save_attn_gradients) # Note: Source code modification in MultiHeadAttention Module (F.multi_head_attention_forward function) to calculate gradient on weights
         return self.dropout1(attn_output)

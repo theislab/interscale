@@ -9,13 +9,13 @@ from InterScale.tl import CosineWarmupScheduler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.module.base._base_module import BaseModuleClass
-from .losses import BalancedPearsonCorrelationLoss, GaussianLoss, SCELoss
+from .losses import BalancedPearsonCorrelationLoss, GaussianLoss, SCELoss, SCE_EntropyATT_Loss
 
 import torchmetrics
 from torchmetrics import MetricCollection
 
 CLASSIFICATION_LOSSES = ["CrossEntropy", "WeightedCE"]
-REGRESSION_LOSSES = ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss", "SCELoss"]
+REGRESSION_LOSSES = ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss", "SCELoss", "SCE_EntropyATT_Loss"]
 
 
 # adjusted from scvi-tools
@@ -119,7 +119,7 @@ class TrainingPlan(pl.LightningModule):
     
     def _setup_regression_loss(self, loss: Literal[REGRESSION_LOSSES]):
         """Setup loss function based on prediction task and configuration."""
-        assert loss in REGRESSION_LOSSES, "Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
+        assert loss in REGRESSION_LOSSES, f"{loss} not in {REGRESSION_LOSSES}"#"Regression must be run with MSELoss, GaussianNLL or SmoothL1 loss."
         if loss == 'MSELoss':
             return nn.MSELoss()
         elif loss == 'GaussianNLL':
@@ -130,6 +130,9 @@ class TrainingPlan(pl.LightningModule):
             return BalancedPearsonCorrelationLoss(None)
         elif loss == "SCELoss":
             return SCELoss()
+        elif loss == "SCE_EntropyATT_Loss":
+            return SCE_EntropyATT_Loss()
+        
         
     @staticmethod
     def _setup_classification_metrics(num_outputs: int):
@@ -175,7 +178,8 @@ class TrainingPlan(pl.LightningModule):
             y_true: torch.Tensor,
             mode: str,
             metrics: MetricCollection,
-            mask_idx: Optional[torch.Tensor] = None
+            mask_idx: Optional[torch.Tensor] = None,
+            attn: Optional[torch.Tensor] = None
         ) -> tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         """Calculate regression metrics.
             y_true, y_pred: torch.Tensor
@@ -184,6 +188,8 @@ class TrainingPlan(pl.LightningModule):
         if self.loss_type == 'GaussianNLL':
             sd = torch.std(y_true, dim=1, keepdim=True)
             loss = self.loss(y_pred, y_true, sd)
+        elif self.loss_type == 'SCE_EntropyATT_Loss':
+            loss = self.loss(y_pred, y_true, attn)
         else:
             loss = self.loss(y_pred, y_true)
 
@@ -203,10 +209,11 @@ class TrainingPlan(pl.LightningModule):
         
     #@torch.inference_mode() decorator disables gradient computation. TODO: enable again after calculating loss in module. 
     def _compute_and_log_metrics(self, 
-                    y_pred: torch.Tensor,
-                    y_true: torch.Tensor,
-                    mode: str, 
-                    metrics: MetricCollection):
+                     y_pred: torch.Tensor,
+                     y_true: torch.Tensor,
+                     mode: str, 
+                     metrics: MetricCollection,
+                     attn: Optional[torch.Tensor]):
         """Helper method to log metrics for training, validation, or test steps.
         
         Parameters
@@ -228,7 +235,7 @@ class TrainingPlan(pl.LightningModule):
             metrics.pop(f'{mode}_f1_per_class')
             
         elif 'regression' in self.prediction_task:
-            loss, metrics = self._regression_metrics(y_pred, y_true, mode, metrics)
+            loss, metrics = self._regression_metrics(y_pred, y_true, mode, metrics,attn=attn)
             
         # Set sync_dist=True only for test mode
         sync_dist = (mode == 'test')
@@ -246,9 +253,9 @@ class TrainingPlan(pl.LightningModule):
         Returns:
             loss: torch.nn.Module
         """
-        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
+        local_embedding, global_embedding, y_pred, y_true,attn = self.module._common_step(batch, self.prediction_task, self.prediction_level)
         
-        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModuleClass)
+		        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModuleClass)
         if hasattr(self.module, 'compute_separate_losses'):
             separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
             
@@ -265,17 +272,32 @@ class TrainingPlan(pl.LightningModule):
                         on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
             
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics)
+            loss = self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics, attn=attn)
+            
+            if separate_losses.get('kl_loss') is not None:
+                kl_loss = separate_losses['kl_loss']
+                
+                # KL Annealing/Weighting (beta)
+                # You can use a fixed weight or a scheduler (e.g., self.current_epoch)
+                kl_weight = getattr(self.hparams, 'kl_weight', 1.0) 
+                weighted_kl = kl_weight * kl_loss
+                
+                self.log('train_kl_loss', kl_loss, on_step=False, on_epoch=True, 
+                        batch_size=int(self.batch_size), sync_dist=False)
+                
+                # Add KL to the final loss to be backpropagated
+                loss += weighted_kl
             
             assert not torch.isnan(loss), "loss is NaN"
             return loss
         else:
-            return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics)
+            return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics, attn=attn)
+        #return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics, attn=attn)
 
     def validation_step(self, batch):
         """Validation step for the model."""
-        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
-        
+        local_embedding, global_embedding, y_pred, y_true,attn = self.module._common_step(batch, self.prediction_task, self.prediction_level)
+
         # Check if module supports separate loss computation (e.g., DualDecoderCombinedModuleClass)
         if hasattr(self.module, 'compute_separate_losses'):
             separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
@@ -289,17 +311,33 @@ class TrainingPlan(pl.LightningModule):
                         on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=False)
             
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
+            loss = self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics, attn=attn)
+
+            if separate_losses.get('kl_loss') is not None:
+                kl_loss = separate_losses['kl_loss']
+                
+                # KL Annealing/Weighting (beta)
+                # You can use a fixed weight or a scheduler (e.g., self.current_epoch)
+                kl_weight = getattr(self.hparams, 'kl_weight', 1.0) 
+                weighted_kl = kl_weight * kl_loss
+                
+                self.log('val_kl_loss', kl_loss, on_step=False, on_epoch=True, 
+                        batch_size=int(self.batch_size), sync_dist=False)
+                
+                # Add KL to the final loss to be backpropagated
+                loss += weighted_kl
             
             assert not torch.isnan(loss), "loss is NaN"
             return loss
         else:
-            return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics)
+            return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics, attn=attn)
+    
+
+        #return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics, attn=attn)
     
     def test_step(self, batch):
         """Test step for the model."""
-        local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
-        
+        local_embedding, global_embedding, y_pred, y_true,attn = self.module._common_step(batch, self.prediction_task, self.prediction_level)
         # Check if module supports separate loss computation (e.g., DualDecoderCombinedModuleClass)
         if hasattr(self.module, 'compute_separate_losses'):
             separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
@@ -317,12 +355,27 @@ class TrainingPlan(pl.LightningModule):
                         on_step=False, on_epoch=True, batch_size=int(self.batch_size), sync_dist=True)
             
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics)
+            loss = self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
+
+            if separate_losses.get('kl_loss') is not None:
+                kl_loss = separate_losses['kl_loss']
+                
+                # KL Annealing/Weighting (beta)
+                # You can use a fixed weight or a scheduler (e.g., self.current_epoch)
+                kl_weight = getattr(self.hparams, 'kl_weight', 1.0) 
+                weighted_kl = kl_weight * kl_loss
+                
+                self.log('test_kl_loss', kl_loss, on_step=False, on_epoch=True, 
+                        batch_size=int(self.batch_size), sync_dist=False)
+                
+                # Add KL to the final loss to be backpropagated
+                loss += weighted_kl
             
             assert not torch.isnan(loss), "loss is NaN"
             return loss
         else:
-            return self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics)
+            return self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
+        #return self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
 
     def configure_optimizers(self):
         params = []

@@ -4,7 +4,7 @@ from yacs.config import CfgNode as CN
 import numpy as np
 import pandas as pd
 import torch
-
+import torch.nn.functional as F
 from InterScale.tl import prepare_a2d_dataset, SelfAttentionRelevance
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.train._training import NodeMaskingTrainingPlan
@@ -24,7 +24,6 @@ class CombinedModel(NodeMaskingTrainingPlan,
         
         self.local_component = True
         self.global_component = True
-
         # Initialize the combined module with both local and global components
         if self._cfg.model.decoder.dual_decoder == True:
             self.module = DualDecoderCombinedModuleClass(
@@ -114,6 +113,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 columns=range(self.n_output),
                 dtype=np.float32
             )
+        else: 
+            y_pred_local_df = None
         
         y_pred_global_df = pd.DataFrame(
             index=obs_names_str,
@@ -125,22 +126,23 @@ class CombinedModel(NodeMaskingTrainingPlan,
         cls_token_vertical = np.full(len(adata.obs_names), np.nan)
         
         for batch in pyg:
-            ## Local model output
-            local_embedding = self.module.local_module.forward(batch.x, batch.edge_index)
-            if self._cfg.model.decoder.dual_decoder == True:
-                y_pred_local = self.module.predict_local(local_embedding)
-            sample_mask_local = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
-            local_embeddings_df.loc[sample_mask_local] = local_embedding.detach().cpu().numpy()
-            if self._cfg.model.decoder.dual_decoder == True:
-                y_pred_local_df.loc[sample_mask_local] = y_pred_local.detach().cpu().numpy()
-                
-            ## Global model output
+            ## Get model output
+            local_input = getattr(batch, 'embeddings', batch.x)
+            local_out = self.module.local_module.forward(local_input, batch.edge_index)
+            if isinstance(local_out, dict):
+                local_embedding = local_out['embedding']
+                self._current_local_latent_params = local_out 
+            else:
+                local_embedding = local_out
+                self._current_local_latent_params = None
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             # no masking during evaluation
             y_pred_global = self.module.predict_global(global_embedding, src_padding_mask, self.prediction_level)
+                
             ## Save model output
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[pad_index_nodes[0]]
             sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
+            local_embeddings_df.loc[sample_mask] = local_embedding.detach().cpu().numpy()
             global_embeddings_df.loc[sample_mask] = global_embedding[:-1].squeeze(1).detach().cpu().numpy()
             cls_token_horizontal[sample_mask] = I[-1, :-1].squeeze().cpu().detach().numpy() 
             cls_token_vertical[sample_mask] = I[:-1, -1].squeeze().cpu().detach().numpy() 
