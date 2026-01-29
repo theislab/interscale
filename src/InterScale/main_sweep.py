@@ -90,7 +90,7 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             print('segmentation sweep')
             cfg.dataset.segmentation_robustness = sweep_config['dataset.segmentation_robustness']
             cfg.optim.seed = sweep_config['optim.seed']
-        elif sweep_goal == 'hyperparmeter':
+        elif sweep_goal == 'hyperparameter':
             print('hyperparameter sweep')
             cfg.optim.lr = sweep_config['optim.lr']
             cfg.optim.lr_warmup = sweep_config['optim.lr_warmup']
@@ -113,6 +113,8 @@ def main_sweep(cfg_path, model_type, sweep_goal):
         elif sweep_goal == 'loss':
             print('loss sweep')
             cfg.optim.loss = sweep_config['optim.loss']
+        else:
+            raise ValueError(f"Invalid sweep goal: {sweep_goal}. Must be either 'robustness', 'segmentation', 'hyperparameter' or 'loss'.")
         cfg.freeze()
     
     ####### PREPROCESSING #######
