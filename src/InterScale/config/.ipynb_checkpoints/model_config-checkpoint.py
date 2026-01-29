@@ -14,7 +14,7 @@ def get_model_cfg(cfg):
   
   cfg.model.global_component = CN()
   cfg.model.global_component.name = None
-  #cfg.model.global_component.load = None # not needed can be removed
+  c#fg.model.global_component.load = None # not needed can be removed
   
   cfg.model.save = None
   cfg.model.loss = None

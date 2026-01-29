@@ -7,6 +7,10 @@ from .gene_rank_analysis import predict_gene_r2
 from .graph_classification import calculate_pr_auc, pr_auc_curve, scale_cls_by_sample
 
 __all__ = [
+    "gene_loadings",
+    "gene_set_covariance",
+    "pr_auc_curve",
+    "spatial_covariance_plot",
     "leiden_cluster_embeddings",
     "plot_clustering_metrics",
     "predict_gene_r2",
