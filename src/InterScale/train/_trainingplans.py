@@ -93,7 +93,7 @@ class TrainingPlan(pl.LightningModule):
         if 'classification' in self.prediction_task:
             metrics = self._setup_classification_metrics(self.module.n_output)
             self.loss = self._setup_classification_loss(self.loss_type, self.class_weights)
-            self.monitor_metric = 'val_f1'
+            self.monitor_metric = 'val_accuracy'
         elif 'regression' in self.prediction_task:
             metrics = self._setup_regression_metrics(self.module.n_output)
             self.loss = self._setup_regression_loss(self.loss_type)
