@@ -9,13 +9,13 @@ from InterScale.tl import CosineWarmupScheduler
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from InterScale.model.base._base_model import BaseModelClass
 from InterScale.module.base._base_module import BaseModuleClass
-from .losses import BalancedPearsonCorrelationLoss, GaussianLoss, SCELoss
+from .losses import BalancedPearsonCorrelationLoss, GaussianLoss, SCELoss,SCE_EntropyATT_Loss
 
 import torchmetrics
 from torchmetrics import MetricCollection
 
 CLASSIFICATION_LOSSES = ["CrossEntropy", "WeightedCE"]
-REGRESSION_LOSSES = ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss", "SCELoss"]
+REGRESSION_LOSSES = ["MSELoss", "GaussianNLL", "SmoothL1", "BalancedPearsonCorrelationLoss", "SCELoss","SCE_EntropyATT_Loss" ]
 
 
 # adjusted from scvi-tools
@@ -130,6 +130,9 @@ class TrainingPlan(pl.LightningModule):
             return BalancedPearsonCorrelationLoss(None)
         elif loss == "SCELoss":
             return SCELoss()
+        elif loss == "SCE_EntropyATT_Loss":
+            return SCE_EntropyATT_Loss()
+        
         
     @staticmethod
     def _setup_classification_metrics(num_outputs: int):
@@ -227,6 +230,7 @@ class TrainingPlan(pl.LightningModule):
         """        
         assert y_true.shape == y_pred.shape, "y_true and y_pred must have the same shape"
         
+        
         if 'classification' in self.prediction_task:
             loss, metrics_dict = self._classification_metrics(y_pred, y_true, mode, metrics)
             if mode == 'train':
@@ -260,6 +264,7 @@ class TrainingPlan(pl.LightningModule):
             loss: torch.nn.Module
         """
         local_embedding, global_embedding, y_pred, y_true = self.module._common_step(batch, self.prediction_task, self.prediction_level)
+        
         return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics)
     
     def on_train_epoch_end(self):

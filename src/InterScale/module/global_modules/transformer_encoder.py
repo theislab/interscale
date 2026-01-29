@@ -3,7 +3,7 @@ from torch import nn
 
 from InterScale.module.base import GlobalModuleClass
 from InterScale.module.global_modules.transformer_encoder_layer import CustomTransformerEncoderLayer
-from InterScale.tl import pad_batch, create_transformer_attention_mask_from_edges, SelfAttentionRelevance
+from InterScale.tl import pad_batch, create_transformer_attention_mask_from_edges, SelfAttentionRelevance, attn_mask_diagonal
 
 class TransformerNodeEncoderHook(GlobalModuleClass):
     """
@@ -11,14 +11,14 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
     """
 
     def __init__(self,
-                 max_seq_len: int,
-                 n_heads: int = 4,
-                 act_func: nn.Module = nn.ReLU(),
-                 num_layers: int = 3,
-                 dim_feedforward: int = 2048,
-                 dropout_global: float = 0.1,
-                 long_range_attention: bool = False,
-                 **base_module_kwargs):
+                max_seq_len: int,
+                n_heads: int = 4,
+                act_func: nn.Module = nn.ReLU(),
+                num_layers: int = 3,
+                dim_feedforward: int = 2048,
+                dropout_global: float = 0.1,
+                long_range_attention: bool = True,
+                **base_module_kwargs):
         
         super().__init__(**base_module_kwargs) 
         # Save model parameters
@@ -33,7 +33,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         
         # Create Transformer Encoder
         encoder_layer = CustomTransformerEncoderLayer(
-            self.n_embed, self.n_heads, self.dim_feedforward, self.dropout_global, self.act_func
+            self.n_embed, self.n_heads, self.dim_feedforward, self.dropout_global, self.act_func, norm_first=True
         )
         encoder_norm = nn.LayerNorm(self.n_embed)
         self.transformer_encoder = nn.TransformerEncoder(encoder_layer, self.num_layers, norm=encoder_norm)
@@ -98,7 +98,16 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
             # Convert attention_mask to same dtype as src_padding_mask
             attention_mask = attention_mask.to(dtype=src_padding_mask.dtype)
         else:
-            attention_mask = None
+            #attention_mask = None
+            # default: mask diagonal with -inf; no attention to self
+            attention_mask = attn_mask_diagonal(
+                batched_data.batch, 
+                index_nodes, 
+                self.n_heads, 
+                emb.device
+            )
+        
+        attention_mask = attention_mask.to(dtype=src_padding_mask.dtype)
             
         return padded_emb, src_padding_mask, index_nodes, attention_mask
 
@@ -106,7 +115,7 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
                 padded_h_node, 
                 src_padding_mask, 
                 mask = None, 
-                register_hook: bool = False):
+                register_hook: bool = True):
         """
         N_b_max: maximum number of nodes in the batch
         B: batch size
@@ -133,14 +142,27 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
 
         zeros = src_padding_mask.data.new(src_padding_mask.size(0), 1).fill_(0)
         src_padding_mask = torch.cat([src_padding_mask, zeros], dim=1)
-
         transformer_out = self.transformer_encoder(padded_h_node, src_key_padding_mask=src_padding_mask, mask=mask)  # (S, B, h_d)
 
+        attn_matrices = []
         if register_hook:
-            for encoder in self.transformer_encoder.layers:
-                encoder.register_hook = False
+            for i, encoder in enumerate(self.transformer_encoder.layers):
+                if hasattr(encoder, 'get_attn_output_weights'):
+                    attn_matrices.append(encoder.get_attn_output_weights())
+                elif hasattr(encoder, 'attention_map'):
+                    attn_matrices.append(encoder.attention_map)
+                elif hasattr(encoder, 'attn'):
+                    attn_matrices.append(encoder.attn)
+                
 
-        return transformer_out, src_padding_mask
+                encoder.register_hook = False
+                
+        if len(attn_matrices) > 0:
+            final_attn = torch.stack(attn_matrices) 
+        else:
+            final_attn = None
+
+        return transformer_out, src_padding_mask, final_attn
     
     def evaluate(self, batched_data, embedding):
         """Evaluates transformer encoder on a batch of data without masking and registering hook.
@@ -154,12 +176,36 @@ class TransformerNodeEncoderHook(GlobalModuleClass):
         """
         # evaluation on single graph
         batched_data.batch = torch.Tensor(len(batched_data.obs_names)*[0])
-        transformer_in, src_padding_mask, pad_index_nodes, _ = self.common_step_local_to_global(batched_data, embedding, eval_step=True)
+        transformer_in, src_padding_mask, pad_index_nodes, attn_mask = self.common_step_local_to_global(batched_data, embedding, eval_step=True)
         
-        transformer_out, src_padding_mask = self.forward(transformer_in, src_padding_mask, register_hook=True)
+        transformer_out, src_padding_mask, _ = self.forward(transformer_in, src_padding_mask, attn_mask, register_hook=True)
+        
+        last_layer = self.transformer_encoder.layers[-1]
+        raw_attn = last_layer.get_attn_output_weights()
+        raw_attn = raw_attn.detach().cpu()
+
+
+
+        if raw_attn.dim() == 3:
+            matrix = raw_attn[0]
+        elif raw_attn.dim() == 4:
+            matrix = raw_attn[0].mean(dim=0)
+        else:
+            matrix = raw_attn.squeeze()
+        
+
+
+        if matrix.dim() == 2:
+            diag_val = torch.diag(matrix).mean().item()
+
+        off_diag_mask = ~torch.eye(matrix.shape[0], dtype=bool)
+        off_diag_val = matrix[off_diag_mask].mean().item()
+
+        
+
         I = self.self_attn_relevance.generate_relevance(transformer_out)
 
-        #src_padding_mask = src_padding_mask[:,:-1] # True = Pad, False = Node
+
 
         return transformer_in, transformer_out, src_padding_mask, pad_index_nodes, I
     

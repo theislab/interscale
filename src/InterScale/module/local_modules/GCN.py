@@ -2,6 +2,7 @@
 from torch import nn
 from torch_geometric.nn import GCNConv, MessagePassing
 import torch.nn.functional as F
+import torch
 
 from typing import Literal
 
@@ -22,21 +23,31 @@ class GCN(LocalModuleClass):
         self.module_name = 'GCN'
         self.n_layers = n_layers
         self.hidden_dim = hidden_dim
+        self.norms = nn.ModuleList()
         self.dropout_local = dropout_local
-        
+        self.start_dropout = nn.Dropout(0)
         layers = []
+
+        self.input_proj = nn.Linear(self.n_input, self.n_embed)
+        self.input_norm = nn.LayerNorm(self.n_embed)
+
         in_dim = self.n_input
         hidden_dim = self.hidden_dim
         for l_idx in range(n_layers - 1):
             layers += [
                 GCNConv(in_channels=in_dim, out_channels=hidden_dim),
-                nn.ReLU(inplace=True),
+                nn.LayerNorm(hidden_dim),
+                #nn.ReLU(inplace=True),
+                nn.GELU(),
                 nn.Dropout(self.dropout_local)
             ]
+			
             in_dim = hidden_dim
-        
-        layers += [GCNConv(in_channels=in_dim, out_channels=self.n_embed)]
+        #layers += [GCNConv(in_channels=in_dim, out_channels=self.n_embed)]
+        layers += [GCNConv(in_channels=in_dim, out_channels=self.n_embed),nn.LayerNorm(self.n_embed,elementwise_affine=False)]
         self.layers = nn.ModuleList(layers)
+
+        self.final_norm = nn.LayerNorm(self.n_embed,elementwise_affine=False)
             
     def forward(self, x, edge_index):
         """
@@ -49,12 +60,24 @@ class GCN(LocalModuleClass):
         --------
             h: Embeddings (n x embed_dim)
         """
+        
+        identity = self.input_proj(x)
+        identity = self.input_norm(identity)
         for layer in self.layers:
             if isinstance(layer, MessagePassing):
                 x = layer(x, edge_index)
             else:
                 x = layer(x)
-        h = F.relu(x)
+        
+        h=x + identity
+
+        h=self.final_norm(h)
+
+        # if self.training:
+        #     print(f"SCALE CHECK:")
+        #     print(f"  GCN Path      -> Mean: {x.mean().item():.4f}, Std: {x.std().item():.4f}")
+        #     print(f"  Identity Path -> Mean: {identity.mean().item():.4f}, Std: {identity.std().item():.4f}")
+        #h = F.gelu(x)
         return h
     
     def get_model_summary(self) -> str:

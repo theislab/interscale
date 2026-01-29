@@ -61,6 +61,28 @@ def sample_batch(num_graphs=2, num_features=5, num_classes=3, graph_level=True):
     batch = Batch.from_data_list(graphs)
     return batch
 
+
+def create_module(sample_batch, long_range_attention=False, pct_mask_nodes=0.0):
+    """Create a batch of graphs for testing."""
+    n_input = 5
+    n_output = 3
+    n_embed = 4
+    
+    batch_size = len(np.unique(sample_batch.batch))
+    
+    global_module_kwargs = create_sample_global_module_kwargs(long_range_attention=long_range_attention)
+
+    module = TransformerNodeEncoderHook(
+        n_input=n_input,
+        n_output=n_output,
+        n_embed=n_embed,
+        decoder_type='linear',
+        pct_mask_nodes=pct_mask_nodes,
+        **global_module_kwargs
+    )
+    
+    return module
+
 @pytest.mark.parametrize('pct_mask_nodes', [0.0, 0.2])
 def test_common_step_masking(sample_global_module_kwargs, sample_batch, pct_mask_nodes):
     """Test _common_step_masking."""
@@ -132,3 +154,82 @@ def test_common_step_local_to_global(sample_batch, pct_mask_nodes, prediction_le
     
     assert not torch.any(torch.isnan(global_embedding)), "global_embedding contains NaN values"
     assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
+
+
+def test_evaluate(sample_batch, long_range_attention=False):
+    """Test the .evaluate() method. No masking during evaluation.
+    """
+    module = create_module(sample_batch, long_range_attention=long_range_attention)
+    
+    embedding = module.create_gex_embedding(sample_batch.x.cpu().numpy(), type="PCA")
+    embedding = torch.tensor(embedding, dtype=torch.float32, device=sample_batch.x.device)
+    transformer_in, transformer_out, eval_src_padding_mask, eval_pad_index_nodes, I = module.evaluate(sample_batch, embedding)
+
+    assert I.shape[0] == I.shape[1], f"Relevance matrix returned by evaluate() should be square, got {I.shape}"
+
+    # Check type and nan safety
+    assert isinstance(I, torch.Tensor)
+    assert not torch.any(torch.isnan(I)), "Relevance matrix I contains NaN values"
+    assert not torch.any(torch.isnan(transformer_out)), "transformer_out contains NaN values"
+
+def test_process_batch_for_metrics_mask_idx_exploration():
+    """Test function to explore the relationship between mask_idx and pad_index_nodes.
+    
+    This test explores whether mask_idx can be correctly sliced to match pad_index_nodes,
+    which is an assumption in _process_batch_for_metrics.
+    """
+    from InterScale.module.base._base_global_module import GlobalModuleClass
+    
+    # Create a mock batch with known structure
+    # Batch 0: 10 nodes (indices 0-9)
+    # Batch 1: 8 nodes (indices 10-17)
+    # Batch 2: 12 nodes (indices 18-29)
+    num_nodes_per_batch = [10, 8, 12]
+    total_nodes = sum(num_nodes_per_batch)
+    
+    # Create batch tensor
+    batch_tensor = torch.cat([torch.full((n,), i, dtype=torch.long) for i, n in enumerate(num_nodes_per_batch)])
+    
+    # Create mock batch object
+    class MockBatch:
+        def __init__(self):
+            self.batch = batch_tensor
+            self.x = torch.randn(total_nodes, 5)
+            self.y = torch.randint(0, 3, (total_nodes, 3)).float()
+            self.ptr = torch.tensor([0, 10, 18, 30], dtype=torch.long)
+    
+    batch = MockBatch()
+    
+    # Scenario 1: No nodes masked (pct_mask_nodes = 0.0 means no nodes are "masked" for prediction)
+    # mask_idx should be empty: []
+    mask_idx_all = torch.tensor([])
+    
+    # Scenario 2: Partial masking - some nodes masked in each batch
+    # Batch 0: mask nodes [1, 3, 5, 7, 9] (global indices)
+    # Batch 1: mask nodes [11, 13, 15] (global indices)
+    # Batch 2: mask nodes [19, 21, 23, 25, 27, 29] (global indices)
+    mask_idx_partial = torch.tensor([1, 3, 5, 7, 9, 11, 13, 15, 19, 21, 23, 25, 27, 29])
+    
+    # Scenario 3: Different number of masked nodes per batch
+    # Batch 0: mask 3 nodes [2, 4, 6]
+    # Batch 1: mask 5 nodes [10, 12, 14, 16, 17]
+    # Batch 2: mask 2 nodes [20, 24]
+    mask_idx_uneven = torch.tensor([2, 4, 6, 10, 12, 14, 16, 17, 20, 24])
+    
+    embedding = batch.x
+    
+    for mask_idx, scenario_name in zip([mask_idx_all, mask_idx_partial, mask_idx_uneven], ["All nodes masked", "Partial masking", "Different number of masked nodes per batch"]):
+        print(f"Scenario: {scenario_name}")
+        max_seq_len = 10
+        padded_emb, src_padding_mask, index_nodes, num_nodes, mask, max_num_nodes = pad_batch(
+                embedding, 
+                batch.batch, 
+                max_seq_len, 
+                get_mask=True, 
+                keep_indices=mask_idx  # Add parameter to ensure masked nodes are kept (not during evaluation) 
+            )
+        
+        y_true, adjusted_mask_idx = module._process_batch_for_metrics(batch, prediction_task, prediction_level, index_nodes, mask_idx)
+        
+    
+    

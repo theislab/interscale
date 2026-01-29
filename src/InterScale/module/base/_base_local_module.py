@@ -2,6 +2,8 @@ from InterScale.module.base._base_module import BaseModuleClass
 from abc import abstractmethod
 from typing import Literal
 from InterScale.tl import apply_mask
+from scvi.nn import Encoder
+import torch.nn as nn
 
 import torch
 
@@ -20,7 +22,7 @@ class LocalModuleClass(BaseModuleClass):
             
     def predict(self,
                 local_embedding,
-                prediction_level: Literal["node", "graph"]):
+                prediction_level: Literal["node", "graph"] | None = None):
         """Predict with the decoder.
         
         Parameters
@@ -87,6 +89,36 @@ class LocalModuleClass(BaseModuleClass):
                        hidden_dim = params['hidden_dim'],
                        dropout_local = params['dropout_local'],
                        **kwargs)
+        elif module_name == 'GIN':
+            from InterScale.module.local_modules import GIN
+            return GIN(n_layers = params['num_layers'],
+                       hidden_dim = params['hidden_dim'],
+                       dropout_local = params['dropout_local'],
+                       **kwargs)
+        elif module_name == 'SCVI':
+            print("Creating SCVI Local Module")
+            from InterScale.module.local_modules import SCVILocalModule
+            n_input = kwargs.pop('n_input')
+            n_embed = kwargs.pop('n_embed')
+            return SCVILocalModule(
+                n_input=n_input,
+                n_latent=n_embed,
+                n_layers=params.get('num_layers', 2),
+                n_hidden=params.get('hidden_dim', 128),
+                dropout_rate=params.get('dropout_local', 0.1),
+                **kwargs
+            )
+        # elif module_name == 'Precomputed':
+        #     print(f"Creating Precomputed Embedding Module from {cfg.dataset.precomputed}")
+        #     from InterScale.module.local_modules import PrecomputedEmbeddingModule
+        #     return PrecomputedEmbeddingModule(
+        #         **kwargs
+        #     )
         # Add more elifs for other modules
         else:
             raise ValueError(f"Unknown local module name: {module_name}")
+        # # Add more elifs for other modules
+        # else:
+        #     raise ValueError(f"Unknown local module name: {module_name}")
+
+    

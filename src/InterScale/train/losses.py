@@ -138,7 +138,32 @@ class SCELoss(torch.nn.Module):
 
         loss = loss.mean()
         return loss
+class SCE_EntropyATT_Loss(torch.nn.Module):
     
+    def __init__(self, alpha=3, beta=1, use_last_layer_only=True):
+        super().__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.use_last_layer_only = use_last_layer_only
+        
+    def forward(self, x, y, attn):
+
+        x = F.normalize(x, p=2, dim=-1)
+        y = F.normalize(y, p=2, dim=-1)
+        loss_recon = (1 - (x * y).sum(dim=-1)).pow_(self.alpha).mean()
+
+        if self.use_last_layer_only and attn.dim() == 5:
+            attn = attn[-1] # [Batch, Heads, N, N]
+
+        attn = torch.clamp(attn, min=1e-9, max=1.0)
+
+        attn_entropy = torch.special.entr(attn) 
+        
+        loss_attn = attn_entropy.sum(dim=-1).mean()
+        
+        return loss_recon + self.beta * loss_attn
+        #return loss_attn
+
 class GaussianLoss(torch.nn.Module):
     # adjusted from NCEM
     # https://github.com/theislab/ncem/blob/main/ncem/utils/losses.py

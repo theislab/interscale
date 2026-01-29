@@ -1,9 +1,11 @@
 from .base._base_module import BaseModuleClass
-from .local_modules import GCN
-from .combined_module import CombinedModuleClass
+from .local_modules import GCN, GIN
+from .combined_module import CombinedModuleClass, DualDecoderCombinedModuleClass
 
 __all__ = [
     "BaseModuleClass",
     "GCN",
-    "CombinedModuleClass"
+    "GIN",
+    "CombinedModuleClass",
+    "DualDecoderCombinedModuleClass"
 ] 

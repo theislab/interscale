@@ -167,7 +167,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             anndata_fields.append(fields.CategoricalObsField(registry_key = 'prediction_obs', attr_key = prediction_obs))
         
         if group_key is not None:
-            anndata_fields.append(fields.CategoricalObsField(registry_key = 'group_key', attr_key = group_key))    
+            anndata_fields.append(fields.CategoricalObsField(registry_key = 'group_label', attr_key = group_key))    
         else:
             anndata_fields.append(fields.CategoricalObsField(registry_key = 'split_key', attr_key = split_key))
         # Check that split_key contains required values
@@ -325,13 +325,12 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             adata_manager.validate()
 
         return adata
-
     
     def save_evaluation_results(self,
                                 adata: AnnData,
                                 prefix: str,
-                                decoder_weight_df: pd.DataFrame,
-                                y_pred_df: pd.DataFrame,
+                                y_pred_local_df: pd.DataFrame,
+                                y_pred_global_df: pd.DataFrame,
                                 local_embeddings_df: pd.DataFrame | None = None,
                                 global_embeddings_df: pd.DataFrame | None = None,
                                 attention_matrix_df: pd.DataFrame | None = None,
@@ -346,8 +345,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         local_embeddings_df: pd.DataFrame
         global_embeddings_df: pd.DataFrame
         attention_matrix_df: pd.DataFrame
-        decoder_weight_df: pd.DataFrame
-        y_pred_df: pd.DataFrame
+        y_pred_local_df: pd.DataFrame
+        y_pred_global_df: pd.DataFrame
         cls_token_horizontal: np.ndarray
         cls_token_vertical: np.ndarray
         
@@ -356,7 +355,6 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         adata: AnnData
             AnnData object with the evaluation results saved in the obsm and layers.
         """
-        adata.obsm[f'{prefix}_decoder_weight'] = decoder_weight_df.values
         if local_embeddings_df is not None:
             adata.obsm[f'{prefix}_local_emb'] = local_embeddings_df.values
         if global_embeddings_df is not None:
@@ -367,10 +365,16 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             adata.obs[f'{prefix}_cls_horizontal'] = cls_token_horizontal
         if cls_token_vertical is not None:
             adata.obs[f'{prefix}_cls_vertical'] = cls_token_vertical
-        if self.prediction_task == 'classification':
-            adata.obsm[f'{prefix}_y_pred'] = y_pred_df.values # [cells, classes]
-        else:
-            adata.layers[f'{prefix}_y_pred'] = y_pred_df.values # [cells, genes]   
+            
+        if self.prediction_task == 'classification' and y_pred_local_df is not None:
+            adata.obsm[f'{prefix}_y_pred_local'] = y_pred_local_df.values # [cells, classes]
+        elif y_pred_local_df is not None:
+            adata.layers[f'{prefix}_y_pred_local'] = y_pred_local_df.values # [cells, genes]   
+            
+        if self.prediction_task == 'classification' and y_pred_global_df is not None:
+            adata.obsm[f'{prefix}_y_pred_global'] = y_pred_global_df.values # [cells, classes]
+        elif y_pred_global_df is not None:
+            adata.layers[f'{prefix}_y_pred_global'] = y_pred_global_df.values # [cells, genes]   
         
         return adata
     
@@ -533,6 +537,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         dir_path: str,
         adata: AnnData,
         cfg: CN,
+        model_name: str | None= None,
         local_component: bool = False,
         global_component: bool = False,
         postfix: str | None = None,
@@ -549,6 +554,8 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             AnnData object to load the model with.
         cfg
             Configuration object.
+        model_name: str | None
+            Name of the model to load. If None, the model name is inferred from the config file.
         local_component
             Whether this is a local component model.
         global_component
@@ -563,7 +570,11 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         model
             Loaded model.
         """
-        file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
+        
+        if model_name is not None:
+            file_name_prefix = model_name
+        else:
+            file_name_prefix = get_model_filename_prefix(cfg, local_component, global_component)
         
         if postfix is not None:
             file_name_prefix = file_name_prefix + f"{postfix}"
@@ -575,8 +586,19 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         
         print(f"Loading model from {model_save_path}")
         
-        # Load state dict
-        state_dict = torch.load(model_save_path)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+        # Determine map_location based on CUDA availability
+        map_location = 'cpu' if cfg.optim.accelerator == 'cpu' else None
+        
+        if os.path.exists(model_save_path):
+            state_dict = torch.load(model_save_path, map_location=map_location)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+        else:
+            print(f"Try with .ckpt extension.")
+            model_save_path = os.path.join(dir_path, f"{file_name_prefix}.ckpt")
+            if os.path.exists(model_save_path):
+                state_dict = torch.load(model_save_path, map_location=map_location)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
+            else:
+                print(f"Model file {model_save_path} not found.")
+                raise FileNotFoundError(f"Model file {model_save_path} not found.")
         
         # Apply remapping if enabled
         if enable_remapping:
@@ -586,6 +608,19 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
                 print(f"State dict remapping applied. Source detected: {source}")
             except ImportError:
                 print("Warning: Could not import remapping functions. Loading without remapping.")
+                
+        from collections import OrderedDict
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            # Replace 'global_module.module.' with 'global_module.'
+            new_key = k.replace('global_module.module.', 'global_module.')
+            
+            # Also handle generic 'module.' prefix if present at the start (legacy DataParallel)
+            if new_key.startswith('module.'):
+                new_key = new_key.replace('module.', '', 1)
+            
+            new_state_dict[new_key] = v
+        state_dict = new_state_dict
         
         # Legacy wandb remapping (kept for backward compatibility)
         if wandb_save:
