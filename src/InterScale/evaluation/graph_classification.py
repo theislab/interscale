@@ -28,6 +28,8 @@ def scale_cls_by_sample(adata,
             Annotated data object
         sample_key: str
             Column name in adata.obs containing the sample/window identifiers
+        window_key: str
+            Column name in adata.obs containing the window identifiers. If None, no windowing is performed.
         cls_columns: str | list
             Column name(s) of CLS values to scale (e.g., 'combined_cls_horizontal')
         inplace: bool, default=True
