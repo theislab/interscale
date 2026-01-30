@@ -386,7 +386,7 @@ class TrainingPlan(pl.LightningModule):
         #     params.extend(filter(lambda p: p.requires_grad, self.model.global_component.parameters()))
         optimizer = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
         if self.lr_scheduler == "ReduceLROnPlateau":
-            lr_scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=self.patience_in_steps, verbose=True)
+            lr_scheduler = ReduceLROnPlateau(optimizer, mode='max', factor=0.1, patience=self.patience_in_steps, verbose=True)
         elif self.lr_scheduler == "CosineWarmupScheduler":
             lr_scheduler = CosineWarmupScheduler(optimizer,
                                                 warmup=self.lr_warmup,
