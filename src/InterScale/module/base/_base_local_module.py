@@ -72,7 +72,7 @@ class LocalModuleClass(BaseModuleClass):
             assert y_true.shape == y_pred.shape
             return local_embedding, None, y_pred, y_true, None
             
-        assert False, "Prediction task not supported", None, None, None, 
+        assert False, "Prediction task not supported"
         
     
     def get_local_embeddings(self, x, edge_index):
