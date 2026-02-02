@@ -25,6 +25,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+wandb-workspaces = [
+    "wandb-workspaces",
+]
 dev = [
     "pre-commit",
     "twine>=4.0.2",
