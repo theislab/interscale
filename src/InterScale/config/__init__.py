@@ -99,6 +99,7 @@ def _wandb_config_to_nested_dict(config):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 def _cfg_to_dict(cfg):
     """Convert CfgNode to plain dict (for YAML dump with custom list style)."""
     if not isinstance(cfg, CN):
@@ -132,6 +133,8 @@ def _dump_cfg_yaml(cfg, stream):
     )
 
 
+=======
+>>>>>>> a56f326 (save config.yaml from wandb sweep)
 def _coerce_run_config_to_types(default_cfg, run_dict):
     """Recursively coerce run config values to match default CfgNode types (avoids yacs merge type mismatch)."""
     if not isinstance(run_dict, dict):
@@ -153,8 +156,11 @@ def _coerce_run_config_to_types(default_cfg, run_dict):
     return out
 
 
+<<<<<<< HEAD
 =======
 >>>>>>> bfc835b (save config.yaml from wandb sweep)
+=======
+>>>>>>> a56f326 (save config.yaml from wandb sweep)
 def config_from_wandb_run(run, save_yaml_path=None):
     """Build a full InterScale CfgNode from a WandB run config and optionally save to YAML.
 
@@ -186,12 +192,18 @@ def config_from_wandb_run(run, save_yaml_path=None):
             cfg = get_global_component_cfg(cfg, run_cfg.model.global_component.name)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a56f326 (save config.yaml from wandb sweep)
     # Coerce run config values to default types so yacs merge does not raise (e.g. int 0 vs float 0.1)
     nested_coerced = _coerce_run_config_to_types(cfg, nested)
     run_cfg = CN(nested_coerced)
 
+<<<<<<< HEAD
 =======
 >>>>>>> bfc835b (save config.yaml from wandb sweep)
+=======
+>>>>>>> a56f326 (save config.yaml from wandb sweep)
     cfg.set_new_allowed(True)
     cfg.defrost()
     cfg.merge_from_other_cfg(run_cfg)
