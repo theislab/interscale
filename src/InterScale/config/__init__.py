@@ -97,6 +97,27 @@ def _wandb_config_to_nested_dict(config):
     return result
 
 
+def _coerce_run_config_to_types(default_cfg, run_dict):
+    """Recursively coerce run config values to match default CfgNode types (avoids yacs merge type mismatch)."""
+    if not isinstance(run_dict, dict):
+        return run_dict
+    out = {}
+    for k, v in run_dict.items():
+        if k not in default_cfg:
+            out[k] = v
+            continue
+        default_val = default_cfg[k]
+        if isinstance(default_val, CN):
+            out[k] = _coerce_run_config_to_types(default_val, v) if isinstance(v, dict) else v
+        elif isinstance(default_val, (int, float)) and isinstance(v, (int, float)):
+            out[k] = type(default_val)(v)
+        elif isinstance(default_val, bool) and isinstance(v, (bool, int)):
+            out[k] = bool(v)
+        else:
+            out[k] = v
+    return out
+
+
 def config_from_wandb_run(run, save_yaml_path=None):
     """Build a full InterScale CfgNode from a WandB run config and optionally save to YAML.
 
@@ -126,6 +147,10 @@ def config_from_wandb_run(run, save_yaml_path=None):
     if hasattr(run_cfg, "model") and hasattr(run_cfg.model, "global_component"):
         if getattr(run_cfg.model.global_component, "name", None):
             cfg = get_global_component_cfg(cfg, run_cfg.model.global_component.name)
+
+    # Coerce run config values to default types so yacs merge does not raise (e.g. int 0 vs float 0.1)
+    nested_coerced = _coerce_run_config_to_types(cfg, nested)
+    run_cfg = CN(nested_coerced)
 
     cfg.set_new_allowed(True)
     cfg.defrost()
