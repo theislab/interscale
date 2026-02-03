@@ -100,6 +100,9 @@ def _wandb_config_to_nested_dict(config):
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 3381115 (convert sample_key and hidden_dims to list in config)
 def _cfg_to_dict(cfg):
     """Convert CfgNode to plain dict (for YAML dump with custom list style)."""
     if not isinstance(cfg, CN):
@@ -133,8 +136,11 @@ def _dump_cfg_yaml(cfg, stream):
     )
 
 
+<<<<<<< HEAD
 =======
 >>>>>>> a56f326 (save config.yaml from wandb sweep)
+=======
+>>>>>>> 3381115 (convert sample_key and hidden_dims to list in config)
 def _coerce_run_config_to_types(default_cfg, run_dict):
     """Recursively coerce run config values to match default CfgNode types (avoids yacs merge type mismatch)."""
     if not isinstance(run_dict, dict):
@@ -212,10 +218,14 @@ def config_from_wandb_run(run, save_yaml_path=None):
     if save_yaml_path:
         with open(save_yaml_path, "w") as f:
 <<<<<<< HEAD
+<<<<<<< HEAD
             _dump_cfg_yaml(cfg, f)
 =======
             f.write(cfg.dump())
 >>>>>>> bfc835b (save config.yaml from wandb sweep)
+=======
+            _dump_cfg_yaml(cfg, f)
+>>>>>>> 3381115 (convert sample_key and hidden_dims to list in config)
     return cfg
 
 
