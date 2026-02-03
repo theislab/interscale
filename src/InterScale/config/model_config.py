@@ -17,7 +17,6 @@ def get_model_cfg(cfg):
   #cfg.model.global_component.load = None # not needed can be removed
   
   cfg.model.save = None
-  cfg.model.loss = None
   cfg.model.decoder = CN()
   cfg.model.decoder.type = 'linear' # [linear, nonlinear, linear-lse]
   cfg.model.decoder.hidden_dims = [256, 128]
