@@ -135,6 +135,10 @@ class CombinedModel(NodeMaskingTrainingPlan,
             else:
                 local_embedding = local_out
                 self._current_local_latent_params = None
+                
+            sample_mask = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
+            # Fill embeddings directly into the DataFrame
+            local_embeddings_df.loc[sample_mask] = local_embedding.detach().cpu().numpy()
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             # no masking during evaluation
             y_pred_global = self.module.predict_global(global_embedding, src_padding_mask, self.prediction_level)
@@ -142,7 +146,6 @@ class CombinedModel(NodeMaskingTrainingPlan,
             ## Save model output
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[pad_index_nodes[0]]
             sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
-            local_embeddings_df.loc[sample_mask] = local_embedding.detach().cpu().numpy()
             global_embeddings_df.loc[sample_mask] = global_embedding[:-1].squeeze(1).detach().cpu().numpy()
             cls_token_horizontal[sample_mask] = I[-1, :-1].squeeze().cpu().detach().numpy() 
             cls_token_vertical[sample_mask] = I[:-1, -1].squeeze().cpu().detach().numpy() 
