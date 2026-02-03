@@ -1,4 +1,5 @@
 from os.path import dirname, basename, isfile, join
+import yaml
 from yacs.config import CfgNode as CN
 import glob
 from .wandb_config import get_wandb_cfg
@@ -97,6 +98,39 @@ def _wandb_config_to_nested_dict(config):
     return result
 
 
+def _cfg_to_dict(cfg):
+    """Convert CfgNode to plain dict (for YAML dump with custom list style)."""
+    if not isinstance(cfg, CN):
+        return cfg
+    return {k: _cfg_to_dict(v) for k, v in cfg.items()}
+
+
+class _FlowListDumper(yaml.SafeDumper):
+    """Dumper that outputs lists in inline form: ['a', 'b'] and [256, 128]."""
+    pass
+
+
+_FlowListDumper.add_representer(
+    list,
+    lambda dumper, data: dumper.represent_sequence(
+        "tag:yaml.org,2002:seq", data, flow_style=True
+    ),
+)
+
+
+def _dump_cfg_yaml(cfg, stream):
+    """Dump CfgNode to YAML with lists in inline form: sample_key: ['a', 'b'], hidden_dims: [256, 128]."""
+    data = _cfg_to_dict(cfg)
+    yaml.dump(
+        data,
+        stream,
+        Dumper=_FlowListDumper,
+        default_flow_style=False,
+        sort_keys=False,
+        allow_unicode=True,
+    )
+
+
 def _coerce_run_config_to_types(default_cfg, run_dict):
     """Recursively coerce run config values to match default CfgNode types (avoids yacs merge type mismatch)."""
     if not isinstance(run_dict, dict):
@@ -159,7 +193,7 @@ def config_from_wandb_run(run, save_yaml_path=None):
 
     if save_yaml_path:
         with open(save_yaml_path, "w") as f:
-            f.write(cfg.dump())
+            _dump_cfg_yaml(cfg, f)
     return cfg
 
 
