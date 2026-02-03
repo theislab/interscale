@@ -65,14 +65,15 @@ class LocalModuleClass(BaseModuleClass):
         if 'classification' in prediction_task:
             y_true = batch.y[mask_idx] # batch without mask because constant otherwise
             assert y_true.shape == y_pred.shape
-            return local_embedding, None, y_pred, y_true
+            return local_embedding, None, y_pred, y_true, None
             
         if 'regression' in prediction_task:
             y_true = batch.x[mask_idx] # batch without mask because constant otherwise
             assert y_true.shape == y_pred.shape
-            return local_embedding, None, y_pred, y_true
+            return local_embedding, None, y_pred, y_true, None
             
         assert False, "Prediction task not supported"
+        
     
     def get_local_embeddings(self, x, edge_index):
         return self.forward(x, edge_index)

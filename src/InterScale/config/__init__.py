@@ -69,3 +69,91 @@ def load_config(cfg_path=None):
     
     cfg.freeze()
     return cfg
+
+
+def _wandb_config_to_nested_dict(config):
+    """Convert WandB run config to nested dict. Handles both dotted keys and nested dicts."""
+    if not hasattr(config, "items"):
+        config = dict(config)
+    keys = list(config.keys())
+    if any("." in str(k) for k in keys):
+        result = {}
+        for key, value in config.items():
+            if "." not in str(key):
+                result[key] = value
+                continue
+            parts = str(key).split(".")
+            d = result
+            for part in parts[:-1]:
+                d = d.setdefault(part, {})
+            d[parts[-1]] = value
+        return result
+    result = {}
+    for k, v in config.items():
+        if isinstance(v, dict) and v:
+            result[k] = _wandb_config_to_nested_dict(v)
+        else:
+            result[k] = v
+    return result
+
+
+def config_from_wandb_run(run, save_yaml_path=None):
+    """Build a full InterScale CfgNode from a WandB run config and optionally save to YAML.
+
+    Uses all variables from InterScale/config: wandb, model, optim, dataset,
+    plus local_component and global_component parameters based on run config.
+
+    Parameters
+    ----------
+    run : wandb.Api.run or object with .config attribute
+        A WandB run (e.g. api.run("entity/project/run_id")).
+    save_yaml_path : str, optional
+        If set, write the merged config to this YAML file.
+
+    Returns
+    -------
+    CN
+        Configuration object with all settings from the run (and defaults where not set).
+    """
+    raw = dict(run.config) if hasattr(run.config, "items") else run.config
+    nested = _wandb_config_to_nested_dict(raw)
+    run_cfg = CN(nested)
+
+    cfg = get_cfg_defaults()
+    if hasattr(run_cfg, "model") and hasattr(run_cfg.model, "local_component"):
+        if getattr(run_cfg.model.local_component, "name", None):
+            cfg = get_local_component_cfg(cfg, run_cfg.model.local_component.name)
+    if hasattr(run_cfg, "model") and hasattr(run_cfg.model, "global_component"):
+        if getattr(run_cfg.model.global_component, "name", None):
+            cfg = get_global_component_cfg(cfg, run_cfg.model.global_component.name)
+
+    cfg.set_new_allowed(True)
+    cfg.defrost()
+    cfg.merge_from_other_cfg(run_cfg)
+    cfg.freeze()
+
+    if save_yaml_path:
+        with open(save_yaml_path, "w") as f:
+            f.write(cfg.dump())
+    return cfg
+
+
+def load_config_from_yaml(cfg_path):
+    """Load config from a YAML file with all InterScale config variables applied.
+
+    Uses defaults from InterScale/config (wandb, model, optim, dataset) and
+    local/global component configs based on model type in the YAML, then merges
+    the file. Use this (or load_config) when training with a config exported from
+    a WandB sweep.
+
+    Parameters
+    ----------
+    cfg_path : str
+        Path to the YAML config file.
+
+    Returns
+    -------
+    CN
+        Configuration object.
+    """
+    return load_config(cfg_path)
