@@ -141,8 +141,10 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 
             ## Save model output
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[pad_index_nodes[0]]
-            sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
+            # HERE: Added this line to correct for the masking of the local embeddings
+            sample_mask = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
             local_embeddings_df.loc[sample_mask] = local_embedding.detach().cpu().numpy()
+            sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
             global_embeddings_df.loc[sample_mask] = global_embedding[:-1].squeeze(1).detach().cpu().numpy()
             cls_token_horizontal[sample_mask] = I[-1, :-1].squeeze().cpu().detach().numpy() 
             cls_token_vertical[sample_mask] = I[:-1, -1].squeeze().cpu().detach().numpy() 
