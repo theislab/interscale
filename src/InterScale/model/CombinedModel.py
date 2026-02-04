@@ -126,20 +126,23 @@ class CombinedModel(NodeMaskingTrainingPlan,
         cls_token_vertical = np.full(len(adata.obs_names), np.nan)
         
         for batch in pyg:
-            ## Get Local model output
+            ## Local model output
             local_embedding = self.module.local_module.forward(batch.x, batch.edge_index)
             if self._cfg.model.decoder.dual_decoder == True:
-                y_pred_local = self.module.predict_local(local_embedding)
-                y_pred_local_df.loc[sample_mask] = y_pred_local.detach().cpu().numpy()
-            ## Get Global model output
+                mask_idx = torch.arange(local_embedding.size(0), device=local_embedding.device)
+                y_pred_local = self.module.predict_local(local_embedding, mask_idx)
+                
+            sample_mask_local = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
+            local_embeddings_df.loc[sample_mask_local] = local_embedding.detach().cpu().numpy()
+            if self._cfg.model.decoder.dual_decoder == True:
+                y_pred_local_df.loc[sample_mask_local] = y_pred_local.detach().cpu().numpy()
+                
+            ## Global model output
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             # no masking during evaluation
             y_pred_global = self.module.predict_global(global_embedding, src_padding_mask, self.prediction_level)
             ## Save model output
-            # Get indices for this sample
-            sample_mask = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
-            # Fill embeddings directly into the DataFrame
-            local_embeddings_df.loc[sample_mask] = local_embedding.detach().cpu().numpy()
+            
             batch_obs_names_str = batch.obs_names.numpy().astype(int).astype(str)[pad_index_nodes[0]]
             sample_mask = global_embeddings_df.index.isin(batch_obs_names_str)
             global_embeddings_df.loc[sample_mask] = global_embedding[:-1].squeeze(1).detach().cpu().numpy()
@@ -150,8 +153,10 @@ class CombinedModel(NodeMaskingTrainingPlan,
             padded_attn = np.full((attn_matrix.shape[0], self._cfg.model.global_component.parameters.max_seq_len), np.nan)
             padded_attn[:, :attn_matrix.shape[1]] = attn_matrix
             attention_matrix_df.loc[sample_mask] = padded_attn
-            y_pred_global_df.loc[sample_mask] = y_pred_global.detach().cpu().numpy()
             
+
+            y_pred_global_df.loc[sample_mask] = y_pred_global.detach().cpu().numpy()
+
             # if self.module.decoder_type == 'linear':
             #     W = self.module.decoder.decoder.weight
                 #contribution = torch.matmul(global_embedding[:-1].squeeze(1), torch.transpose(W, 0, 1))
