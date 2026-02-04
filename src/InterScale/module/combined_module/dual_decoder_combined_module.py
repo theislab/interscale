@@ -74,11 +74,10 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             Size: [N_masked_nodes, C] or [N_masked_nodes, F]
         """
         # Predict on all nodes
-        if hasattr(self.local_module, 'decoder'):
-            y_pred_all = self.local_module.decoder.forward(local_embedding)
-        else:
-            y_pred_all = self.local_module.predict(local_embedding) 
-        return y_pred_all[mask_idx]
+        y_pred_all = self.local_module.decoder.forward(local_embedding)
+        # Filter to masked nodes
+        y_pred_local = y_pred_all[mask_idx]
+        return y_pred_local
     
     def predict_global(self,
                       global_embedding,
@@ -111,7 +110,7 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         
         local_out = self.local_module.forward(batch_masked.x, batch_masked.edge_index)
 
-        if isinstance(local_out, dict):
+        if isinstance(local_out, dict): # neede for scVI component
             local_embedding = local_out['embedding']
             self._current_local_latent_params = local_out 
         else:
@@ -159,7 +158,7 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             # Store metadata for graph level (only global predictions)
             self._n_masked_nodes = None
             self._is_graph_level = True
-        else:
+        elif prediction_level == 'node':
             # For node-level predictions, get ground truth for masked nodes
             y_true, adjusted_mask_idx = self.global_module._process_batch_for_metrics(
                 batch, prediction_task, prediction_level, pad_index_nodes, mask_idx
@@ -187,6 +186,9 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             # This allows the loss function to compute loss on both predictions
             y_pred_combined = torch.cat([y_pred_local, y_pred_global_masked], dim=0)
             y_true_combined = torch.cat([y_true_masked, y_true_masked], dim=0)
+        
+        else:
+            raise ValueError(f"Invalid prediction level: {prediction_level}")
             
             
         assert len(y_pred_combined) == len(y_true_combined), "y_pred and y_true are not consistent"
