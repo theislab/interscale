@@ -609,7 +609,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
             except ImportError:
                 print("Warning: Could not import remapping functions. Loading without remapping.")
                 
-        # from collections import OrderedDict
+        from collections import OrderedDict
         new_state_dict = OrderedDict()
         for k, v in state_dict.items():
             # Replace 'global_module.module.' with 'global_module.'
