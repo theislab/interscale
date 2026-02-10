@@ -123,7 +123,6 @@ def gene_rank_analysis(adata,
     plt.xlabel("Local Model Rank")
     plt.ylabel("Global Model Rank")
     plt.title("Gene Prediction Rank: Local vs. Global")
-    plt.legend()
     
     # Save figure if save_dir is provided
     if save_dir is not None:
