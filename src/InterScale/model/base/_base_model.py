@@ -610,16 +610,16 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
                 print("Warning: Could not import remapping functions. Loading without remapping.")
                 
         # from collections import OrderedDict
-        # new_state_dict = OrderedDict()
-        # for k, v in state_dict.items():
-        #     # Replace 'global_module.module.' with 'global_module.'
-        #     new_key = k.replace('global_module.module.', 'global_module.')
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            # Replace 'global_module.module.' with 'global_module.'
+            new_key = k.replace('global_module.module.', 'global_module.')
             
-        #     # Also handle generic 'module.' prefix if present at the start (legacy DataParallel)
-        #     if new_key.startswith('module.'):
-        #         new_key = new_key.replace('module.', '', 1)
+            # Also handle generic 'module.' prefix if present at the start (legacy DataParallel)
+            if new_key.startswith('module.'):
+                new_key = new_key.replace('module.', '', 1)
             
-        #     new_state_dict[new_key] = v
+            new_state_dict[new_key] = v
         state_dict = new_state_dict
         
         # Legacy wandb remapping (kept for backward compatibility)
