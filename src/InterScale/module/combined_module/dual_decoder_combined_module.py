@@ -74,11 +74,10 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             Size: [N_masked_nodes, C] or [N_masked_nodes, F]
         """
         # Predict on all nodes
-        if hasattr(self.local_module, 'decoder'):
-            y_pred_all = self.local_module.decoder.forward(local_embedding)
-        else:
-            y_pred_all = self.local_module.predict(local_embedding) 
-        return y_pred_all[mask_idx]
+        y_pred_all = self.local_module.decoder.forward(local_embedding)
+        # Filter to masked nodes
+        y_pred_local = y_pred_all[mask_idx]
+        return y_pred_local
     
     def predict_global(self,
                       global_embedding,
@@ -111,7 +110,7 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         
         local_out = self.local_module.forward(batch_masked.x, batch_masked.edge_index)
 
-        if isinstance(local_out, dict):
+        if isinstance(local_out, dict): # neede for scVI component
             local_embedding = local_out['embedding']
             self._current_local_latent_params = local_out 
         else:
@@ -153,13 +152,17 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             y_true = batch.y[batch.ptr[:-1]]
             # For graph level, we can't easily combine local and global
             # So we'll use global predictions only for graph level
-            y_pred_combined = y_pred_global
-            y_true_combined = y_true
+            y_pred_combined = torch.cat([y_pred_local, y_pred_global], dim=0)
+            y_true_combined = torch.cat([y_true, y_true], dim=0)
+            
+            assert len(y_true) == len(y_pred_global), "y_true and y_pred_global are not consistent"
+            assert len(y_true) == len(y_pred_local), "y_true and y_pred_local are not consistent"
+            assert len(y_pred_combined) == len(y_true_combined), "y_pred and y_true are not consistent"
             
             # Store metadata for graph level (only global predictions)
-            self._n_masked_nodes = None
+            self._n_masked_nodes = len(y_true)
             self._is_graph_level = True
-        else:
+        elif prediction_level == 'node':
             # For node-level predictions, get ground truth for masked nodes
             y_true, adjusted_mask_idx = self.global_module._process_batch_for_metrics(
                 batch, prediction_task, prediction_level, pad_index_nodes, mask_idx
@@ -187,6 +190,9 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             # This allows the loss function to compute loss on both predictions
             y_pred_combined = torch.cat([y_pred_local, y_pred_global_masked], dim=0)
             y_true_combined = torch.cat([y_true_masked, y_true_masked], dim=0)
+        
+        else:
+            raise ValueError(f"Invalid prediction level: {prediction_level}")
             
             
         assert len(y_pred_combined) == len(y_true_combined), "y_pred and y_true are not consistent"
@@ -194,45 +200,6 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         assert not torch.any(torch.isnan(y_true_combined)), "y_true contains NaN values"
 
         return local_embedding, global_embedding, y_pred_combined, y_true_combined, attn
-    
-    def get_separate_predictions(self, y_pred_combined, y_true_combined):
-        """Get separate predictions and ground truth for local and global decoders.
-        
-        Parameters
-        ----------
-        y_pred_combined: torch.Tensor
-            Combined predictions from _common_step. For node-level: [2*N_masked, C],
-            for graph-level: [B, C] where B is batch size.
-        y_true_combined: torch.Tensor
-            Combined ground truth from _common_step. Same shape as y_pred_combined.
-        
-        Returns
-        -------
-        dict: Dictionary with keys:
-            - 'local': tuple of (y_pred_local, y_true_local) or None if not available
-            - 'global': tuple of (y_pred_global, y_true_global) or None if not available
-        """
-        local = None
-        global_pred = None
-        
-        if self._is_graph_level:
-            # For graph level, only global predictions exist
-            global_pred = (y_pred_combined, y_true_combined)
-        elif self._n_masked_nodes is not None:
-            # For node level, split the concatenated predictions
-            # First half is local, second half is global
-            y_pred_local = y_pred_combined[:self._n_masked_nodes]
-            y_pred_global = y_pred_combined[self._n_masked_nodes:]
-            y_true_local = y_true_combined[:self._n_masked_nodes]
-            y_true_global = y_true_combined[self._n_masked_nodes:]
-            
-            local = (y_pred_local, y_true_local)
-            global_pred = (y_pred_global, y_true_global)
-        
-        return {
-            'local': local,
-            'global': global_pred
-        }
     
     def compute_separate_losses(self, loss_fn, loss_type, y_pred_combined, y_true_combined):
         """Compute separate losses for local and global predictions.
@@ -267,11 +234,7 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         local_loss = None
         global_loss = None
         
-        if self._is_graph_level:
-            # For graph level, only global predictions exist
-            global_loss = loss_fn(y_pred_combined, y_true_combined)
-            losses['global_loss'] = global_loss
-        elif self._n_masked_nodes is not None:
+        if self._n_masked_nodes is not None:
             # For node level, split the concatenated predictions
             # First half is local, second half is global
             y_pred_local = y_pred_combined[:self._n_masked_nodes]
@@ -288,6 +251,9 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
                 global_loss = loss_fn(y_pred_global, y_true_global)
             losses['local_loss'] = local_loss
             losses['global_loss'] = global_loss
+        else:
+            error_message = f"No masked nodes found for prediction level: {prediction_level}"
+            raise ValueError(error_message)
             
         if self._current_local_latent_params is not None:
             losses['kl_loss'] = self.local_module.loss_kl(self._current_local_latent_params)
