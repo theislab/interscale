@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 from sklearn.metrics import r2_score
@@ -5,6 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from scipy.stats import rankdata
 from anndata import AnnData
+from typing import Literal
 
 def predict_gene_r2(adata: AnnData, layers_pred: str, top_n: int = 5) -> pd.DataFrame:
     """
@@ -52,6 +54,48 @@ def predict_gene_r2(adata: AnnData, layers_pred: str, top_n: int = 5) -> pd.Data
     
     return r2_df
 
+
+def predict_gene_cosine(adata: AnnData, layers_pred: str, top_n: int = 5) -> pd.DataFrame:
+    """
+    Predict gene cosine similarity scores for a given model layer.
+    For each gene, computes cosine similarity between true and predicted expression across cells.
+
+    Parameters:
+        adata: AnnData object containing the data
+        layers_pred: str, name of the model layer to predict
+        top_n: int, number of top genes to return
+    """
+    y_true = adata.X.toarray().astype(float)
+    y_pred = adata.layers[layers_pred]
+    if not isinstance(y_pred, np.ndarray):
+        y_pred = np.array(y_pred)
+    y_pred = y_pred.astype(float)
+
+    cosine_scores = []
+    for i in range(y_true.shape[1]):
+        mask = ~np.isnan(y_true[:, i]) & ~np.isnan(y_pred[:, i])
+        a, b = y_true[mask, i], y_pred[mask, i]
+        n = np.sum(mask)
+        if n > 0:
+            norm_a = np.linalg.norm(a)
+            norm_b = np.linalg.norm(b)
+            if norm_a > 0 and norm_b > 0:
+                cos_sim = np.dot(a, b) / (norm_a * norm_b)
+            else:
+                cos_sim = np.nan
+        else:
+            cos_sim = np.nan
+        cosine_scores.append(cos_sim)
+
+    cosine_ranked = rankdata(cosine_scores, method="average")
+    genes = adata.var_names
+    cosine_df = pd.DataFrame({"gene": genes, "cosine": cosine_scores, "cosine_rank": cosine_ranked})
+
+    top = cosine_df.nlargest(top_n, "cosine")
+    print(f"Top {top_n} genes for {layers_pred} model (cosine):\n", top)
+    return cosine_df
+
+
 def gene_rank_analysis(adata,
                        layers_local_pred: str = 'layers_local',
                        layers_global_pred: str = 'layers_global',
@@ -59,28 +103,37 @@ def gene_rank_analysis(adata,
                        plot_result: bool = True,
                        return_top_genes: bool = False,
                        save_dir: str = None,
-                       post_fix: str = None):
-    """Ranks how well the local and global predictions capture the gene expression. 
-    Plots the top N predicted genes for each model and consensus genes. 
+                       post_fix: str = None,
+                       score_metric: Literal["r2", "cosine"] = "r2"):
+    """Ranks how well the local and global predictions capture the gene expression.
+    Plots the top N predicted genes for each model and consensus genes.
 
     Args:
-        adata (_type_): _description_
-        layers_local_pred (str, optional): _description_. Defaults to 'layers_local'.
-        layers_global_pred (str, optional): _description_. Defaults to 'layers_global'.
-        top_n (int, optional): _description_. Defaults to 5.
-        plot_result (bool, optional): _description_. Defaults to True.
-        return_top_genes (bool, optional): _description_. Defaults to False.
-        save_dir (str, optional): Directory to save the figure. If None, figure is not saved. Defaults to None.
+        adata: AnnData with layers for local and global predictions.
+        layers_local_pred: Layer name for local predictions. Defaults to 'layers_local'.
+        layers_global_pred: Layer name for global predictions. Defaults to 'layers_global'.
+        top_n: Number of top genes to highlight. Defaults to 5.
+        plot_result: Whether to plot. Defaults to True.
+        return_top_genes: Whether to return top gene DataFrames. Defaults to False.
+        save_dir: Directory to save the figure. If None, figure is not saved. Defaults to None.
+        post_fix: Suffix for saved filename. Defaults to None.
+        score_metric: 'r2' for R² score, 'cosine' for cosine similarity. Defaults to 'r2'.
     """
     assert layers_local_pred in adata.layers.keys(), f"layers_local_pred {layers_local_pred} not in adata.layers.keys()"
     assert layers_global_pred in adata.layers.keys(), f"layers_global_pred {layers_global_pred} not in adata.layers.keys()"
-    
-    local_df = predict_gene_r2(adata, layers_local_pred, top_n)
-    global_df = predict_gene_r2(adata, layers_global_pred, top_n)
+
+    if score_metric == "r2":
+        local_df = predict_gene_r2(adata, layers_local_pred, top_n)
+        global_df = predict_gene_r2(adata, layers_global_pred, top_n)
+        rank_col = "r2_rank"
+    else:
+        local_df = predict_gene_cosine(adata, layers_local_pred, top_n)
+        global_df = predict_gene_cosine(adata, layers_global_pred, top_n)
+        rank_col = "cosine_rank"
 
     # Select relevant columns and rename for clarity
-    local_df = local_df[['gene', 'r2_rank']].rename(columns={'r2_rank': 'Local Rank'})
-    global_df = global_df[['gene', 'r2_rank']].rename(columns={'r2_rank': 'Global Rank'})
+    local_df = local_df[["gene", rank_col]].rename(columns={rank_col: "Local Rank"})
+    global_df = global_df[["gene", rank_col]].rename(columns={rank_col: "Global Rank"})
     
     # Merge on 'gene'
     merged_df = pd.merge(local_df, global_df, on='gene', how='inner')
@@ -122,11 +175,12 @@ def gene_rank_analysis(adata,
     # Labels and legend
     plt.xlabel("Local Model Rank")
     plt.ylabel("Global Model Rank")
-    plt.title("Gene Prediction Rank: Local vs. Global")
+    plt.title(f"Gene Prediction Rank: Local vs. Global ({score_metric})")
     
     # Save figure if save_dir is provided
     if save_dir is not None:
-        save_path = os.path.join(save_dir, f"gene_rank_analysis_{post_fix}.png")
+        name = f"gene_rank_analysis_{score_metric}" + (f"_{post_fix}" if post_fix else "") + ".png"
+        save_path = os.path.join(save_dir, name)
         plt.savefig(save_path, dpi=300, bbox_inches='tight')    
         print(f"Figure saved to: {save_path}")
     
