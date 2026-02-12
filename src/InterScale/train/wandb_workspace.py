@@ -47,10 +47,10 @@ def _line_plot_with_colors(x, y, color_map):
 def _build_class_f1_colors(class_labels: Sequence[str]) -> dict[str, str]:
     """Build a color map for per-class F1 metrics (train/val/test)."""
     colors: dict[str, str] = {}
-    for cls in class_labels:
-        colors[f"train_f1_{cls}"] = TRAIN_COLOR
-        colors[f"val_f1_{cls}"] = VAL_COLOR
-        colors[f"test_f1_{cls}"] = TEST_COLOR
+    for class_label in class_labels:
+        colors[f"train_f1_{class_label}"] = TRAIN_COLOR
+        colors[f"val_f1_{class_label}"] = VAL_COLOR
+        colors[f"test_f1_{class_label}"] = TEST_COLOR
     return colors
 
 
@@ -97,11 +97,11 @@ def get_interscale_workspace_sections(class_labels: Sequence[str] | None = None)
     # ---- Per-class F1 section (classification only) ----
     if class_labels is not None and len(class_labels) > 0:
         f1_metrics = []
-        for cls in class_labels:
+        for class_label in class_labels:
             f1_metrics.extend([
-                f"train_f1_{cls}",
-                f"val_f1_{cls}",
-                f"test_f1_{cls}",
+                f"train_f1_{class_label}",
+                f"val_f1_{class_label}",
+                f"test_f1_{class_label}",
             ])
         f1_colors = _build_class_f1_colors(class_labels)
         f1_plot = _line_plot_with_colors("Step", f1_metrics, f1_colors)
