@@ -194,7 +194,11 @@ class NodeMaskingTrainingPlan:
                 raise ValueError("wandb_project must be specified when use_wandb is True")
             run = wandb.init(project=self._cfg.wandb.project_name, config=self._cfg, name=run_name, job_type = 'model_training')
             from InterScale.train.wandb_workspace import setup_wandb_workspace_if_available
-            setup_wandb_workspace_if_available(entity=run.entity, project=run.project)
+            setup_wandb_workspace_if_available(
+                entity=run.entity,
+                project=run.project,
+                class_labels=getattr(self, 'class_labels', None),
+            )
             logger = WandbLogger(name = run_name, log_model=True)
             total_params = sum(p.numel() for p in self.module.parameters())
             trainable_params = sum(p.numel() for p in self.module.parameters() if p.requires_grad)
