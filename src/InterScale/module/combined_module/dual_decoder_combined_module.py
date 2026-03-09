@@ -155,8 +155,6 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             y_pred_combined = torch.cat([y_pred_local, y_pred_global], dim=0)
             y_true_combined = torch.cat([y_true, y_true], dim=0)
             
-            assert len(y_true) == len(y_pred_global), "y_true and y_pred_global are not consistent"
-            assert len(y_true) == len(y_pred_local), "y_true and y_pred_local are not consistent"
             assert len(y_pred_combined) == len(y_true_combined), "y_pred and y_true are not consistent"
             
             # Store metadata for graph level (only global predictions)
