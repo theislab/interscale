@@ -17,7 +17,7 @@ DEFAULT_CONFIG_ICB="/home/icb/francesca.drummer/1-Projects/GT-long-range-niches/
 DEFAULT_CONFIG_LRZ="/dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches/src/config_files/"
 
 MELTON_SWEEP="melton25/robustness_sweep.yaml"
-MELTON_CFG="melton25/node_class_combined.yaml"
+MELTON_CFG="melton25/clas_node_DualCombined.yaml"
 
 # Legnini graph sweep for Local, Global and Combined Model
 #python src/InterScale/main_sweep.py --cfg "$DEFAULT_CONFIG_ICB$MELTON_CFG" --sweep_cfg "$DEFAULT_CONFIG_ICB$MELTON_SWEEP" --model_type LocalModel --sweep_goal robustness --prediction_task classification
