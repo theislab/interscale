@@ -14,9 +14,12 @@ __all__ = [
     "scale_cls_by_sample",
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
     "Wandb_evaluation",
 >>>>>>> bfc835b (save config.yaml from wandb sweep)
 =======
 >>>>>>> 380a98c (remove WandB_evaluation from evaluation)
+=======
+>>>>>>> 8f175aa459298d5f9d41c0ebfc70f4f7407676fc
 ]

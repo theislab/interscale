@@ -101,8 +101,11 @@ def _wandb_config_to_nested_dict(config):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> 3381115 (convert sample_key and hidden_dims to list in config)
+=======
+>>>>>>> 8f175aa459298d5f9d41c0ebfc70f4f7407676fc
 def _cfg_to_dict(cfg):
     """Convert CfgNode to plain dict (for YAML dump with custom list style)."""
     if not isinstance(cfg, CN):
@@ -137,10 +140,13 @@ def _dump_cfg_yaml(cfg, stream):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> a56f326 (save config.yaml from wandb sweep)
 =======
 >>>>>>> 3381115 (convert sample_key and hidden_dims to list in config)
+=======
+>>>>>>> 8f175aa459298d5f9d41c0ebfc70f4f7407676fc
 def _coerce_run_config_to_types(default_cfg, run_dict):
     """Recursively coerce run config values to match default CfgNode types (avoids yacs merge type mismatch)."""
     if not isinstance(run_dict, dict):
@@ -163,10 +169,13 @@ def _coerce_run_config_to_types(default_cfg, run_dict):
 
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> bfc835b (save config.yaml from wandb sweep)
 =======
 >>>>>>> a56f326 (save config.yaml from wandb sweep)
+=======
+>>>>>>> 8f175aa459298d5f9d41c0ebfc70f4f7407676fc
 def config_from_wandb_run(run, save_yaml_path=None):
     """Build a full InterScale CfgNode from a WandB run config and optionally save to YAML.
 
@@ -199,17 +208,23 @@ def config_from_wandb_run(run, save_yaml_path=None):
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> a56f326 (save config.yaml from wandb sweep)
+=======
+>>>>>>> 8f175aa459298d5f9d41c0ebfc70f4f7407676fc
     # Coerce run config values to default types so yacs merge does not raise (e.g. int 0 vs float 0.1)
     nested_coerced = _coerce_run_config_to_types(cfg, nested)
     run_cfg = CN(nested_coerced)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> bfc835b (save config.yaml from wandb sweep)
 =======
 >>>>>>> a56f326 (save config.yaml from wandb sweep)
+=======
+>>>>>>> 8f175aa459298d5f9d41c0ebfc70f4f7407676fc
     cfg.set_new_allowed(True)
     cfg.defrost()
     cfg.merge_from_other_cfg(run_cfg)
@@ -219,6 +234,7 @@ def config_from_wandb_run(run, save_yaml_path=None):
         with open(save_yaml_path, "w") as f:
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
             _dump_cfg_yaml(cfg, f)
 =======
             f.write(cfg.dump())
@@ -226,6 +242,9 @@ def config_from_wandb_run(run, save_yaml_path=None):
 =======
             _dump_cfg_yaml(cfg, f)
 >>>>>>> 3381115 (convert sample_key and hidden_dims to list in config)
+=======
+            _dump_cfg_yaml(cfg, f)
+>>>>>>> 8f175aa459298d5f9d41c0ebfc70f4f7407676fc
     return cfg
 
 

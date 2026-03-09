@@ -145,6 +145,7 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 y_pred_local_df.loc[sample_mask_local] = y_pred_local.detach().cpu().numpy()
                 
 <<<<<<< HEAD
+<<<<<<< HEAD
             ## Global model output
 =======
             ## Get model output
@@ -163,6 +164,8 @@ class CombinedModel(NodeMaskingTrainingPlan,
 >>>>>>> 44067a0 (sample_mask for local in CombinedModel.get_model_output)
 =======
 >>>>>>> 59d8b50 (merge CombinedModel with scVI implementation)
+=======
+>>>>>>> 8f175aa459298d5f9d41c0ebfc70f4f7407676fc
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             # no masking during evaluation
             y_pred_global = self.module.predict_global(global_embedding, src_padding_mask, self.prediction_level)
