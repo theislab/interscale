@@ -144,28 +144,6 @@ class CombinedModel(NodeMaskingTrainingPlan,
             if self._cfg.model.decoder.dual_decoder == True:
                 y_pred_local_df.loc[sample_mask_local] = y_pred_local.detach().cpu().numpy()
                 
-<<<<<<< HEAD
-<<<<<<< HEAD
-            ## Global model output
-=======
-            ## Get model output
-            local_input = getattr(batch, 'embeddings', batch.x)
-            local_out = self.module.local_module.forward(local_input, batch.edge_index)
-            if isinstance(local_out, dict):
-                local_embedding = local_out['embedding']
-                self._current_local_latent_params = local_out 
-            else:
-                local_embedding = local_out
-                self._current_local_latent_params = None
-                
-            sample_mask = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
-            # Fill embeddings directly into the DataFrame
-            local_embeddings_df.loc[sample_mask] = local_embedding.detach().cpu().numpy()
->>>>>>> 44067a0 (sample_mask for local in CombinedModel.get_model_output)
-=======
->>>>>>> 59d8b50 (merge CombinedModel with scVI implementation)
-=======
->>>>>>> 8f175aa459298d5f9d41c0ebfc70f4f7407676fc
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             # no masking during evaluation
             y_pred_global = self.module.predict_global(global_embedding, src_padding_mask, self.prediction_level)
