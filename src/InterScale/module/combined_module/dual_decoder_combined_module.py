@@ -147,12 +147,17 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         
         # Get ground truth for masked nodes
         if prediction_task == 'classification' and prediction_level == 'graph':
+            # graph level prediction assumes that all nodes have the same prediction
+            if not torch.allclose(y_pred_local, y_pred_local[0].expand_as(y_pred_local)):
+                raise ValueError("Not all elements in y_pred_local are the same")
+            if not torch.allclose(y_pred_global, y_pred_global[0].expand_as(y_pred_global)):
+                raise ValueError("Not all elements in y_pred_local are the same")
             # For graph-level classification, we need to handle this differently
             # since we have one prediction per graph
             y_true = batch.y[batch.ptr[:-1]]
             # For graph level, we can't easily combine local and global
             # So we'll use global predictions only for graph level
-            y_pred_combined = torch.cat([y_pred_local, y_pred_global], dim=0)
+            y_pred_combined = torch.cat([y_pred_local[:-1], y_pred_global[:-1]], dim=0)
             y_true_combined = torch.cat([y_true, y_true], dim=0)
             
             assert len(y_pred_combined) == len(y_true_combined), "y_pred and y_true are not consistent"
