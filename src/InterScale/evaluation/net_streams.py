@@ -69,7 +69,12 @@ def plot_all_spatial_net_streams(
 			columns=adata_win.obs_names
 		)
 		M_net = M - M.T  # Net flow between all cells
-		
+
+		max_net_flow = np.max(np.abs(M_net.values))
+
+		if max_net_flow > 0:
+			M_net = M_net / max_net_flow
+
 		pos_win = adata_win.obsm['spatial'] * sf
 		types_win = adata_win.obs[cell_type_col].values
 		
@@ -88,7 +93,7 @@ def plot_all_spatial_net_streams(
 			dist = np.linalg.norm(diff, axis=1)
 			unit_diff = diff / (dist[:, np.newaxis] + 1e-6)
 			s_weight = np.exp(-dist**2 / (2 * max_dist**2))
-			
+			#s_weight=1
 			# Calculate local cell flow vector
 			v_cell = np.sum(unit_diff * (positive_flows * s_weight)[:, np.newaxis], axis=0)
 			
@@ -99,68 +104,83 @@ def plot_all_spatial_net_streams(
 			U_dict[cell_type] += v_cell[0] * kernel
 			V_dict[cell_type] += v_cell[1] * kernel
 
-	# 3. Plotting
-	if ax is None:
-		fig, ax = plt.subplots(figsize=(12, 10))
-	
 
-	emb= additional_embeddings if additional_embeddings is not None else cell_type_col
-	# Background scatter plot
-	sq.pl.spatial_scatter(
-		adata_slice, color=emb, 
-		library_key=fov_key, library_id=[fov_id],
-		ax=ax, spatial_key='spatial', 
-		img=False,**kwargs
-	)
 
-	# 4. Draw streamlines for each cell type individually
-
-	legend_elements = []
-
-	for cat in categories:
-		U, V = U_dict[cat], V_dict[cat]
-		mag = np.sqrt(U**2 + V**2)
-		if np.max(mag) == 0: continue
+	if return_streams is False:
+		# 3. Plotting
+		if ax is None:
+			fig, ax = plt.subplots(figsize=(6, 5))
 		
-		# Local normalization and thresholding
-		thresh = 0.01 * np.max(mag)
-		Un = np.divide(U, mag, out=np.zeros_like(U), where=mag > thresh)
-		Vn = np.divide(V, mag, out=np.zeros_like(V), where=mag > thresh)
-		Un[mag <= thresh] = np.nan
-		Vn[mag <= thresh] = np.nan
+		emb = additional_embeddings if additional_embeddings is not None else cell_type_col
 		
-		if not np.all(np.isnan(Un)):
-			# Create a darker version of the category color for visibility
-			rgb = to_rgb(color_map[cat])
-			hsv = rgb_to_hsv(rgb)
-			dark_color = to_hex(hsv_to_rgb([hsv[0], hsv[1], hsv[2] * 0.7]))
-			
-			ax.streamplot(X_lin, Y_lin, Un, Vn, color=dark_color, 
-						linewidth=1.2, density=density, arrowsize=1.2)
-			
-			legend_elements.append(Line2D([0], [0], color=dark_color, lw=2, 
-										label=f'Flow: {cat}'))
-			
-	if legend_elements and additional_embeddings is not None:
-		old_legend = ax.get_legend()
-		new_legend = ax.legend(
-					handles=legend_elements, 
-					loc='upper center', 
-					ncol=4,
-					bbox_to_anchor=(0.5,-0.1), # Posizionata in alto a destra
-					title=f"Net Flow Directions - {cell_type_col}"
+		# Background scatter plot
+		sq.pl.spatial_scatter(
+			adata_slice, color=emb, 
+			library_key=fov_key, library_id=[fov_id],
+			ax=ax, spatial_key='spatial', 
+			img=False, **kwargs
 		)
-		if old_legend is not None:
-			ax.add_artist(old_legend)
+
+		# Grab the existing legend from Squidpy BEFORE adding new streams and legends
+		old_legend = ax.get_legend()
+		#print(old_legend)
+		legend_elements = []
+
+		# 4. Draw streamlines for each cell type individually
+		for cat in categories:
+			U, V = U_dict[cat], V_dict[cat]
+			mag = np.sqrt(U**2 + V**2)
+			if np.max(mag) == 0: continue
+			
+			# Local normalization and thresholding
+			thresh = 0.01 * np.max(mag)
+			Un = np.divide(U, mag, out=np.zeros_like(U), where=mag > thresh)
+			Vn = np.divide(V, mag, out=np.zeros_like(V), where=mag > thresh)
+			Un[mag <= thresh] = np.nan
+			Vn[mag <= thresh] = np.nan
+			
+			if not np.all(np.isnan(Un)):
+				# Create a darker version of the category color for visibility
+				rgb = to_rgb(color_map[cat])
+				hsv = rgb_to_hsv(rgb)
+				dark_color = to_hex(hsv_to_rgb([hsv[0], hsv[1], hsv[2] * 0.7]))
+				
+				ax.streamplot(X_lin, Y_lin, Un, Vn, color=dark_color, 
+							linewidth=1.2, density=density, arrowsize=1.2)
+				
+				legend_elements.append(Line2D([0], [0], color=dark_color, lw=2, 
+											label=f'Flow: {cat}'))
+		
+		# Handle legends outside the loop
+		if legend_elements:
+			# Create the new legend for net flows (bottom center)
+			new_legend = ax.legend(
+				handles=legend_elements, 
+				loc='upper center', 
+				ncol=4,
+				bbox_to_anchor=(0.5, -0.15), # Pushed slightly lower to avoid overlaps
+				title=f"Net Flow Directions - {cell_type_col}"
+			)
+			
+			#Re-attach the old Squidpy legend (center right outside)
+			if old_legend is not None:
+				#old_legend.set_bbox_to_anchor((0.5, 0.5))
+				old_legend.set_loc('best')
+				ax.add_artist(old_legend)
+			
+		# 	# Force Matplotlib to calculate layout to fit the external legends
+		# 	#ax.figure.tight_layout()
+		if ax is None:
+			plt.tight_layout()
+		else:
+			return ax
 
 	if return_streams:
 		streams = {cat: (U_dict[cat], V_dict[cat]) for cat in categories}
-		return streams,X_lin, Y_lin
-	else:
-		return ax
+		return streams, X_lin, Y_lin
 
 def calculate_divergence(U, V):
-    return np.gradient(U, axis=1) + np.gradient(V, axis=0)	
+	return np.gradient(U, axis=1) + np.gradient(V, axis=0)	
 
 
 def cluster_spatial_flows(U_dict, V_dict, n_clusters=5):
@@ -210,7 +230,7 @@ def cluster_spatial_flows(U_dict, V_dict, n_clusters=5):
 	
 	return cluster_grid, X_scaled
 
-def plot_flow_clusters(cluster_grid, X_lin, Y_lin, adata_slice, fov_id, fov_key='fov', cell_type_col=None):
+def plot_flow_clusters(cluster_grid, X_lin, Y_lin, adata_slice, fov_id, fov_key='fov', cell_type_col=None, **kwargs):
 	"""
 	Visualizes the identified flow domains as a background for the spatial data.
 	"""
@@ -227,8 +247,9 @@ def plot_flow_clusters(cluster_grid, X_lin, Y_lin, adata_slice, fov_id, fov_key=
 		adata_slice, color=cell_type_col, 
 		library_key=fov_key, library_id=[fov_id],
 		ax=ax, spatial_key='spatial', 
-		size=2, alpha=0.4, img=False, 
-		title=f"Unsupervised Flow Domains (n={len(np.unique(cluster_grid))})"
+		alpha=0.4, img=False, 
+		title=f"Unsupervised Flow Domains (n={len(np.unique(cluster_grid))})",
+		**kwargs
 	)
 	# Plot the clusters as a heatmap (Voronoi-like segmentation of flow)
 	im = ax.pcolormesh(X_lin, Y_lin, cluster_grid, 
@@ -244,8 +265,44 @@ def plot_flow_clusters(cluster_grid, X_lin, Y_lin, adata_slice, fov_id, fov_key=
 
 	
 	ax.legend(handles=legend_handles, title="Flow Domains", 
-              loc='center left', bbox_to_anchor=(1, 0.5))
+			loc='center left', bbox_to_anchor=(1, 0.5))
 	return fig, ax
+
+def characterize_flow_clusters(U_dict, V_dict, cluster_grid,k=2):
+	results = []
+	categories = list(U_dict.keys())
+	k=1
+	for cat in categories:
+		# Calculate divergence for this category
+		div = calculate_divergence(U_dict[cat], V_dict[cat])
+		mu = np.mean(div)
+		sigma = np.std(div)
+		
+		# Adaptive thresholds
+		source_thresh = mu + (k * sigma)
+		sink_thresh = mu - (k * sigma)
+		
+		# For each cluster ID in the grid
+		for cluster_id in np.unique(cluster_grid):
+			# Mask the divergence map with the current cluster
+			mask = (cluster_grid == cluster_id)
+			avg_div = np.mean(div[mask])
+
+			if avg_div > source_thresh:
+				role = 'Source'
+			elif avg_div < sink_thresh:
+				role = 'Sink'
+			else:
+				role = 'Neutral'
+			
+			results.append({
+				'cell_type': cat,
+				'cluster_id': cluster_id,
+				'avg_divergence': avg_div,
+				'role': role
+			})
+			
+	return pd.DataFrame(results)
 
 
 def map_clusters_to_cells(cluster_grid, X_lin, Y_lin, adata, fov_id, fov_key='fov'):
