@@ -240,3 +240,49 @@ def test_dual_decoder_compute_separate_losses_graph_level(graph_level_batch_same
     assert losses["global_loss"] is not None
     assert torch.isfinite(losses["local_loss"]).item()
     assert torch.isfinite(losses["global_loss"]).item()
+
+
+if __name__ == "__main__":
+    # Simple entry point to debug DualDecoderCombinedModuleClass with Cursor's debugger.
+    torch.manual_seed(42)
+    np.random.seed(42)
+
+    # Build minimal config and a small graph-level batch
+    cfg = get_dual_decoder_config()
+    n_input, n_output = 5, 3
+    num_nodes_per_graph = 2
+    num_graphs = 2
+    graphs = []
+    for i in range(num_graphs):
+        graphs.append(
+            create_graph_level_data(
+                num_nodes_per_graph,
+                n_input,
+                n_output,
+                same_input_per_node=True,
+                seed=42 + i,
+            )
+        )
+    batch = Batch.from_data_list(graphs)
+
+    n_embed = 4
+    module = DualDecoderCombinedModuleClass(
+        cfg=cfg,
+        n_input=n_input,
+        n_output=n_output,
+        n_embed=n_embed,
+        decoder_type="linear",
+        dropout_decoder=0.1,
+        decoder_hidden_dims=[64, 32],
+        pct_mask_nodes=0.0,
+    )
+
+    # Place breakpoints in this block or inside dual_decoder_combined_module._common_step
+    local_emb, global_emb, y_pred_combined, y_true_combined, attn = module._common_step(
+        batch, prediction_task="classification", prediction_level="graph"
+    )
+
+    print("local_emb shape:", tuple(local_emb.shape))
+    print("global_emb shape:", tuple(global_emb.shape))
+    print("y_pred_combined shape:", tuple(y_pred_combined.shape))
+    print("y_true_combined shape:", tuple(y_true_combined.shape))

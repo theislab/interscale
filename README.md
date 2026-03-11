@@ -45,6 +45,14 @@ pip install graph-transformer-long-range-niches
 
 ### With GPU support
 
+#### Viash set up
+
+Prerequisites:
+- Viash installed
+- Docker running
+
+
+
 #### Conda/Mamba set up
 
 ```bash

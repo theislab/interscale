@@ -7,6 +7,7 @@ from .dataset_config import get_dataset_cfg
 from .model_config import get_model_cfg
 from .optim_config import get_optim_cfg
 from .global_component_config import get_global_component_cfg
+import yaml
 
 # TODO: load all configs from folder automatically instead of manual definition
 # modules = glob.glob(join(dirname(__file__), "*.py"))
