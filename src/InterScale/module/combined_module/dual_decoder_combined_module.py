@@ -2,6 +2,7 @@ import torch
 from typing import Literal
 
 from InterScale.module.base import BaseModuleClass, LocalModuleClass, GlobalModuleClass
+from InterScale.tl import aggregate_node_embeddings_to_graph, aggregate_node_values_to_graph
 from yacs.config import CfgNode as CN
 
 
@@ -58,26 +59,30 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         
     def predict_local(self,
                      local_embedding,
-                     mask_idx):
-        """Predict with the local decoder on masked nodes.
-        
+                     prediction_level: Literal["node", "graph"] = "node",
+                     batch_ptr: torch.Tensor | None = None):
+        """Predict with the local decoder.
+
+        For node-level: one prediction per masked node [N_masked, C].
+        For graph-level: aggregate embeddings per graph (mean), then one prediction per graph [B, C].
+
         Parameters
         ----------
-        local_embedding: torch.Tensor
+        local_embedding : torch.Tensor
             Size: [N, E]
-        mask_idx: torch.Tensor
-            Indices of masked nodes. Size: [N_masked_nodes, ]
-            
+        mask_idx : torch.Tensor
+            Indices of masked nodes. Ignored when prediction_level == "graph".
+        prediction_level : "node" | "graph"
+            If "graph", return one prediction per graph; requires batch_ptr.
+        batch_ptr : torch.Tensor, optional
+            Batch.ptr from PyG Batch. Required when prediction_level == "graph".
+
         Returns
         -------
-        y_pred_local: torch.Tensor
-            Size: [N_masked_nodes, C] or [N_masked_nodes, F]
+        y_pred_local : torch.Tensor
+            [N_masked_nodes, C] for node-level, [B, C] for graph-level.
         """
-        # Predict on all nodes
-        y_pred_all = self.local_module.decoder.forward(local_embedding)
-        # Filter to masked nodes
-        y_pred_local = y_pred_all[mask_idx]
-        return y_pred_local
+        return self.local_module.predict(local_embedding, prediction_level, batch_ptr)
     
     def predict_global(self,
                       global_embedding,
@@ -137,26 +142,22 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             
         local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask, attn = self.forward(batch_masked)
         
-        # Predict from local embedding on masked nodes
-        y_pred_local = self.predict_local(local_embedding, mask_idx)
-        
+        # Predict from local embedding (per-node or per-graph depending on prediction_level)
+        y_pred_local = self.predict_local(
+            local_embedding, 
+            prediction_level=prediction_level,
+            batch_ptr=batch.ptr if prediction_level == "graph" else None,
+        )
         # Predict from global embedding
         y_pred_global = self.predict_global(
             global_embedding, src_padding_mask, prediction_level
         )
-        
-        # Get ground truth for masked nodes
-        if prediction_task == 'classification' and prediction_level == 'graph':
-            # For graph-level classification, we need to handle this differently
-            # since we have one prediction per graph
-            y_true = batch.y[batch.ptr[:-1]]
 
-            y_pred_combined = torch.cat([y_pred_local[:-1], y_pred_global[:-1]], dim=0)
+        if prediction_task == "classification" and prediction_level == "graph":
+            y_true = aggregate_node_values_to_graph(batch.y, batch.ptr, reduce="mean")
+            y_pred_combined = torch.cat([y_pred_local, y_pred_global], dim=0)
             y_true_combined = torch.cat([y_true, y_true], dim=0)
-            
             assert len(y_pred_combined) == len(y_true_combined), "y_pred and y_true are not consistent"
-
-            # Store metadata for graph level (only global predictions)
             self._n_masked_nodes = len(y_true)
             self._is_graph_level = True
 
@@ -250,8 +251,9 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             losses['local_loss'] = local_loss
             losses['global_loss'] = global_loss
         else:
-            error_message = f"No masked nodes found for prediction level: {prediction_level}"
-            raise ValueError(error_message)
+            raise ValueError(
+                "No masked nodes found; _n_masked_nodes was not set in _common_step."
+            )
             
         if self._current_local_latent_params is not None:
             losses['kl_loss'] = self.local_module.loss_kl(self._current_local_latent_params)

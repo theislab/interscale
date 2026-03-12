@@ -90,7 +90,11 @@ class LocalModel(NodeMaskingTrainingPlan,
             #     #decoder_weight_df.loc[sample_mask] = contribution.detach().cpu().numpy()
             #     decoder_weight_df.loc[sample_mask] = W.detach().cpu().numpy()
             
-            y_pred = self.module.predict(local_embedding, self.prediction_level)
+            batch_ptr = batch.ptr if self.prediction_level == "graph" else None
+            y_pred = self.module.predict(local_embedding, self.prediction_level, batch_ptr=batch_ptr)
+            if self.prediction_level == "graph":
+                # Expand [B, C] to [N, C] so one row per node (each node gets its graph's prediction)
+                y_pred = y_pred[batch.batch]
             y_pred_df.loc[sample_mask] = y_pred.detach().cpu().numpy()
 
         # Save embeddings in adata.obsm
