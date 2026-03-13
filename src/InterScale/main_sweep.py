@@ -120,6 +120,8 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             cfg.optim.wd = sweep_config['optim.wd']
             cfg.dataset.batch_size = sweep_config['dataset.batch_size']
             cfg.dataset.pct_mask_nodes = sweep_config['dataset.pct_mask_nodes']
+            cfg.dataset.split_key = sweep_config['dataset.split_key']
+            cfg.dataset.sample_key = sweep_config['dataset.sample_key']
             cfg.model.n_embed = sweep_config['model.n_embed']
             if model_type == 'LocalModel' or model_type == 'CombinedModel':
                 print('LocalModel configs')
