@@ -139,7 +139,7 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 mask_idx = torch.arange(local_embedding.size(0), device=local_embedding.device)
                 batch_ptr = batch.ptr if self.prediction_level == "graph" else None
                 y_pred_local = self.module.predict_local(
-                    local_embedding, mask_idx,
+                    local_embedding,
                     prediction_level=self.prediction_level,
                     batch_ptr=batch_ptr,
                 )
