@@ -107,7 +107,7 @@ def main_sweep(cfg_path, model_type, sweep_goal):
         if sweep_goal == 'robustness':
             print('robustness sweep')
             cfg.dataset.pct_mask_nodes = sweep_config['dataset.pct_mask_nodes']
-            cfg.dataset.spatial_neigbors_kwargs.radius = sweep_config['dataset.spatial_neigbors_kwargs.radius']
+            #cfg.dataset.spatial_neigbors_kwargs.radius = sweep_config['dataset.spatial_neigbors_kwargs.radius']
             cfg.optim.seed = sweep_config['optim.seed']
         elif sweep_goal == 'segmentation':
             print('segmentation sweep')
