@@ -136,17 +136,18 @@ class CombinedModel(NodeMaskingTrainingPlan,
                 local_embedding = local_out
                 self._current_local_latent_params = None
             if self._cfg.model.decoder.dual_decoder is True:
-                mask_idx = torch.arange(local_embedding.size(0), device=local_embedding.device)
                 batch_ptr = batch.ptr if self.prediction_level == "graph" else None
                 y_pred_local = self.module.predict_local(
                     local_embedding,
                     prediction_level=self.prediction_level,
                     batch_ptr=batch_ptr,
                 )
-                y_pred_local_df.loc[sample_mask_local] = y_pred_local.detach().cpu().numpy()
 
             sample_mask_local = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
             local_embeddings_df.loc[sample_mask_local] = local_embedding.detach().cpu().numpy()
+
+            if self._cfg.model.decoder.dual_decoder is True:
+                y_pred_local_df.loc[sample_mask_local] = y_pred_local.detach().cpu().numpy()
                 
             transformer_in, global_embedding, src_padding_mask, pad_index_nodes, I = self.module.global_module.evaluate(batch, local_embedding)
             # no masking during evaluation
