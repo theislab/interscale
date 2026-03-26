@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -p lrz-hgx-h100-94x4
+#SBATCH -p lrz-v100x2
 #SBATCH --nodes=1
 #SBATCH --gres=gpu:1
 #SBATCH --output=/dev/null
@@ -21,7 +21,7 @@ export WANDB_API_KEY="45b9c9a439c12187aa03a740a0cacad57dcf958f"
 DEFAULT_CONFIG_ICB="/home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/"
 DEFAULT_CONFIG_LRZ="/dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches/src/config_files/"
 
-COSMX_PANCREAS_CONFIG="melton25/clas_node_DualCombined.yaml"
+COSMX_PANCREAS_CONFIG="Cosmx_pancreas/clas_graph.yaml"
 
 echo "Current working directory: $(pwd)"
 ls -l /dss/dssfs03/tumdss/pn36po/pn36po-dss-0002/di93tig/Projects/A3_InterScale/data/schuerch20.h5ad
@@ -39,7 +39,7 @@ srun -N1 --ntasks-per-node=1 \
 	          --container-image='/dss/dssfs03/tumdss/pn36po/pn36po-dss-0002/di93tig/custom-enroot-image/InterScale.sqsh' \
 		       python src/InterScale/main_sweep.py \
 		            --cfg "${DEFAULT_CONFIG_LRZ}${COSMX_PANCREAS_CONFIG}" \
-			         --sweep_cfg "${DEFAULT_CONFIG_LRZ}melton25/sweep/hyperparameter.yaml" \
+			         --sweep_cfg "${DEFAULT_CONFIG_LRZ}Cosmx_pancreas/sweep/hyperparameter.yaml" \
 				      --model_type "CombinedModel" \
 				           --sweep_goal hyperparameter \
 					        --prediction_task classification

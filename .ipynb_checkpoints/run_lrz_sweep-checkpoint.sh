@@ -6,6 +6,7 @@
 #SBATCH --error=/dev/null
 #SBATCH -J InterScale
 #SBATCH --time=24:00:00
+#SBATCH --mem=200GB
 
 # Shell logic
 TIMESTAMP=$(date +%Y-%m-%d_%H-%M-%S)
@@ -21,25 +22,28 @@ export WANDB_API_KEY="45b9c9a439c12187aa03a740a0cacad57dcf958f"
 DEFAULT_CONFIG_ICB="/home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/"
 DEFAULT_CONFIG_LRZ="/dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches/src/config_files/"
 
-COSMX_PANCREAS_CONFIG="melton25/clas_node_DualCombined.yaml"
+SWEEP="Chen22/sweep/robustness.yaml"
+
+LEGNINI_CONFIG="Legnini_23/legnini23_graph_sample_LocalModel_gnn.yaml"
+SCHUERCH_CONFIG="Schuerch20/schuerch20_graph_sample_GlobalModel.yaml"
+SCHUERCH_SWEEP="Schuerch20/schurch20_hyperparam_sweep.yaml"
+CHEN_CONFIG="Chen22/class_node_Combined.yaml"
+
 
 echo "Current working directory: $(pwd)"
 ls -l /dss/dssfs03/tumdss/pn36po/pn36po-dss-0002/di93tig/Projects/A3_InterScale/data/schuerch20.h5ad
 ls -ld /dss/dssfs03/tumdss/pn36po/pn36po-dss-0002/di93tig/Projects/A3_InterScale/data
 
-# Memory monitoring
-echo "=== System Memory Info ==="
-free -h
-echo "SLURM_MEM_PER_NODE: $SLURM_MEM_PER_NODE"
-echo "SLURM_MEM_PER_CPU: $SLURM_MEM_PER_CPU"
-echo "=========================="
-
 srun -N1 --ntasks-per-node=1 \
 	     --container-mounts=/dss/dsshome1/05/di93tig/1_projects/GT-long-range-niches:/workspace,/dss/dssfs03:/dss/dssfs03 \
 	          --container-image='/dss/dssfs03/tumdss/pn36po/pn36po-dss-0002/di93tig/custom-enroot-image/InterScale.sqsh' \
 		       python src/InterScale/main_sweep.py \
-		            --cfg "${DEFAULT_CONFIG_LRZ}${COSMX_PANCREAS_CONFIG}" \
-			         --sweep_cfg "${DEFAULT_CONFIG_LRZ}melton25/sweep/hyperparameter.yaml" \
+		            --cfg "${DEFAULT_CONFIG_LRZ}${CHEN_CONFIG}" \
+			         --sweep_cfg "${DEFAULT_CONFIG_LRZ}${SWEEP}" \
 				      --model_type "CombinedModel" \
-				           --sweep_goal hyperparameter \
+				           --sweep_goal robustness \
 					        --prediction_task classification
+
+
+# # srun necessary for running lightning on SLURM
+# python src/InterScale/main.py --cfg "$DEFAULT_CONFIG_LRZ$LEGNINI_CONFIG"

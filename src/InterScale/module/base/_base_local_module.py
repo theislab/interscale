@@ -1,7 +1,7 @@
 from InterScale.module.base._base_module import BaseModuleClass
 from abc import abstractmethod
 from typing import Literal
-from InterScale.tl import apply_mask
+from InterScale.tl import apply_mask, aggregate_node_embeddings_to_graph, aggregate_node_values_to_graph
 from scvi.nn import Encoder
 import torch.nn as nn
 
@@ -22,15 +22,29 @@ class LocalModuleClass(BaseModuleClass):
             
     def predict(self,
                 local_embedding,
-                prediction_level: Literal["node", "graph"] | None = None):
+                prediction_level: Literal["node", "graph"] | None = None,
+                batch_ptr: torch.Tensor | None = None):
         """Predict with the decoder.
-        
+
         Parameters
         ----------
-        local_embedding: torch.Tensor
+        local_embedding : torch.Tensor
             Size: [N, E]
-        prediction_level: Literal["node", "graph"]
-        """ 
+        prediction_level : "node" | "graph" | None
+            If "graph", return one prediction per graph [B, C]; requires batch_ptr.
+        batch_ptr : torch.Tensor, optional
+            Batch.ptr from PyG Batch. Required when prediction_level == "graph".
+
+        Returns
+        -------
+        torch.Tensor
+            [N, C] for node-level, [B, C] for graph-level.
+        """
+        if prediction_level == "graph":
+            if batch_ptr is None:
+                raise ValueError("batch_ptr is required for graph-level prediction")
+            graph_emb = aggregate_node_embeddings_to_graph(local_embedding, batch_ptr, reduce="mean")
+            return self.decoder.forward(graph_emb)
         return self.decoder.forward(local_embedding)
         
     def _common_step(self,
@@ -38,41 +52,47 @@ class LocalModuleClass(BaseModuleClass):
                      prediction_task: str,
                      prediction_level: Literal["node", "graph"]):
         """Shared step between train, val and test.
-        
+
         Returns
         -------
-        local_embedding: torch.Tensor 
+        local_embedding : torch.Tensor
             Size: [N, E]
-        global_embedding: torch.Tensor 
-            Size: [N, E]
-        y_pred: torch.Tensor 
-            Size: [B, C] (classification) or [B, F] (regression)
-        y_true: torch.Tensor 
-            Size: [B, ] (classification) or [B, F] (regression)
+        global_embedding : None
+        y_pred : torch.Tensor
+            Size: [B, C] for graph-level, [N_masked, C] for node-level.
+        y_true : torch.Tensor
+            Same shape as y_pred.
         """
-        # Mask nodes 
         batch_masked, mask_idx = self._common_step_masking(batch)
-        
         local_embedding = self.forward(batch_masked.x, batch_masked.edge_index)
-        y_pred = self.decoder.forward(local_embedding)
-        
-        assert y_pred.shape[0] == len(batch.obs_names), f"Mismatch: y_pred.shape: {y_pred.shape[0]}, batch.obs_names: {len(batch.obs_names)}"
-        assert y_pred.shape[1] == self.n_output, f"Mismatch: y_pred.shape: {y_pred.shape[1]}, self.n_output: {self.n_output}"
-        assert y_pred.isnan().sum() == 0, "y_pred contains NaN values"
-        
-        y_pred = y_pred[mask_idx]
-        
-        if 'classification' in prediction_task:
-            y_true = batch.y[mask_idx] # batch without mask because constant otherwise
-            assert y_true.shape == y_pred.shape
+
+        if prediction_level == "graph":
+            y_true = aggregate_node_values_to_graph(batch.y, batch.ptr, reduce="mean")
+            y_pred = self.predict(local_embedding, prediction_level="graph", batch_ptr=batch.ptr)
+            assert y_pred.shape == y_true.shape
+            assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
+            assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
             return local_embedding, None, y_pred, y_true, None
-            
-        if 'regression' in prediction_task:
-            y_true = batch.x[mask_idx] # batch without mask because constant otherwise
-            assert y_true.shape == y_pred.shape
-            return local_embedding, None, y_pred, y_true, None
-            
-        assert False, "Prediction task not supported"
+
+        # Node-level
+        elif prediction_level == "node":
+            y_pred = self.decoder.forward(local_embedding)
+            assert y_pred.shape[0] == len(batch.obs_names), f"Mismatch: y_pred.shape: {y_pred.shape[0]}, batch.obs_names: {len(batch.obs_names)}"
+            assert y_pred.shape[1] == self.n_output, f"Mismatch: y_pred.shape: {y_pred.shape[1]}, self.n_output: {self.n_output}"
+            assert y_pred.isnan().sum() == 0, "y_pred contains NaN values"
+            y_pred = y_pred[mask_idx]
+
+            if "classification" in prediction_task:
+                y_true = batch.y[mask_idx]
+                assert y_true.shape == y_pred.shape
+                return local_embedding, None, y_pred, y_true, None
+            if "regression" in prediction_task:
+                y_true = batch.x[mask_idx]
+                assert y_true.shape == y_pred.shape
+                return local_embedding, None, y_pred, y_true, None
+            raise ValueError("Prediction task not supported")
+        
+        raise ValueError(f"Invalid prediction level: {prediction_level}")
         
     
     def get_local_embeddings(self, x, edge_index):

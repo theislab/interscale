@@ -1,5 +1,4 @@
 from os.path import dirname, basename, isfile, join
-import yaml
 from yacs.config import CfgNode as CN
 import glob
 from .wandb_config import get_wandb_cfg
@@ -8,6 +7,7 @@ from .dataset_config import get_dataset_cfg
 from .model_config import get_model_cfg
 from .optim_config import get_optim_cfg
 from .global_component_config import get_global_component_cfg
+import yaml
 
 # TODO: load all configs from folder automatically instead of manual definition
 # modules = glob.glob(join(dirname(__file__), "*.py"))
@@ -70,7 +70,6 @@ def load_config(cfg_path=None):
     
     cfg.freeze()
     return cfg
-
 
 def _wandb_config_to_nested_dict(config):
     """Convert WandB run config to nested dict. Handles both dotted keys and nested dicts."""
@@ -195,24 +194,3 @@ def config_from_wandb_run(run, save_yaml_path=None):
         with open(save_yaml_path, "w") as f:
             _dump_cfg_yaml(cfg, f)
     return cfg
-
-
-def load_config_from_yaml(cfg_path):
-    """Load config from a YAML file with all InterScale config variables applied.
-
-    Uses defaults from InterScale/config (wandb, model, optim, dataset) and
-    local/global component configs based on model type in the YAML, then merges
-    the file. Use this (or load_config) when training with a config exported from
-    a WandB sweep.
-
-    Parameters
-    ----------
-    cfg_path : str
-        Path to the YAML config file.
-
-    Returns
-    -------
-    CN
-        Configuration object.
-    """
-    return load_config(cfg_path)

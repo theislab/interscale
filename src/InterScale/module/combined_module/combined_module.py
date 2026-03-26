@@ -56,7 +56,7 @@ class CombinedModuleClass(BaseModuleClass):
     def predict_local(self,
                       local_embedding):
         """Predict with the decoder."""
-        raise Exception("For CombinedModel the local module does not have a decoder")
+        raise Exception("For CombinedModel the local module does not have a dexcoder")
         
     def predict_global(self,
                 global_embedding,

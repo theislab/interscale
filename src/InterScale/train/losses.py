@@ -138,6 +138,7 @@ class SCELoss(torch.nn.Module):
 
         loss = loss.mean()
         return loss
+        
 class SCE_EntropyATT_Loss(torch.nn.Module):
     
     def __init__(self, alpha=3, beta=1, use_last_layer_only=True):

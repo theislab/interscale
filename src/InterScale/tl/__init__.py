@@ -6,8 +6,9 @@ from .self_attn_relevance import SelfAttentionRelevance
 from .masking import apply_mask, create_transformer_attention_mask_from_edges, attn_mask_diagonal
 from ._preprocessing import remove_zero_expression_cells
 from .patient_split import split_adata_patient_stratified
+from .graph_aggregation import aggregate_node_embeddings_to_graph, aggregate_node_values_to_graph
 
-__all__ = ["CosineWarmupScheduler", 
+__all__ = ["CosineWarmupScheduler",
            "prepare_geome_dataset",
            "prepare_a2d_dataset",
            "pad_batch",
@@ -17,5 +18,7 @@ __all__ = ["CosineWarmupScheduler",
            "apply_mask",
            "create_transformer_attention_mask_from_edges",
            "attn_mask_diagonal",
-           "remove_zero_expression_cells", 
-           "split_adata_patient_stratified"]
+           "remove_zero_expression_cells",
+           "split_adata_patient_stratified",
+           "aggregate_node_embeddings_to_graph",
+           "aggregate_node_values_to_graph"]

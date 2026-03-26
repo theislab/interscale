@@ -10,7 +10,6 @@
 #SBATCH --qos=cpu_normal
 #SBATCH --nice=10000
 
-source activate GT_long_range_env
 
 # Default config path
 DEFAULT_CONFIG_ICB="/home/icb/francesca.drummer/1-Projects/GT-long-range-niches/src/config_files/"

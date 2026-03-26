@@ -11,6 +11,29 @@ import yaml
 import psutil
 import os
 
+def cleanup_cuda(model=None, dm=None, adata=None, pyg_data_list=None):
+    """Force cleanup of CUDA memory and large Python objects between runs."""
+    try:
+        import gc
+        import torch
+
+        if model is not None:
+            del model
+        if dm is not None:
+            del dm
+        if adata is not None:
+            del adata
+        if pyg_data_list is not None:
+            del pyg_data_list
+
+        gc.collect()
+
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+    except Exception as e:
+        print(f"CUDA cleanup failed: {e}")
+
 def print_memory_usage(stage=""):
     """Print current memory usage for both CPU and GPU"""
     process = psutil.Process(os.getpid())
@@ -84,7 +107,7 @@ def main_sweep(cfg_path, model_type, sweep_goal):
         if sweep_goal == 'robustness':
             print('robustness sweep')
             cfg.dataset.pct_mask_nodes = sweep_config['dataset.pct_mask_nodes']
-            cfg.dataset.spatial_neigbors_kwargs.radius = sweep_config['dataset.spatial_neigbors_kwargs.radius']
+            #cfg.dataset.spatial_neigbors_kwargs.radius = sweep_config['dataset.spatial_neigbors_kwargs.radius']
             cfg.optim.seed = sweep_config['optim.seed']
         elif sweep_goal == 'segmentation':
             print('segmentation sweep')
@@ -97,6 +120,8 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             cfg.optim.wd = sweep_config['optim.wd']
             cfg.dataset.batch_size = sweep_config['dataset.batch_size']
             cfg.dataset.pct_mask_nodes = sweep_config['dataset.pct_mask_nodes']
+            cfg.dataset.split_key = sweep_config['dataset.split_key']
+            cfg.dataset.sample_key = sweep_config['dataset.sample_key']
             cfg.model.n_embed = sweep_config['model.n_embed']
             if model_type == 'LocalModel' or model_type == 'CombinedModel':
                 print('LocalModel configs')
@@ -187,6 +212,12 @@ def main_sweep(cfg_path, model_type, sweep_goal):
     model.train(max_epochs = cfg.optim.n_epochs,
                 datamodule = dm,
                 early_stopping = cfg.optim.early_stopping)
+    if cfg.wandb.use:
+        try:
+            wandb.finish()
+        except Exception as e:
+            print(f"wandb.finish() failed: {e}")
+    cleanup_cuda(model=model, dm=dm, adata=adata, pyg_data_list=pyg_data_list)
    
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='GTLongRange')

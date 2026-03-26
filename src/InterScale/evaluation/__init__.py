@@ -14,4 +14,5 @@ __all__ = [
     "gene_rank_condition_comparison",
     "calculate_pr_auc",
     "scale_cls_by_sample",
+    "Wandb_evaluation",
 ]
