@@ -5,9 +5,9 @@ requires = ["hatchling"]
 [project]
 name = "graph-transformer-long-range-niches"
 version = "0.0.1"
-description = "graph transformer for non-homogeneous niches at long-range prediction"
+description = "InterScale: Towards understanding long-range interactions in spatial transcriptomics"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.13"
 license = {file = "LICENSE"}
 authors = [
     {name = "Francesca Drummer"},
@@ -15,16 +15,46 @@ authors = [
 maintainers = [
     {name = "Francesca Drummer", email = "Francesca.Drummer@helmholtz-munich.de"},
 ]
-urls.Documentation = "https://graph-transformer-long-range-niches.readthedocs.io/"
-urls.Source = "https://github.com/theislab/GT-long-range-niches"
-urls.Home-page = "https://github.com/theislab/GT-long-range-niches"
+urls.Documentation = "https://interscale.readthedocs.io/"
+urls.Source = "https://github.com/theislab/interscale"
+urls.Home-page = "https://github.com/theislab/interscale"
 dependencies = [
-    "anndata",
-    # for debug logging (referenced from the issue template)
-    "session-info",
+    "torch>=2.0.0",
+    "torch-geometric>=2.5.0",
+    "pytorch-lightning>=2.0.0",
+    "wandb>=0.15.0",
+    "yacs>=0.1.8",
+    "scvi-tools>=1.1.0",
+    "geome @ git+https://github.com/theislab/geome.git@main",
+    "pandas>=1.5.0",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+    "matplotlib>=3.7.0",
+    "seaborn>=0.12.0",
+    "scanpy>=1.9.0",
+    "squidpy>=1.3.0",
+    "anndata>=0.9.0",
 ]
 
+# Optional dependencies for development, docs, GPU support, etc.
 [project.optional-dependencies]
+torch-scatter = ["torch-scatter", "torch-sparse", "torch-cluster"]
+gpu = [
+    "torch>=2.0.0,!=2.0.1",  # CUDA compatible version
+    "torch-geometric[torch-scatter,torch-sparse,torch-cluster]>=2.5.0",
+]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "black>=23.0.0",
+    "ruff>=0.0.100",
+    "mypy>=1.4.0",
+]
+docs = [
+    "sphinx>=7.0.0",
+    "sphinx-rtd-theme>=1.3.0",
+    "sphinx-autodoc-typehints>=1.23.0",
+]
 wandb-workspaces = [
     "wandb-workspaces",
 ]
@@ -52,7 +82,7 @@ test = [
 ]
 
 [tool.coverage.run]
-source = ["graph_transformer_long_range_niches"]
+source = ["interscale"]
 omit = [
     "**/test_*.py",
 ]
