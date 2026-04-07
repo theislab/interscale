@@ -28,3 +28,4 @@ src/graph_transformer_long_range_niches/logs/
 src/graph_transformer_long_range_niches/model/__pycache__/
 src/graph_transformer_long_range_niches/tl/__pycache__/ 
 src/graph_transformer_long_range_niches/modules/__pycache__/
+CLAUDE.md
