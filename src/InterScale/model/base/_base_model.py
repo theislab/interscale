@@ -587,7 +587,14 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         print(f"Loading model from {model_save_path}")
         
         # Determine map_location based on CUDA availability
-        map_location = 'cpu' if cfg.optim.accelerator == 'cpu' else None
+        #map_location = 'cpu' if cfg.optim.accelerator == 'cpu' else None
+
+        # Always force CPU when CUDA is unavailable
+        if torch.cuda.is_available():
+            map_location = None          # load to GPU as usual
+        else:
+            map_location = torch.device('cpu')
+
         
         if os.path.exists(model_save_path):
             state_dict = torch.load(model_save_path, map_location=map_location)[SAVE_KEYS.MODEL_STATE_DICT_KEY]

@@ -170,8 +170,8 @@ def spatial_covariance_plot(
     """
     int_length = str(int_length).lower()
     key_map = {
-        "local":  {"varm_key": "_local_gene_loadings",  "obsm_key": "_local_emb",  "title_tag": "Local Emb"},
-        "global": {"varm_key": "_global_gene_loadings", "obsm_key": "_global_emb", "title_tag": "Global Emb"},
+        "local":  {"varm_key": "_local_std_gene_loadings",  "obsm_key": "_local_emb",  "title_tag": "Local Emb"},
+        "global": {"varm_key": "_global_std_gene_loadings", "obsm_key": "_global_emb", "title_tag": "Global Emb"},
     }
     if int_length not in key_map:
         raise ValueError("int_length must be 'local' or 'global'.")
