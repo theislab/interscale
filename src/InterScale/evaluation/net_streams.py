@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 import pandas as pd
 import squidpy as sq
+import seaborn as sns
 from matplotlib.colors import to_rgb, to_hex, rgb_to_hsv, hsv_to_rgb
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
@@ -15,6 +16,8 @@ def plot_all_spatial_net_streams(
 	k_dist=0.05, density=1.5, ax=None,
 	additional_embeddings=None,
 	return_streams=False,
+	cell_list=None,
+	inter_only=False,
 	**kwargs
 ):
 	# 1. Prepare FOV slice
@@ -23,8 +26,12 @@ def plot_all_spatial_net_streams(
 	
 	# Extract color mapping for all categories
 	categories = list(adata.obs[cell_type_col].cat.categories)
+	if cell_list is not None:
+		categories = [cat for cat in categories if cat in cell_list]
 	if f'{cell_type_col}_colors' in adata.uns:
 		colors = list(adata.uns[f'{cell_type_col}_colors'])
+		if cell_list is not None:
+			colors = [color for cat, color in zip(adata.obs[cell_type_col].cat.categories, colors) if cat in cell_list]
 		color_map = dict(zip(categories, colors))
 	else:
 		import matplotlib.cm as cm
@@ -59,9 +66,20 @@ def plot_all_spatial_net_streams(
 	for win in windows:
 		win_mask = adata_slice.obs[window_key] == win
 		adata_win = adata_slice[win_mask]
+
+		# --- NEW FILTER FOR CELL_LIST ---
+		# If cell_list is provided, keep only those cells in the current window
+		if cell_list is not None:
+			cell_mask = adata_win.obs[cell_type_col].isin(cell_list)
+			adata_win = adata_win[cell_mask].copy()
+		# --------------------------------
 		n_win = len(adata_win.obs)
 		if n_win < 2: continue
 		
+
+
+
+
 		# Matrix of all-vs-all attention in the window
 		M = pd.DataFrame(
 			adata_win.obsm['_attn_matrix'][:, :n_win],
@@ -69,6 +87,18 @@ def plot_all_spatial_net_streams(
 			columns=adata_win.obs_names
 		)
 		M_net = M - M.T  # Net flow between all cells
+
+		if inter_only:
+			# Create a mask where row type != column type
+			# Reshape types to compare every pair
+			types = adata_win.obs[cell_type_col].astype(str).values
+			type_matrix = types[:, None] != types[None, :]
+			M_net_values = M_net.values
+			M_net_values[~type_matrix] = 0
+			# Apply mask to M_net: set same-type interactions to 0
+
+			M_net = pd.DataFrame(M_net_values, index=M_net.index, columns=M_net.columns)
+
 
 		max_net_flow = np.max(np.abs(M_net.values))
 
@@ -81,7 +111,7 @@ def plot_all_spatial_net_streams(
 		for j, cell_j_name in enumerate(adata_win.obs_names):
 			s_coord = pos_win[j]
 			cell_type = types_win[j]
-			
+			if cell_type not in categories: continue
 			# Identify flows incoming to cell j
 			net_flows = M_net.iloc[:, j].values
 			positive_flows = np.maximum(net_flows, 0)
@@ -163,10 +193,10 @@ def plot_all_spatial_net_streams(
 			)
 			
 			#Re-attach the old Squidpy legend (center right outside)
-			if old_legend is not None:
-				#old_legend.set_bbox_to_anchor((0.5, 0.5))
-				old_legend.set_loc('best')
-				ax.add_artist(old_legend)
+			# if old_legend is not None:
+			# 	#old_legend.set_bbox_to_anchor((0.5, 0.5))
+			# 	old_legend.set_loc('best')
+			# 	ax.add_artist(old_legend)
 			
 		# 	# Force Matplotlib to calculate layout to fit the external legends
 		# 	#ax.figure.tight_layout()
@@ -343,4 +373,142 @@ def map_clusters_to_cells(cluster_grid, X_lin, Y_lin, adata, fov_id, fov_key='fo
 	adata_slice.obs[cluster_key] = [f"Domain_{int(i)}" for i in cell_clusters]
 	adata_slice.obs[cluster_key] = adata_slice.obs[cluster_key].astype('category')
 
-	return adata_slice.obs[cluster_key].values						
+	return adata_slice.obs[cluster_key].values
+
+
+def compute_hierarchical_net_flow(
+	adata, 
+	window_key='sliding_window_assignment', 
+	sample_key='fov', 
+	condition_key=None, 
+	cell_type_col='cell_type_coarse',
+	compute_net=True
+):
+	"""
+	Computes net flow across hierarchy: Windows -> Samples -> Conditions.
+	If condition_key is None, aggregates all samples into 'all_samples'.
+	"""
+	cell_types = sorted(adata.obs[cell_type_col].unique())
+	windows = adata.obs[window_key].unique()
+	
+	# --- 1. Window Level Flow Calculation ---
+	window_results = {}
+	for win in windows:
+		sub = adata[adata.obs[window_key] == win]
+		n_win = len(sub.obs)
+		
+		# Get attention matrix for current window
+		M = pd.DataFrame(
+			sub.obsm['_attn_matrix'][:, :n_win],
+			index=sub.obs_names, columns=sub.obs_names
+		)
+		
+		agg_matrix = pd.DataFrame(0.0, index=cell_types, columns=cell_types)
+		for ct_s in cell_types:
+			idx_s = sub.obs_names[sub.obs[cell_type_col] == ct_s]
+			if len(idx_s) == 0: continue
+			for ct_r in cell_types:
+				idx_r = sub.obs_names[sub.obs[cell_type_col] == ct_r]
+				if len(idx_r) == 0: continue
+				
+				# Interaction density: mean value per pair
+				agg_matrix.loc[ct_s, ct_r] = M.loc[idx_s, idx_r].values.mean()
+		
+		if compute_net:
+			# Compute net flow (A->B - B->A) ((change sign to consider information as opposite of attention))
+			net_matrix = agg_matrix.T - agg_matrix
+		else:
+			net_matrix = agg_matrix.T
+			for ct_r in cell_types:
+				net_matrix.loc[ct_r,ct_r]=0
+		max_net_flow = np.max(np.abs(net_matrix.values))
+
+		if max_net_flow > 0:
+			net_matrix = net_matrix / max_net_flow
+
+		window_results[win] = net_matrix
+
+	# --- 2. Sample Level Aggregation ---
+	sample_net_flows = {}
+	sample_to_wins = adata.obs.groupby(sample_key)[window_key].unique()
+	
+	for s, win_ids in sample_to_wins.items():
+		flows = [window_results[w].values for w in win_ids if w in window_results]
+		if flows:
+			sample_net_flows[s] = pd.DataFrame(
+				np.nanmean(np.stack(flows), axis=0),
+				index=cell_types, columns=cell_types
+			)
+
+	# --- 3. Condition Level Aggregation ---
+	final_results = {}
+	if condition_key is not None:
+		sample_to_cond = adata.obs.groupby(sample_key)[condition_key].first()
+		for cond in adata.obs[condition_key].unique():
+			relevant_samples = sample_to_cond[sample_to_cond == cond].index
+			flows = [sample_net_flows[s].values for s in relevant_samples if s in sample_net_flows]
+			if flows:
+				stacked = np.stack(flows)
+				final_results[cond] = {
+					'mean': pd.DataFrame(np.nanmean(stacked, axis=0), index=cell_types, columns=cell_types),
+					'std': pd.DataFrame(np.nanstd(stacked, axis=0), index=cell_types, columns=cell_types)
+				}
+	else:
+		# Aggregate everything if no condition is provided
+		flows = [df.values for df in sample_net_flows.values()]
+		if flows:
+			stacked = np.stack(flows)
+			final_results['all_samples'] = {
+				'mean': pd.DataFrame(np.nanmean(stacked, axis=0), index=cell_types, columns=cell_types),
+				'std': pd.DataFrame(np.nanstd(stacked, axis=0), index=cell_types, columns=cell_types)
+			}
+
+	return final_results
+
+
+def plot_global_directionality(mean_df, std_df, only_positive=True,title="Net Flow",figsize=(8, 6)):
+	# 1. Melt the data
+	plot_data = mean_df.reset_index().melt(id_vars='index')
+	plot_data.columns = ['Sender', 'Receiver', 'Flow']
+	
+	# 2. Define and Enforce the same order for both axes
+	categories = sorted(mean_df.index.unique())
+	
+	# Convert to Categorical with a fixed list of categories
+	plot_data['Sender'] = pd.Categorical(plot_data['Sender'], categories=categories)
+	plot_data['Receiver'] = pd.Categorical(plot_data['Receiver'], categories=categories)
+	
+	# 3. Calculate Consistency
+	std_flat = std_df.values.flatten()
+	plot_data['Consistency'] = 1 / (std_flat + 1e-9) 
+	
+	# Filter only positive flows
+	if only_positive:
+		plot_data = plot_data[plot_data['Flow'] > 0]
+	else:
+		plot_data = plot_data[plot_data['Flow'].abs() > 0]
+	
+	# 4. Plotting
+	plt.figure(figsize=figsize)
+	
+	# Now Seaborn will use the categorical order automatically
+	sns.scatterplot(
+		data=plot_data, 
+		x='Receiver', 
+		y='Sender', 
+		size='Consistency', 
+		hue='Flow', 
+		palette='YlOrRd' if only_positive else 'coolwarm', 
+		sizes=(20, 500)
+	)
+	
+	# Force axes to show all categories in the right order
+	plt.xticks(ticks=range(len(categories)), labels=categories, rotation=45)
+	plt.yticks(ticks=range(len(categories)), labels=categories)
+	
+	# Move legend outside
+	plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+	
+	plt.title(title)
+	plt.tight_layout()
+	plt.show()
