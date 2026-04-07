@@ -3,28 +3,49 @@ build-backend = "hatchling.build"
 requires = ["hatchling"]
 
 [project]
-name = "graph-transformer-long-range-niches"
-version = "0.0.1"
-description = "graph transformer for non-homogeneous niches at long-range prediction"
+name = "interscale"
+version = "0.1.0"
+description = "Computational model for intercellular interaction analysis in spatial transcriptomics across length-scales"
 readme = "README.md"
 requires-python = ">=3.9"
 license = {file = "LICENSE"}
 authors = [
     {name = "Francesca Drummer"},
+    {name = "Sara Jimenez"},
 ]
 maintainers = [
     {name = "Francesca Drummer", email = "Francesca.Drummer@helmholtz-munich.de"},
+    {name = "Sara Jimenez", email = "sara.jimenez@helmholtz-munich.de"},
 ]
-urls.Documentation = "https://graph-transformer-long-range-niches.readthedocs.io/"
-urls.Source = "https://github.com/theislab/GT-long-range-niches"
-urls.Home-page = "https://github.com/theislab/GT-long-range-niches"
+urls.Documentation = "https://interscale.readthedocs.io/"
+urls.Source = "https://github.com/theislab/interscale"
+urls.Home-page = "https://github.com/theislab/interscale"
 dependencies = [
     "anndata",
+    "numpy>=1.19.0,<2.0.0",
+    "pandas",
+    "scipy>=1.7.0",
+    "scikit-learn",
+    "scanpy",
+    "squidpy",
+    "torch>=2.0.0",
+    "torch-geometric>=2.0.0",
+    "lightning>=2.0.0",
+    "torchmetrics>=1.8.0",
+    "wandb",
+    "yacs",
+    "scvi-tools>=0.19.0",
+    "geome",
     # for debug logging (referenced from the issue template)
     "session-info",
 ]
 
 [project.optional-dependencies]
+pyg = [
+    "torch-scatter",
+    "torch-sparse",
+    "torch-cluster",
+]
 dev = [
     "pre-commit",
     "twine>=4.0.2",
@@ -49,7 +70,7 @@ test = [
 ]
 
 [tool.coverage.run]
-source = ["graph_transformer_long_range_niches"]
+source = ["InterScale"]
 omit = [
     "**/test_*.py",
 ]

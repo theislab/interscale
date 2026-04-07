@@ -63,7 +63,7 @@ uv pip install torch-scatter torch-sparse torch-cluster \
 uv pip install torch-geometric pytorch-lightning wandb yacs scvi-tools
 
 # geome from GitHub
-uv pip install git+https://github.com/theislab/geome.git@main
+uv pip install geome
 
 # Your package in editable mode; make sure to be in the InterScale folder to install all depdendencies correctly
 uv pip install -e .
