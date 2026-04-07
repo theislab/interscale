@@ -45,6 +45,30 @@ pip install graph-transformer-long-range-niches
 
 ### With GPU support
 
+#### `uv` set up (recommended)
+
+```bash
+# Create a virtual environment with Python 3.13
+uv venv .interscale --python 3.13
+source .interscale/bin/activate
+
+# Install PyTorch (CPU/MPS build for macOS)
+uv pip install torch torchvision torchaudio
+
+# PyG extensions — use the CPU wheel index
+uv pip install torch-scatter torch-sparse torch-cluster \
+  -f https://data.pyg.org/whl/torch-2.10.0+cpu.html
+
+# Core dependencies
+uv pip install torch-geometric pytorch-lightning wandb yacs scvi-tools
+
+# geome from GitHub
+uv pip install git+https://github.com/theislab/geome.git@main
+
+# Your package in editable mode; make sure to be in the InterScale folder to install all depdendencies correctly
+uv pip install -e .
+```
+
 #### Conda/Mamba set up
 
 ```bash

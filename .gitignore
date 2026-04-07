@@ -12,6 +12,7 @@ __pycache__/
 *.txt
 *.pyc
 *.cpython-310
+*.sh
 
 # ignore ALL files in ANY directory named 
 figures/
