@@ -38,7 +38,8 @@ def predict_gene_r2(adata: AnnData, layers_pred: str, top_n: int = 5) -> pd.Data
         else:
             r2 = np.nan  # Not enough data to compute R²
         r2_scores.append(r2)
-    r2_scores_log = [np.log(r2 + 1) for r2 in r2_scores if not np.isnan(r2)]
+    #r2_scores_log = [np.log(r2 + 1) for r2 in r2_scores if not np.isnan(r2)]
+    r2_scores_log = [np.log1p(r2) if not np.isnan(r2) else np.nan for r2 in r2_scores]
     r2_ranked = rankdata(r2_scores, method="average")
     
     # Convert to DataFrame for easy sorting
