@@ -23,9 +23,9 @@ artifacts/
 results/
 src/confi_files/
 InterScale_hyperparameter_sweep/
-src/graph_transformer_long_range_niches/tmp/
-src/graph_transformer_long_range_niches/logs/
-src/graph_transformer_long_range_niches/model/__pycache__/
-src/graph_transformer_long_range_niches/tl/__pycache__/
-src/graph_transformer_long_range_niches/modules/__pycache__/
+src/interscale/tmp/
+src/interscale/logs/
+src/interscale/model/__pycache__/
+src/interscale/tl/__pycache__/
+src/interscale/modules/__pycache__/
 CLAUDE.md
