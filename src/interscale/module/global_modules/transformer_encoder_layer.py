@@ -4,7 +4,7 @@ from torch import Tensor
 from torch.nn import functional as F
 from torch.nn.modules import TransformerEncoderLayer
 
-from InterScale.module.global_modules.transformer_utils import MultiHeadAttentionWithEdits
+from interscale.module.global_modules.transformer_utils import MultiHeadAttentionWithEdits
 
 
 class CustomTransformerEncoderLayer(TransformerEncoderLayer):

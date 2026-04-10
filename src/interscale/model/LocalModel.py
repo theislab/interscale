@@ -4,10 +4,10 @@ import torch
 from anndata import AnnData
 from yacs.config import CfgNode as CN
 
-from InterScale.model.base._base_model import BaseModel
-from InterScale.module.base import LocalModule
-from InterScale.tl.geome_utils import prepare_a2d_dataset
-from InterScale.train._training import NodeMaskingTrainingPlan
+from interscale.model.base._base_model import BaseModel
+from interscale.module.base import LocalModule
+from interscale.tl.geome_utils import prepare_a2d_dataset
+from interscale.train._training import NodeMaskingTrainingPlan
 
 
 class LocalModel(NodeMaskingTrainingPlan, BaseModel):
@@ -65,10 +65,6 @@ class LocalModel(NodeMaskingTrainingPlan, BaseModel):
 
         # Create empty DataFrame with correct shape
         local_embeddings_df = pd.DataFrame(index=obs_names_str, columns=range(self.n_embed), dtype=np.float32)
-        # decoder_weight_df = pd.DataFrame(
-        #     index=obs_names_str,
-        #     columns=range(self.n_output)
-        # )
         y_pred_df = pd.DataFrame(index=obs_names_str, columns=range(self.n_output), dtype=np.float32)
 
         for batch in pyg:
@@ -77,12 +73,6 @@ class LocalModel(NodeMaskingTrainingPlan, BaseModel):
             sample_mask = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
             # Fill embeddings directly into the DataFrame
             local_embeddings_df.loc[sample_mask] = local_embedding.detach().cpu().numpy()
-
-            # if self.module.decoder_type == 'linear':
-            #     W = self.module.decoder.decoder.weight
-            #     #contribution = torch.matmul(local_embedding, torch.transpose(W, 0, 1))
-            #     #decoder_weight_df.loc[sample_mask] = contribution.detach().cpu().numpy()
-            #     decoder_weight_df.loc[sample_mask] = W.detach().cpu().numpy()
 
             y_pred = self.module.predict(local_embedding, self.prediction_level)
             y_pred_df.loc[sample_mask] = y_pred.detach().cpu().numpy()

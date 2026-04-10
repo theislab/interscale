@@ -17,10 +17,10 @@ from scvi.data._utils import _assign_adata_uuid, _check_if_view
 from sklearn.utils.class_weight import compute_class_weight
 from yacs.config import CfgNode as CN
 
-from InterScale.module.base import GlobalModule, LocalModule
-from InterScale.module.global_modules import TransformerNodeEncoderHook
-from InterScale.module.local_modules import GCN
-from InterScale.tl.utils import get_model_filename_prefix
+from interscale.module.base import GlobalModule, LocalModule
+from interscale.module.global_modules import TransformerNodeEncoderHook
+from interscale.module.local_modules import GCN
+from interscale.tl.utils import get_model_filename_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -610,7 +610,7 @@ class BaseModel(metaclass=BaseModelMeta):
         # Apply remapping if enabled
         if enable_remapping:
             try:
-                from InterScale.tl.utils import detect_and_remap_state_dict_keys
+                from interscale.tl.utils import detect_and_remap_state_dict_keys
 
                 state_dict, source = detect_and_remap_state_dict_keys(state_dict)
                 print(f"State dict remapping applied. Source detected: {source}")

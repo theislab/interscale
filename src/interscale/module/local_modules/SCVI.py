@@ -1,7 +1,7 @@
 import torch
 from scvi.nn import Encoder
 
-from InterScale.module.base import LocalModule
+from interscale.module.base import LocalModule
 
 
 class SCVILocalModule(LocalModule):

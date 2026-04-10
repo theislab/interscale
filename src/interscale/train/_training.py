@@ -7,11 +7,11 @@ from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, Mode
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.trainer import seed_everything
 
-from InterScale.tl.utils import get_model_filename_prefix
-from InterScale.train._trainingplans import TrainingPlan
-from InterScale.train._utils import MetricsHistory
+from interscale.tl.utils import get_model_filename_prefix
+from interscale.train._trainingplans import TrainingPlan
+from interscale.train._utils import MetricsHistory
 
-# from InterScale.model.base._trainer import TrainRunner
+# from interscale.model.base._trainer import TrainRunner
 
 
 # adjusted from scvi-tools

@@ -4,7 +4,7 @@ from typing import Literal
 import torch
 from sklearn.decomposition import NMF, PCA
 
-from InterScale.module.base import BaseModule
+from interscale.module.base import BaseModule
 
 
 class GlobalModule(BaseModule):
@@ -329,7 +329,7 @@ class GlobalModule(BaseModule):
         params = cfg.model.global_component.parameters.copy()  # Make a copy to avoid modifying the original
 
         if module_name == "self-attn-transformer":
-            from InterScale.module.global_modules import TransformerNodeEncoderHook
+            from interscale.module.global_modules import TransformerNodeEncoderHook
 
             return TransformerNodeEncoderHook(
                 max_seq_len=params["max_seq_len"],

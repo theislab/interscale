@@ -4,10 +4,10 @@ import torch
 from anndata import AnnData
 from yacs.config import CfgNode as CN
 
-from InterScale.model.base._base_model import BaseModel
-from InterScale.module import CombinedModule, DualDecoderCombinedModule
-from InterScale.tl import prepare_a2d_dataset
-from InterScale.train._training import NodeMaskingTrainingPlan
+from interscale.model.base._base_model import BaseModel
+from interscale.module import CombinedModule, DualDecoderCombinedModule
+from interscale.tl import prepare_a2d_dataset
+from interscale.train import NodeMaskingTrainingPlan
 
 
 class CombinedModel(NodeMaskingTrainingPlan, BaseModel):
@@ -96,12 +96,6 @@ class CombinedModel(NodeMaskingTrainingPlan, BaseModel):
             dtype=np.float32,
         )
 
-        # decoder_weight_df = pd.DataFrame(
-        #     index=obs_names_str,
-        #     columns=range(self.n_output),
-        #     dtype=np.float32
-        # )
-
         if self._cfg.model.decoder.dual_decoder:
             y_pred_local_df = pd.DataFrame(index=obs_names_str, columns=range(self.n_output), dtype=np.float32)
         else:
@@ -146,11 +140,6 @@ class CombinedModel(NodeMaskingTrainingPlan, BaseModel):
             attention_matrix_df.loc[sample_mask] = padded_attn
 
             y_pred_global_df.loc[sample_mask] = y_pred_global.detach().cpu().numpy()
-
-            # if self.module.decoder_type == 'linear':
-            #     W = self.module.decoder.decoder.weight
-            # contribution = torch.matmul(global_embedding[:-1].squeeze(1), torch.transpose(W, 0, 1))
-            # decoder_weight_df.loc[sample_mask] = contribution.detach().numpy()
 
         adata = self.save_evaluation_results(
             adata,

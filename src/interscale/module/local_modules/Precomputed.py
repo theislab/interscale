@@ -1,6 +1,6 @@
 import torch
 
-from InterScale.module.base import LocalModule
+from interscale.module.base import LocalModule
 
 
 class PrecomputedEmbeddingModule(LocalModule):

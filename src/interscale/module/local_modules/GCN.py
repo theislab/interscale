@@ -4,7 +4,7 @@
 from torch import nn
 from torch_geometric.nn import GCNConv, MessagePassing
 
-from InterScale.module.base import LocalModule
+from interscale.module.base import LocalModule
 
 
 class GCN(LocalModule):

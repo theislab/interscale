@@ -102,7 +102,7 @@ def remap_state_dict_keys(state_dict):
     """
     Remap state dictionary keys to handle naming convention changes.
 
-    This function handles the transition from InterScale key names to graph_transformer_long_range_niches key names:
+    This function handles the transition from interscale key names to graph_transformer_long_range_niches key names:
     - local_layers.* -> local_module.layers.*
     - global_* -> global_module.*
 
@@ -136,7 +136,7 @@ def detect_and_remap_state_dict_keys(state_dict):
     """
     Automatically detect the source of the state dict and apply appropriate remapping.
 
-    This function detects whether the state dict is from InterScale or graph_transformer_long_range_niches
+    This function detects whether the state dict is from interscale or graph_transformer_long_range_niches
     and applies the appropriate key remapping.
 
     Parameters

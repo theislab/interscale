@@ -7,12 +7,12 @@ import squidpy as sq
 import wandb
 import yaml
 
-import InterScale as interscale
-from InterScale.config import load_config
-from InterScale.geome_dataloader import GraphAnnDataModule
-from InterScale.pp.segmentation_noise import apply_segmentation_noise
-from InterScale.tl import prepare_geome_dataset
-from InterScale.tl.utils import get_model_filename_prefix
+import interscale as interscale
+from interscale.config import load_config
+from interscale.geome_dataloader import GraphAnnDataModule
+from interscale.pp.segmentation_noise import apply_segmentation_noise
+from interscale.tl import prepare_geome_dataset
+from interscale.tl.utils import get_model_filename_prefix
 
 
 def print_memory_usage(stage=""):

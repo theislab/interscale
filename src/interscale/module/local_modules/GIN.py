@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch import nn
 from torch_geometric.nn import GINConv, MessagePassing
 
-from InterScale.module.base import LocalModule
+from interscale.module.base import LocalModule
 
 
 class GIN(LocalModule):

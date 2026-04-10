@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Literal
 
-from InterScale.module.base._base_module import BaseModule
+from interscale.module.base._base_module import BaseModule
 
 
 class LocalModule(BaseModule):
@@ -79,7 +79,7 @@ class LocalModule(BaseModule):
         params = cfg.model.local_component.parameters.copy()  # Make a copy to avoid modifying the original
 
         if module_name == "GCN":
-            from InterScale.module.local_modules import GCN
+            from interscale.module.local_modules import GCN
 
             return GCN(
                 n_layers=params["num_layers"],
@@ -88,7 +88,7 @@ class LocalModule(BaseModule):
                 **kwargs,
             )
         elif module_name == "GIN":
-            from InterScale.module.local_modules import GIN
+            from interscale.module.local_modules import GIN
 
             return GIN(
                 n_layers=params["num_layers"],
@@ -98,7 +98,7 @@ class LocalModule(BaseModule):
             )
         elif module_name == "SCVI":
             print("Creating SCVI Local Module")
-            from InterScale.module.local_modules import SCVILocalModule
+            from interscale.module.local_modules import SCVILocalModule
 
             n_input = kwargs.pop("n_input")
             n_embed = kwargs.pop("n_embed")
@@ -112,7 +112,7 @@ class LocalModule(BaseModule):
             )
         # elif module_name == 'Precomputed':
         #     print(f"Creating Precomputed Embedding Module from {cfg.dataset.precomputed}")
-        #     from InterScale.module.local_modules import PrecomputedEmbeddingModule
+        #     from interscale.module.local_modules import PrecomputedEmbeddingModule
         #     return PrecomputedEmbeddingModule(
         #         **kwargs
         #     )

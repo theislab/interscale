@@ -3,11 +3,11 @@ import argparse
 import scanpy as sc
 import squidpy as sq
 
-import InterScale as interscale
-from InterScale.config import load_config
-from InterScale.geome_dataloader import GraphAnnDataModule
-from InterScale.pp import apply_segmentation_noise
-from InterScale.tl import prepare_geome_dataset, remove_zero_expression_cells, set_full_reproducibility
+import interscale as interscale
+from interscale.config import load_config
+from interscale.geome_dataloader import GraphAnnDataModule
+from interscale.pp import apply_segmentation_noise
+from interscale.tl import prepare_geome_dataset, remove_zero_expression_cells, set_full_reproducibility
 
 
 def main(cfg_path, model_type):

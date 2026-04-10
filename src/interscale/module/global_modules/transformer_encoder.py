@@ -1,9 +1,9 @@
 import torch
 from torch import nn
 
-from InterScale.module.base import GlobalModule
-from InterScale.module.global_modules.transformer_encoder_layer import CustomTransformerEncoderLayer
-from InterScale.tl import (
+from interscale.module.base import GlobalModule
+from interscale.module.global_modules.transformer_encoder_layer import CustomTransformerEncoderLayer
+from interscale.tl import (
     SelfAttentionRelevance,
     attn_mask_diagonal,
     create_transformer_attention_mask_from_edges,

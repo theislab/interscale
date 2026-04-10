@@ -4,8 +4,8 @@ from typing import Literal
 import pytorch_lightning as L
 import torch
 
-from InterScale.nn import LinearDecoder, LinearLSEDecoder, NonLinearDecoder
-from InterScale.tl.masking import apply_mask
+from interscale.nn import LinearDecoder, LinearLSEDecoder, NonLinearDecoder
+from interscale.tl.masking import apply_mask
 
 
 class BaseModule(L.LightningModule, ABC):

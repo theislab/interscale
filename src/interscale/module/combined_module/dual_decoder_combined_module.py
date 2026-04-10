@@ -3,7 +3,7 @@ from typing import Literal
 import torch
 from yacs.config import CfgNode as CN
 
-from InterScale.module.base import BaseModule, GlobalModule, LocalModule
+from interscale.module.base import BaseModule, GlobalModule, LocalModule
 
 
 class DualDecoderCombinedModule(BaseModule):

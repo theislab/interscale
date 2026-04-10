@@ -5,10 +5,10 @@ from anndata import AnnData
 from torch.nn import functional as F
 from yacs.config import CfgNode as CN
 
-from InterScale.model.base._base_model import BaseModel
-from InterScale.module.base import GlobalModule
-from InterScale.tl import SelfAttentionRelevance, prepare_a2d_dataset
-from InterScale.train._training import NodeMaskingTrainingPlan
+from interscale.model.base._base_model import BaseModel
+from interscale.module.base import GlobalModule
+from interscale.tl import SelfAttentionRelevance, prepare_a2d_dataset
+from interscale.train._training import NodeMaskingTrainingPlan
 
 
 class GlobalModel(NodeMaskingTrainingPlan, BaseModel):
@@ -77,10 +77,6 @@ class GlobalModel(NodeMaskingTrainingPlan, BaseModel):
             dtype=np.float32,
         )
 
-        # decoder_weight_df = pd.DataFrame(
-        #     index=obs_names_str,
-        #     columns=range(self.n_output)
-        # )
         y_pred_df = pd.DataFrame(index=obs_names_str, columns=range(self.n_output), dtype=np.float32)
 
         cls_token_horizontal = np.full(len(adata.obs_names), np.nan)
@@ -118,12 +114,6 @@ class GlobalModel(NodeMaskingTrainingPlan, BaseModel):
             padded_attn[:, : attn_matrix.shape[1]] = attn_matrix
             attention_matrix_df.loc[sample_mask] = padded_attn
             y_pred_df.loc[sample_mask] = y_pred.detach().cpu().numpy()
-
-            # if self.module.decoder_type == 'linear':
-            #     W = self.module.decoder.decoder.weight
-            #     #contribution = torch.matmul(global_embedding[:-1].squeeze(1), torch.transpose(W, 0, 1))
-            #     #decoder_weight_df.loc[sample_mask] = contribution.detach().numpy()
-            #     decoder_weight_df.loc[sample_mask] = W.detach().numpy()
 
         # Save embeddings in adata.obsm
         adata = self.save_evaluation_results(
