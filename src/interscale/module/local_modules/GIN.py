@@ -5,10 +5,10 @@ import torch.nn.functional as F
 from torch import nn
 from torch_geometric.nn import GINConv, MessagePassing
 
-from InterScale.module.base import LocalModuleClass
+from InterScale.module.base import LocalModule
 
 
-class GIN(LocalModuleClass):
+class GIN(LocalModule):
     def __init__(self, n_layers: int = 2, hidden_dim: int = 16, dropout_local: float = 0.1, **base_module_kwargs):
 
         super().__init__(**base_module_kwargs)

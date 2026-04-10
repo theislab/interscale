@@ -5,14 +5,14 @@ from anndata import AnnData
 from torch.nn import functional as F
 from yacs.config import CfgNode as CN
 
-from InterScale.model.base._base_model import BaseModelClass
-from InterScale.module.base import GlobalModuleClass
+from InterScale.model.base._base_model import BaseModel
+from InterScale.module.base import GlobalModule
 from InterScale.tl import SelfAttentionRelevance, prepare_a2d_dataset
 from InterScale.train._training import NodeMaskingTrainingPlan
 
 
-class GlobalModel(NodeMaskingTrainingPlan, BaseModelClass):
-    _module_cls = GlobalModuleClass
+class GlobalModel(NodeMaskingTrainingPlan, BaseModel):
+    _module_cls = GlobalModule
 
     def __init__(
         self,
@@ -28,7 +28,7 @@ class GlobalModel(NodeMaskingTrainingPlan, BaseModelClass):
 
         # self.module = self._register_global_component()
 
-        self.module = GlobalModuleClass.from_config(
+        self.module = GlobalModule.from_config(
             cfg,
             n_input=self.n_input,
             n_output=self.n_output,

@@ -8,7 +8,7 @@ import torchmetrics
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchmetrics import MetricCollection
 
-from InterScale.module.base._base_module import BaseModuleClass
+from InterScale.module.base._base_module import BaseModule
 from InterScale.nn import CosineWarmupScheduler
 
 from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss
@@ -54,7 +54,7 @@ class TrainingPlan(pl.LightningModule):
 
     def __init__(
         self,
-        module: BaseModuleClass,
+        module: BaseModule,
         prediction_task: str,
         prediction_level: Literal["node", "graph"],
         loss: Literal[CLASSIFICATION_LOSSES, REGRESSION_LOSSES],
@@ -281,7 +281,7 @@ class TrainingPlan(pl.LightningModule):
             batch, self.prediction_task, self.prediction_level
         )
 
-        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModuleClass)
+        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModule)
         if hasattr(self.module, "compute_separate_losses"):
             separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
 
@@ -349,7 +349,7 @@ class TrainingPlan(pl.LightningModule):
             batch, self.prediction_task, self.prediction_level
         )
 
-        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModuleClass)
+        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModule)
         if hasattr(self.module, "compute_separate_losses"):
             separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
 
@@ -408,7 +408,7 @@ class TrainingPlan(pl.LightningModule):
         local_embedding, global_embedding, y_pred, y_true, attn = self.module._common_step(
             batch, self.prediction_task, self.prediction_level
         )
-        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModuleClass)
+        # Check if module supports separate loss computation (e.g., DualDecoderCombinedModule)
         if hasattr(self.module, "compute_separate_losses"):
             separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
 

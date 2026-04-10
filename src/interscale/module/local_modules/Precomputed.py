@@ -1,9 +1,9 @@
 import torch
 
-from InterScale.module.base import LocalModuleClass
+from InterScale.module.base import LocalModule
 
 
-class PrecomputedEmbeddingModule(LocalModuleClass):
+class PrecomputedEmbeddingModule(LocalModule):
     def __init__(self, n_embed: int, **kwargs):
         """
         Module for using frozen, pre-computed embeddings.

@@ -1,6 +1,3 @@
-import glob
-from os.path import basename, dirname, isfile, join
-
 from yacs.config import CfgNode as CN
 
 from .dataset_config import get_dataset_cfg

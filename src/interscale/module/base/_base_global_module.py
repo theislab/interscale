@@ -4,10 +4,10 @@ from typing import Literal
 import torch
 from sklearn.decomposition import NMF, PCA
 
-from InterScale.module.base import BaseModuleClass
+from InterScale.module.base import BaseModule
 
 
-class GlobalModuleClass(BaseModuleClass):
+class GlobalModule(BaseModule):
     def __init__(self, **base_module_kwargs):
 
         super().__init__(**base_module_kwargs)
@@ -22,7 +22,7 @@ class GlobalModuleClass(BaseModuleClass):
         elif self.type_gex_embedding == "Precomputed":
             pass
         elif self.type_gex_embedding is None:
-            # No GEX embedding needed when using CombinedModuleClass (local module provides embeddings)
+            # No GEX embedding needed when using CombinedModule (local module provides embeddings)
             pass
         else:
             raise ValueError(f"Invalid embedding type: {self.type_gex_embedding}")

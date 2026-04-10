@@ -8,7 +8,7 @@ from InterScale.nn import LinearDecoder, LinearLSEDecoder, NonLinearDecoder
 from InterScale.tl.masking import apply_mask
 
 
-class BaseModuleClass(L.LightningModule, ABC):
+class BaseModule(L.LightningModule, ABC):
     """Abstract base class for all models defining the common training interface."""
 
     def __init__(

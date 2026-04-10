@@ -3,10 +3,10 @@ from typing import Literal
 import torch
 from yacs.config import CfgNode as CN
 
-from InterScale.module.base import BaseModuleClass, GlobalModuleClass, LocalModuleClass
+from InterScale.module.base import BaseModule, GlobalModule, LocalModule
 
 
-class DualDecoderCombinedModuleClass(BaseModuleClass):
+class DualDecoderCombinedModule(BaseModule):
     """Combined module with decoders for both local and global modules.
 
     This class uses decoders from both the local and global modules to predict
@@ -30,7 +30,7 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
         self.registered_global_component = True
 
         # Local module with decoder
-        self.local_module = LocalModuleClass.from_config(
+        self.local_module = LocalModule.from_config(
             cfg,
             n_input=self.n_input,
             n_output=self.n_output,
@@ -41,7 +41,7 @@ class DualDecoderCombinedModuleClass(BaseModuleClass):
             pct_mask_nodes=self.pct_mask_nodes,
         )
         # Global module with decoder
-        self.global_module = GlobalModuleClass.from_config(
+        self.global_module = GlobalModule.from_config(
             cfg,
             n_input=self.n_input,
             n_output=self.n_output,

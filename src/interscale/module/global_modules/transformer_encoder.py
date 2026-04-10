@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 
-from InterScale.module.base import GlobalModuleClass
+from InterScale.module.base import GlobalModule
 from InterScale.module.global_modules.transformer_encoder_layer import CustomTransformerEncoderLayer
 from InterScale.tl import (
     SelfAttentionRelevance,
@@ -11,7 +11,7 @@ from InterScale.tl import (
 )
 
 
-class TransformerNodeEncoderHook(GlobalModuleClass):
+class TransformerNodeEncoderHook(GlobalModule):
     """
     Sequence of: Dropout → Layer Norm → FC → nonlinearity → Dropout → FC → Dropout → Layer Norm + residual connections
     """

@@ -1,10 +1,10 @@
 from abc import abstractmethod
 from typing import Literal
 
-from InterScale.module.base._base_module import BaseModuleClass
+from InterScale.module.base._base_module import BaseModule
 
 
-class LocalModuleClass(BaseModuleClass):
+class LocalModule(BaseModule):
     def __init__(self, **base_module_kwargs):
 
         super().__init__(**base_module_kwargs)

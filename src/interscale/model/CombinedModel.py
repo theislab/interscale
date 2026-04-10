@@ -4,14 +4,14 @@ import torch
 from anndata import AnnData
 from yacs.config import CfgNode as CN
 
-from InterScale.model.base._base_model import BaseModelClass
-from InterScale.module import CombinedModuleClass, DualDecoderCombinedModuleClass
+from InterScale.model.base._base_model import BaseModel
+from InterScale.module import CombinedModule, DualDecoderCombinedModule
 from InterScale.tl import prepare_a2d_dataset
 from InterScale.train._training import NodeMaskingTrainingPlan
 
 
-class CombinedModel(NodeMaskingTrainingPlan, BaseModelClass):
-    _module_cls = CombinedModuleClass
+class CombinedModel(NodeMaskingTrainingPlan, BaseModel):
+    _module_cls = CombinedModule
 
     def __init__(
         self,
@@ -26,7 +26,7 @@ class CombinedModel(NodeMaskingTrainingPlan, BaseModelClass):
         self.global_component = True
         # Initialize the combined module with both local and global components
         if self._cfg.model.decoder.dual_decoder:
-            self.module = DualDecoderCombinedModuleClass(
+            self.module = DualDecoderCombinedModule(
                 cfg=self._cfg,
                 n_input=self.n_input,
                 n_output=self.n_output,
@@ -37,7 +37,7 @@ class CombinedModel(NodeMaskingTrainingPlan, BaseModelClass):
                 pct_mask_nodes=self._cfg.dataset.pct_mask_nodes,
             )
         else:
-            self.module = CombinedModuleClass(
+            self.module = CombinedModule(
                 cfg=self._cfg,
                 n_input=self.n_input,
                 n_output=self.n_output,

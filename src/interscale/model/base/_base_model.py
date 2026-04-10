@@ -17,7 +17,7 @@ from scvi.data._utils import _assign_adata_uuid, _check_if_view
 from sklearn.utils.class_weight import compute_class_weight
 from yacs.config import CfgNode as CN
 
-from InterScale.module.base import GlobalModuleClass, LocalModuleClass
+from InterScale.module.base import GlobalModule, LocalModule
 from InterScale.module.global_modules import TransformerNodeEncoderHook
 from InterScale.module.local_modules import GCN
 from InterScale.tl.utils import get_model_filename_prefix
@@ -41,8 +41,8 @@ SAVE_KEYS = _SAVE_KEYS_NT()
 # adjusted from scvi-tools
 # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
 # accessed on 22.April 2025
-class BaseModelMetaClass(ABCMeta):
-    """Metaclass for :class:`~scvi.model.base.BaseModelClass`.
+class BaseModelMeta(ABCMeta):
+    """Metaclass for :class:`~scvi.model.base.BaseModel`.
 
     Constructs model class-specific mappings for :class:`~scvi.data.AnnDataManager` instances.
     ``cls._setup_adata_manager_store`` maps from AnnData object UUIDs to
@@ -67,7 +67,7 @@ class BaseModelMetaClass(ABCMeta):
         super().__init__(name, bases, dct)
 
 
-class BaseModelClass(metaclass=BaseModelMetaClass):
+class BaseModel(metaclass=BaseModelMeta):
     """Abstract class for InterScale models
 
     Parameters
@@ -206,7 +206,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
 
         Checks for the most recent :class:`~scvi.data.AnnDataManager` created for the given AnnData
         object via ``setup_anndata()`` on model initialization. Unlike
-        :meth:`scvi.model.base.BaseModelClass.get_anndata_manager`, this method is not model
+        :meth:`scvi.model.base.BaseModel.get_anndata_manager`, this method is not model
         instance specific and can be called before a model is fully initialized.
 
         Parameters
@@ -381,7 +381,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
     def train(self):
         """Trains the model."""
 
-    def _register_local_component(self) -> LocalModuleClass:
+    def _register_local_component(self) -> LocalModule:
         """Register local component based on name.
         Instance must be defined in InterScale.module.local_components.
         """
@@ -407,7 +407,7 @@ class BaseModelClass(metaclass=BaseModelMetaClass):
         else:
             raise ValueError(f"Local component {self._cfg.local_component.name} not found.")
 
-    def _register_global_component(self) -> GlobalModuleClass:
+    def _register_global_component(self) -> GlobalModule:
         """Register global component based on name.
         Instance must be defined in InterScale.module.global_components.
         """

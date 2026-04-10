@@ -4,14 +4,14 @@ import torch
 from anndata import AnnData
 from yacs.config import CfgNode as CN
 
-from InterScale.model.base._base_model import BaseModelClass
-from InterScale.module.base import LocalModuleClass
+from InterScale.model.base._base_model import BaseModel
+from InterScale.module.base import LocalModule
 from InterScale.tl.geome_utils import prepare_a2d_dataset
 from InterScale.train._training import NodeMaskingTrainingPlan
 
 
-class LocalModel(NodeMaskingTrainingPlan, BaseModelClass):
-    _module_cls = LocalModuleClass
+class LocalModel(NodeMaskingTrainingPlan, BaseModel):
+    _module_cls = LocalModule
 
     def __init__(
         self,
@@ -23,7 +23,7 @@ class LocalModel(NodeMaskingTrainingPlan, BaseModelClass):
         self.local_component = True
         self.global_component = False
 
-        self.module = LocalModuleClass.from_config(
+        self.module = LocalModule.from_config(
             cfg,
             n_input=self.n_input,
             n_output=self.n_output,

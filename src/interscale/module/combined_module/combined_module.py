@@ -3,17 +3,17 @@ from typing import Literal
 import torch
 from yacs.config import CfgNode as CN
 
-from InterScale.module.base import BaseModuleClass, GlobalModuleClass, LocalModuleClass
+from InterScale.module.base import BaseModule, GlobalModule, LocalModule
 
 # MODULE_REGISTRY = {
-#     "GIN": LocalModuleClass,
-#     "GCN": LocalModuleClass,
+#     "GIN": LocalModule,
+#     "GCN": LocalModule,
 #     'scVI': SCVILocalModule,
 #     "Precomputed": PrecomputedEmbeddingModule
 # }
 
 
-class CombinedModuleClass(BaseModuleClass):
+class CombinedModule(BaseModule):
     def __init__(self, cfg: CN, **base_module_kwargs):
         super().__init__(**base_module_kwargs)
 
@@ -31,7 +31,7 @@ class CombinedModuleClass(BaseModuleClass):
         self.registered_local_component = True
         self.registered_global_component = True
 
-        self.local_module = LocalModuleClass.from_config(
+        self.local_module = LocalModule.from_config(
             cfg,
             n_input=self.n_input,
             n_output=self.n_output,
@@ -41,7 +41,7 @@ class CombinedModuleClass(BaseModuleClass):
             decoder_hidden_dims=[],
             pct_mask_nodes=self.pct_mask_nodes,
         )
-        self.global_module = GlobalModuleClass.from_config(
+        self.global_module = GlobalModule.from_config(
             cfg,
             n_input=self.n_input,
             n_output=self.n_output,
