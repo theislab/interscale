@@ -1,3 +1,4 @@
-from ._base_components import LinearDecoder, LinearLSEDecoder, NonLinearDecoder
+from ._decoder import LinearDecoder, LinearLSEDecoder, NonLinearDecoder
+from .utils.scheduler import CosineWarmupScheduler
 
-__all__ = ["LinearDecoder", "NonLinearDecoder", "LinearLSEDecoder"]
+__all__ = ["LinearDecoder", "NonLinearDecoder", "LinearLSEDecoder", "CosineWarmupScheduler"]

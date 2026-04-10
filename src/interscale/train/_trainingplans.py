@@ -9,7 +9,7 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torchmetrics import MetricCollection
 
 from InterScale.module.base._base_module import BaseModuleClass
-from InterScale.tl import CosineWarmupScheduler
+from InterScale.nn import CosineWarmupScheduler
 
 from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss
 

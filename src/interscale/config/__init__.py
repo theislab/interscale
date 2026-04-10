@@ -10,13 +10,6 @@ from .model_config import get_model_cfg
 from .optim_config import get_optim_cfg
 from .wandb_config import get_wandb_cfg
 
-# TODO: load all configs from folder automatically instead of manual definition
-# modules = glob.glob(join(dirname(__file__), "*.py"))
-# __all__ = [
-#     basename(f)[:-3] for f in modules
-#     if isfile(f) and not f.endswith('__init__.py')
-# ]
-
 
 def get_cfg_defaults():
     """Loads the default settings from the .py files in the config folder."""
