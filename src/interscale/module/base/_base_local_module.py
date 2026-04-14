@@ -1,7 +1,7 @@
 from abc import abstractmethod
 from typing import Literal
 
-from interscale.module.base._base_module import BaseModule
+from ._base_module import BaseModule
 
 
 class LocalModule(BaseModule):
