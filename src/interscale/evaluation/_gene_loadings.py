@@ -140,12 +140,18 @@ def gene_loadings(
 
     X = adata.layers[layer_key]
 
-    if sp.issparse(X):
-        mean = np.asarray(X.mean(axis=0)).ravel()
-        mean_sq = np.asarray(X.multiply(X).mean(axis=0)).ravel()
-        x_std = np.sqrt(np.maximum(mean_sq - mean**2, 0.0))
-    else:
-        x_std = X.std(axis=0, ddof=1)
+    try:
+        from fast_array_utils import mean_var
+
+        _, var = mean_var(X, axis=0, ddof=1)
+        x_std = np.sqrt(np.maximum(var, 0.0))
+    except ImportError:
+        if sp.issparse(X):
+            mean = np.asarray(X.mean(axis=0)).ravel()
+            mean_sq = np.asarray(X.multiply(X).mean(axis=0)).ravel()
+            x_std = np.sqrt(np.maximum(mean_sq - mean**2, 0.0))
+        else:
+            x_std = X.std(axis=0, ddof=1)
 
     x_std = np.maximum(np.asarray(x_std).ravel(), eps)
 

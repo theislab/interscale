@@ -1,2 +1,4 @@
 def test_import():
-    pass
+    import interscale
+
+    assert hasattr(interscale, "__version__")

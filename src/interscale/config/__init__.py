@@ -37,9 +37,9 @@ def load_config(cfg_path=None):
     # First get all default configs including local component defaults
     cfg = get_cfg_defaults()
 
-    if cfg_path:
+    with cfg_path.open() as f:
         # Create a temporary config to load the model type
-        temp_cfg = CN.load_cfg(open(cfg_path))
+        temp_cfg = CN.load_cfg(f)
 
         # If model type is specified, load the corresponding local component configs
         if hasattr(temp_cfg, "model") and hasattr(temp_cfg.model, "local_component"):

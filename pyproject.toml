@@ -24,6 +24,7 @@ classifiers = [
 ]
 dependencies = [
   "anndata",
+  "fast-array-utils[accel]",
   "geome",
   "lightning>=2",
   "numpy>=1.19,<2",
@@ -39,7 +40,7 @@ dependencies = [
   "torch-geometric>=2",
   "torchmetrics>=1.8",
   "wandb",
-  "yacs",
+  "yacs"
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
 urls.Documentation = "https://InterScale.readthedocs.io/"
