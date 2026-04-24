@@ -59,6 +59,7 @@ def predict_gene_r2(adata: AnnData, layers_pred: str, top_n: int = 5) -> pd.Data
 
 def gene_rank_analysis(
     adata,
+    *,
     layers_local_pred: str = "layers_local",
     layers_global_pred: str = "layers_global",
     top_n: int = 5,
