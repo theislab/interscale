@@ -149,7 +149,6 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             layer_key=cfg.dataset.layer_key,
             sample_key_list=cfg.dataset.sample_key,
             prediction_obs=cfg.dataset.prediction_obs,
-            group_key=cfg.dataset.group_label,
         )
         print_memory_usage("After LocalModel setup")
 
@@ -163,7 +162,6 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             layer_key=cfg.dataset.layer_key,
             sample_key_list=cfg.dataset.sample_key,
             prediction_obs=cfg.dataset.prediction_obs,
-            group_key=cfg.dataset.group_label,
         )
         print_memory_usage("After GlobalModel setup")
 
@@ -177,7 +175,6 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             layer_key=cfg.dataset.layer_key,
             sample_key_list=cfg.dataset.sample_key,
             prediction_obs=cfg.dataset.prediction_obs,
-            group_key=cfg.dataset.group_label,
         )
         print_memory_usage("After CombinedModel setup")
 

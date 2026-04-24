@@ -28,7 +28,6 @@ def check_and_update_cfg(
     prediction_obs: str = None,
     layer_key: str = None,
     sample_key: str = None,
-    group_label: str = None,
 ):
     """Checks for jupyer notebook specifications and updates cfg if necessary."""
     cfg.set_new_allowed(True)
@@ -48,9 +47,6 @@ def check_and_update_cfg(
     if sample_key != cfg.dataset.sample_key[0]:
         print(f"Update sample key (from '{cfg.dataset.sample_key}' to '{sample_key}')")
         cfg.dataset.sample_key = sample_key
-    if group_label != cfg.dataset.group_label:
-        print(f"Update group label (from '{cfg.dataset.group_label}' to '{group_label}')")
-        cfg.dataset.group_label = group_label
     cfg.freeze()
     return cfg
 

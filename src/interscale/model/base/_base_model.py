@@ -139,9 +139,10 @@ class BaseModel(metaclass=BaseModelMeta):
     def _setup_anndata(
         cls,
         adata: AnnData,
-        prediction_task: str,
+        *,
         layer_key: str,
         sample_key_list: list[str],
+        prediction_task: str = "regression",
         prediction_obs: str = None,
         group_key: str | None = None,
         split_key: str | None = "split",
@@ -158,6 +159,8 @@ class BaseModel(metaclass=BaseModelMeta):
             AnnData object
         layer_key
             Key in `adata.layers` that contains the data. If None, uses `adata.X` by default.
+        prediction_task
+            Prediction task for the model. Either "classification" or "regression". Default is "regression".
         prediction_obs:
             Key in `adata.obs` that contains the prediction information.
         sample_key
@@ -176,12 +179,9 @@ class BaseModel(metaclass=BaseModelMeta):
         if prediction_task == "classification":
             anndata_fields.append(fields.CategoricalObsField(registry_key="prediction_obs", attr_key=prediction_obs))
 
-        if group_key is not None:
-            anndata_fields.append(fields.CategoricalObsField(registry_key="group_label", attr_key=group_key))
-        else:
-            anndata_fields.append(fields.CategoricalObsField(registry_key="split_key", attr_key=split_key))
-        # Check that split_key contains required values
         if split_key is not None:
+            anndata_fields.append(fields.CategoricalObsField(registry_key="split_key", attr_key=split_key))
+            # Check that split_key contains required values
             assert {"train", "val"}.issubset(set(adata.obs[split_key].unique())), (
                 f"'{split_key}' must contain 'train' and 'val' categories"
             )

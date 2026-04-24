@@ -21,7 +21,6 @@ def get_dataset_cfg(cfg):
     cfg.dataset.prediction_level = "node"
     cfg.dataset.layer_key = None  # default: .X
     cfg.dataset.sample_key = []
-    cfg.dataset.group_label = ""
     cfg.dataset.split_key = "split"
 
     cfg.dataset.spatial_neigbors_kwargs = CN()

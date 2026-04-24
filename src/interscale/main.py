@@ -35,7 +35,6 @@ def main(cfg_path, model_type):
             layer_key=cfg.dataset.layer_key,
             sample_key_list=cfg.dataset.sample_key,
             prediction_obs=cfg.dataset.prediction_obs,
-            group_key=cfg.dataset.group_label,
         )
 
         model = interscale.model.LocalModel(adata, cfg=cfg)
@@ -46,7 +45,6 @@ def main(cfg_path, model_type):
             layer_key=cfg.dataset.layer_key,
             sample_key_list=cfg.dataset.sample_key,
             prediction_obs=cfg.dataset.prediction_obs,
-            group_key=cfg.dataset.group_label,
         )
 
         model = interscale.model.GlobalModel(adata, cfg=cfg)
@@ -57,7 +55,6 @@ def main(cfg_path, model_type):
             layer_key=cfg.dataset.layer_key,
             sample_key_list=cfg.dataset.sample_key,
             prediction_obs=cfg.dataset.prediction_obs,
-            group_key=cfg.dataset.group_label,
         )
 
         model = interscale.model.CombinedModel(adata, cfg=cfg)

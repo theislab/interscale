@@ -68,7 +68,7 @@ def prepare_a2d_dataset(cfg: CN):
         )
 
 
-def prepare_geome_dataset(adata, cfg, split_key: str = "split"):
+def prepare_geome_dataset(adata, cfg: CN):
     """
     Loads, preprocesses and transforms the defined .h5ad data to a list of PyG data according to cfg file.
     """
@@ -98,9 +98,10 @@ def prepare_geome_dataset(adata, cfg, split_key: str = "split"):
     layer_key = cfg.dataset.layer_key
     subset_dict = {}
 
-    if cfg.dataset.split_key in adata.obs.columns:
-        print(f"Split key {cfg.dataset.split_key} already exists in adata.obs")
-        split_key = cfg.dataset.split_key
+    assert cfg.dataset.split_key in adata.obs.columns, (
+        f"split_key '{cfg.dataset.split_key}' not found in adata.obs columns"
+    )
+    split_key = cfg.dataset.split_key
 
     # initalize object to save train, val and test PyG datas
     datas_train, datas_val, datas_test = list(), list(), list()
