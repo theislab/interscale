@@ -23,12 +23,6 @@ def get_dataset_cfg(cfg):
     cfg.dataset.sample_key = []
     cfg.dataset.split_key = "split"
 
-    cfg.dataset.spatial_neigbors_kwargs = CN()
-    cfg.dataset.spatial_neigbors_kwargs.radius = 50
-    cfg.dataset.spatial_neigbors_kwargs.coord_type = "generic"
-    cfg.dataset.spatial_neigbors_kwargs.library_key = ""
-    cfg.dataset.spatial_neigbors_kwargs.n_neighs = 6
-
     cfg.dataset.batch_size = 32
     cfg.dataset.train_size = 0.7
     cfg.dataset.val_size = 0.2
@@ -36,10 +30,15 @@ def get_dataset_cfg(cfg):
     cfg.dataset.num_features = -1
     cfg.dataset.num_classes = -1
 
-    cfg.dataset.stratify_group = None
     cfg.dataset.pct_mask_nodes = 0.2
 
     # Segmentation robustness parameters
     cfg.dataset.segmentation_robustness = None  # [node_fraction, overflow_fraction] or None
+    # only needed for segmentation robustness experiments
+    cfg.dataset.spatial_neigbors_kwargs = CN()
+    cfg.dataset.spatial_neigbors_kwargs.radius = 50
+    cfg.dataset.spatial_neigbors_kwargs.coord_type = "generic"
+    cfg.dataset.spatial_neigbors_kwargs.library_key = ""
+    cfg.dataset.spatial_neigbors_kwargs.n_neighs = 6
 
     return cfg
