@@ -7,7 +7,6 @@ InterScale is a model descigned for spatial transcpriptomics analysis. It provid
 ## Core components
 
 
-
 ### InterScale model
 
 This is the main model class that can be used to define, train, and evaluate the model on an anndata.

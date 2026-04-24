@@ -21,7 +21,7 @@ InterScale is a package for cell interaction analysis in spatial transcriptomics
 ## Reference
 
 ```
-@article{Birk2025,
+@article{DrummerJimenez2026,
   author    = {Drummer, F. and Jimenez, S. et al.},
   title     = {InterScale reveals multi-scale cellular interaction programs in spatial transcriptomics},
   journal   = {BioArvix},

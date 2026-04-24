@@ -1,0 +1,200 @@
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
+from evaluation import _get_Z
+
+
+def latent_correlation(
+    adata,
+    z_key="_global_emb",
+    vmax=1.0,
+    cmap="BrBG_r",
+    figsize=(10, 10),
+    label_fontsize=8,
+    title=None,
+    method="average",
+    metric="correlation",
+    show=True,
+):
+    """
+    Clustermap of Corr(Z) for embedding dimensions.
+    """
+    Z = _get_Z(adata, z_key)
+    C = np.corrcoef(Z, rowvar=False)
+
+    labels = [f"{i}" for i in range(C.shape[0])]
+
+    g = sns.clustermap(
+        C,
+        dendrogram_ratio=(0.08, 0.08),
+        cmap=cmap,
+        vmin=-vmax,
+        vmax=vmax,
+        figsize=figsize,
+        method=method,
+        metric=metric,
+        xticklabels=labels,
+        yticklabels=labels,
+        cbar_kws={"label": "correlation"},
+    )
+
+    # Rotate and resize tick labels
+    g.ax_heatmap.set_xticklabels(g.ax_heatmap.get_xticklabels(), rotation=90, fontsize=label_fontsize)
+
+    g.ax_heatmap.set_yticklabels(g.ax_heatmap.get_yticklabels(), rotation=0, fontsize=label_fontsize)
+
+    g.ax_heatmap.set_xlabel("latent dim")
+    g.ax_heatmap.set_ylabel("latent dim")
+    # g.ax_heatmap.set_title(title or f"Correlation of {z_key}", pad=12)
+
+    plt.tight_layout()
+
+    if show:
+        plt.show()
+
+    return g
+
+
+def dim_importance_elbow_stdexpr(
+    adata,
+    s_key="_global_std_gene_loadings",
+    z_key="_global_emb",
+    mode="full",
+    use_ratio=True,
+    cumulative_cutoff=0.90,
+    spacing=2,
+    n_top=None,  # NEW
+    figsize=(8, 4.5),
+    fontsize=12,
+    title=None,
+    show=True,
+):
+
+    if s_key not in adata.varm:
+        raise KeyError(f"{s_key} not found in adata.varm")
+    if z_key not in adata.obsm:
+        raise KeyError(f"{z_key} not found in adata.obsm")
+
+    S = np.asarray(adata.varm[s_key], dtype=float)
+    Z = np.asarray(adata.obsm[z_key], dtype=float)
+
+    if Z.ndim == 1:
+        Z = Z[:, None]
+
+    if S.ndim != 2 or S.shape[1] != Z.shape[1]:
+        raise ValueError(f"Shape mismatch: S is {S.shape}, Z is {Z.shape}")
+
+    ok = np.isfinite(Z).all(axis=1)
+    if ok.sum() < 3:
+        raise ValueError(f"Need >=3 finite rows in adata.obsm['{z_key}']")
+
+    Z = Z[ok]
+
+    # -------------------
+    # scoring
+    # -------------------
+
+    if mode == "diag":
+        score = np.sum(S * S, axis=0)
+
+    elif mode == "full":
+        Corr = np.corrcoef(Z, rowvar=False)
+        StS = S.T @ S
+        A = StS * Corr
+        A = 0.5 * (A + A.T)
+        score = A.sum(axis=0)
+
+    else:
+        raise ValueError("mode must be 'diag' or 'full'")
+
+    # -------------------
+    # y values
+    # -------------------
+
+    if use_ratio:
+        total = float(np.sum(score))
+        y = score / total if total > 0 else np.zeros_like(score)
+        ylab = "Importance ratio (std-expr)"
+    else:
+        y = score
+        ylab = "Importance (std-expr)"
+
+    # -------------------
+    # sorting
+    # -------------------
+
+    order = np.argsort(y)[::-1]
+    y_sorted = y[order]
+    dim_sorted = order
+
+    # -------------------
+    # cutoff
+    # -------------------
+
+    cutoff_x = None
+    cutoff_idx = None
+
+    if use_ratio and cumulative_cutoff is not None and y.sum() > 0:
+        cum = np.cumsum(y_sorted)
+        cutoff_idx = int(np.searchsorted(cum, cumulative_cutoff, side="left"))
+        cutoff_x = cutoff_idx * spacing
+
+        n_dims_left = cutoff_idx + 1
+        dims_left = dim_sorted[:n_dims_left]
+
+        print(f"\n{int(cumulative_cutoff * 100)}% cumulative variance reached with {n_dims_left} dimensions:")
+        print("Embedding dimensions (sorted by importance):")
+        print(dims_left.tolist())
+
+    # -------------------
+    # apply n_top filter
+    # -------------------
+
+    K = len(y_sorted)
+
+    if n_top is not None:
+        K = min(n_top, K)
+
+    y_plot = y_sorted[:K]
+    dim_plot = dim_sorted[:K]
+    x = np.arange(K) * spacing
+
+    # -------------------
+    # plotting
+    # -------------------
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    ax.plot(x, y_plot, marker="o", linewidth=1)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(dim_plot.astype(str), rotation=45, ha="right", fontsize=fontsize - 1)
+
+    # cutoff line only if visible
+    if cutoff_x is not None and cutoff_idx < K:
+        ax.axvline(
+            x=cutoff_x,
+            linestyle="--",
+            linewidth=1,
+            color="red",
+            label=f"{int(cumulative_cutoff * 100)}% cumulative",
+        )
+        ax.legend(fontsize=fontsize - 2, loc="best")
+
+    ax.set_title(
+        title or f"Elbow (std-expr, {mode}): {s_key} + Corr({z_key})",
+        fontsize=fontsize + 1,
+    )
+
+    ax.set_xlabel("Embedding dim (sorted)", fontsize=fontsize)
+    ax.set_ylabel(ylab, fontsize=fontsize)
+
+    ax.tick_params(axis="both", labelsize=fontsize - 1)
+    ax.grid(False)
+
+    plt.tight_layout()
+
+    if show:
+        plt.show()
+
+    return ax

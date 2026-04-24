@@ -2,7 +2,7 @@ import numpy as np
 import squidpy as sq
 
 
-def compute_neighborhood_stats(adata, radii):
+def compute_neighborhood_stats(adata, radii, *, library_key: str | None = None, show=True):
     """
     Compute the average number of neighbors and standard deviation
     for multiple radii in a spatial transcriptomics dataset using Squidpy.
@@ -20,7 +20,7 @@ def compute_neighborhood_stats(adata, radii):
 
     for radius in radii:
         # Compute spatial neighbors using Squidpy
-        sq.gr.spatial_neighbors(adata, coord_type="generic", radius=radius)
+        sq.gr.spatial_neighbors(adata, coord_type="generic", radius=radius, library_key=library_key)
 
         # Extract the neighborhood graph
         graph = adata.obsp["spatial_connectivities"]
@@ -33,5 +33,7 @@ def compute_neighborhood_stats(adata, radii):
         std_neighbors = np.std(neighbor_counts)
 
         stats[radius] = (avg_neighbors, std_neighbors)
+        if show:
+            print(f"Radius: {radius}, Average Neighbors: {avg_neighbors:.2f}, Std Dev: {std_neighbors:.2f}")
 
     return stats
