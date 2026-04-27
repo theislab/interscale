@@ -8,6 +8,8 @@ from interscale.module.base import LocalModule
 
 
 class GCN(LocalModule):
+    """Graph Convolutional Network (local module) - builds on PyTorch Geometric implementation."""
+
     def __init__(self, n_layers: int = 2, hidden_dim: int = 16, dropout_local: float = 0.1, **base_module_kwargs):
 
         super().__init__(**base_module_kwargs)

@@ -4,6 +4,8 @@ from interscale.module.base import LocalModule
 
 
 class PrecomputedEmbeddingModule(LocalModule):
+    """Module for using frozen, pre-computed embeddings. Essentially a pass-through module."""
+
     def __init__(self, n_embed: int, **kwargs):
         """
         Module for using frozen, pre-computed embeddings.

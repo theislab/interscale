@@ -5,6 +5,8 @@ from interscale.module.base import LocalModule
 
 
 class SCVILocalModule(LocalModule):
+    """scVI Encoder (local module) - builds on scvi-tools implementation."""
+
     def __init__(
         self,
         n_input: int,

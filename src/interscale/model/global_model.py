@@ -12,6 +12,8 @@ from interscale.train._training import NodeMaskingTrainingPlan
 
 
 class GlobalModel(NodeMaskingTrainingPlan, BaseModel):
+    """Global model with only global component."""
+
     _module_cls = GlobalModule
 
     def __init__(

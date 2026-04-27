@@ -5,28 +5,15 @@ from yacs.config import CfgNode as CN
 
 from interscale.module.base import BaseModule, GlobalModule, LocalModule
 
-# MODULE_REGISTRY = {
-#     "GIN": LocalModule,
-#     "GCN": LocalModule,
-#     'scVI': SCVILocalModule,
-#     "Precomputed": PrecomputedEmbeddingModule
-# }
-
 
 class CombinedModule(BaseModule):
+    """Combined module with single decoder for both local and global modules."""
+
     def __init__(self, cfg: CN, **base_module_kwargs):
         super().__init__(**base_module_kwargs)
 
         self.local_module_args = cfg.model.local_component
         self.global_module_args = cfg.model.global_component
-
-        # module_name = cfg.model.local_component.name
-        # local_class = MODULE_REGISTRY.get(module_name)
-
-        # if local_class is None:
-        #     raise ValueError(f"Module {module_name} not found in MODULE_REGISTRY")
-
-        # print(local_class)
 
         self.registered_local_component = True
         self.registered_global_component = True

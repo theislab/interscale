@@ -11,6 +11,8 @@ from interscale.train import NodeMaskingTrainingPlan
 
 
 class CombinedModel(NodeMaskingTrainingPlan, BaseModel):
+    """Combined model with both local and global components."""
+    
     _module_cls = CombinedModule
 
     def __init__(
