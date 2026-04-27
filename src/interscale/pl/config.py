@@ -103,34 +103,19 @@ class Plotting:
 
 
 
-<<<<<<< HEAD
 class _SettingsMeta(type):
     """Metaclass for singleton settings"""
     _instance = None
-=======
-
-def set_plotting_config(config_path=None, output_dir="figures"):
-    """
-    Initialize global plotting configuration.
->>>>>>> 29e5f864033bbc502adb8e17ea978dbe37e57ec3
 
     def __call__(cls):
         if cls._instance is None:
             cls._instance = super().__call__()
         return cls._instance
 
-<<<<<<< HEAD
-=======
-
-def get_plotting_config() -> Plotting:
-    """
-    Get the global plotting configuration.
->>>>>>> 29e5f864033bbc502adb8e17ea978dbe37e57ec3
 
 class settings(metaclass=_SettingsMeta):
     """Global settings for plotting functions - singleton pattern matching scanpy's approach"""
 
-<<<<<<< HEAD
     def __init__(self):
         self._plotting_config = Plotting()
 
@@ -161,16 +146,3 @@ class settings(metaclass=_SettingsMeta):
     def config(self) -> dict:
         """Get the configuration dictionary"""
         return self._plotting_config.config
-=======
-
-def ensure_plotting_config(func):
-    """Decorator to ensure plotting configuration is applied before function execution"""
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        # Auto-initialize if not done yet (no error raised)
-        get_plotting_config()
-        return func(*args, **kwargs)
-
-    return wrapper
->>>>>>> 29e5f864033bbc502adb8e17ea978dbe37e57ec3
