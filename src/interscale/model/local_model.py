@@ -12,6 +12,7 @@ from interscale.train._training import NodeMaskingTrainingPlan
 
 class LocalModel(NodeMaskingTrainingPlan, BaseModel):
     """Local model with only local component."""
+
     _module_cls = LocalModule
 
     def __init__(
