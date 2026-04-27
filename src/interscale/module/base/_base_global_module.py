@@ -6,6 +6,7 @@ from sklearn.decomposition import NMF, PCA
 
 from ._base_module import BaseModule
 
+
 class GlobalModule(BaseModule):
     def __init__(self, **base_module_kwargs):
 

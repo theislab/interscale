@@ -15,6 +15,8 @@ __pycache__/
 *.sh
 
 # ignore ALL files in ANY directory named
+docs/_build
+docs/api/generated
 figures/
 wandb/
 logs/
@@ -25,7 +27,4 @@ src/confi_files/
 InterScale_hyperparameter_sweep/
 src/interscale/tmp/
 src/interscale/logs/
-src/interscale/model/__pycache__/
-src/interscale/tl/__pycache__/
-src/interscale/modules/__pycache__/
 CLAUDE.md

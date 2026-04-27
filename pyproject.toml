@@ -27,7 +27,7 @@ dependencies = [
   "fast-array-utils[accel]",
   "geome",
   "lightning>=2",
-  "numpy>=1.19,<2",
+  "numpy>=1.19",
   "pandas",
   "scanpy",
   "scikit-learn",
@@ -35,7 +35,7 @@ dependencies = [
   "scvi-tools>=0.19",
   # for debug logging (referenced from the issue template)
   "session-info2",
-  "squidpy",
+  "squidpy>=1.7",
   "torch>=2",
   "torch-geometric>=2",
   "torchmetrics>=1.8",
@@ -91,6 +91,11 @@ envs.hatch-test.matrix = [
 envs.hatch-test.overrides.matrix.deps.env-vars = [
   { key = "UV_PRERELEASE", value = "allow", if = [ "pre" ] },
 ]
+
+[tool.uv]
+extra-build-dependencies.torch-cluster = [ "torch" ]
+extra-build-dependencies.torch-scatter = [ "torch" ]
+extra-build-dependencies.torch-sparse = [ "torch" ]
 
 [tool.ruff]
 line-length = 120

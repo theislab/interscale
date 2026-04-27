@@ -13,7 +13,7 @@ from sklearn.preprocessing import StandardScaler
 
 def _prepare_spatial_metadata(adata_slice, fov_id, cell_type_col, cell_list, grid_res):
     """
-    Prepare spatial metadata for visualization or analysis, including coordinate 
+    Prepare spatial metadata for visualization or analysis, including coordinate
     scaling, grid generation for interpolation, and color mapping for cell types.
 
     Parameters
@@ -21,12 +21,12 @@ def _prepare_spatial_metadata(adata_slice, fov_id, cell_type_col, cell_list, gri
     adata_slice : AnnData
         An AnnData object containing a single slice or FOV of spatial data.
     fov_id : str
-        The unique identifier for the FOV within the spatial 
+        The unique identifier for the FOV within the spatial
         metadata of the AnnData object.
     cell_type_col : str
         The column name in `adata_slice.obs` that contains cell type annotations.
     cell_list : list or None
-        A list of specific cell types to include. If None, all categories in 
+        A list of specific cell types to include. If None, all categories in
         `cell_type_col` are used.
     grid_res : int
         The resolution (number of points per axis) for the generated spatial grid.
@@ -68,26 +68,32 @@ def _prepare_spatial_metadata(adata_slice, fov_id, cell_type_col, cell_list, gri
     categories = list(adata_slice.obs[cell_type_col].cat.categories)
     if cell_list is not None:
         categories = [cat for cat in categories if cat in cell_list]
-    
+
     if f"{cell_type_col}_colors" in adata_slice.uns:
         all_colors = adata_slice.uns[f"{cell_type_col}_colors"]
-        color_map = {cat: color for cat, color in zip(adata_slice.obs[cell_type_col].cat.categories, all_colors) if cat in categories}
+        color_map = {
+            cat: color
+            for cat, color in zip(adata_slice.obs[cell_type_col].cat.categories, all_colors)
+            if cat in categories
+        }
     else:
         import matplotlib.cm as cm
+
         colors = [to_hex(c) for c in cm.tab20(np.linspace(0, 1, len(categories)))]
         color_map = dict(zip(categories, colors))
 
     return sf, grid_x, grid_y, X_lin, Y_lin, color_map, categories
 
 
-def _compute_vector_fields(adata_slice, categories, window_key, cell_type_col, 
-                           cell_list, sf, grid_x, grid_y, max_dist, inter_only):
+def _compute_vector_fields(
+    adata_slice, categories, window_key, cell_type_col, cell_list, sf, grid_x, grid_y, max_dist, inter_only
+):
     """
-    Compute vector fields (U and V components) representing spatial interaction 
+    Compute vector fields (U and V components) representing spatial interaction
     flows for each cell type category.
 
-    This function iterates through local windows, processes attention matrices 
-    to derive net interaction flows, and projects these flows onto a spatial 
+    This function iterates through local windows, processes attention matrices
+    to derive net interaction flows, and projects these flows onto a spatial
     grid using Gaussian kernels.
 
     Parameters
@@ -111,7 +117,7 @@ def _compute_vector_fields(adata_slice, categories, window_key, cell_type_col,
     max_dist : float
         Maximum distance for spatial influence and Gaussian kernel bandwidth.
     inter_only : bool
-        If True, only consider interactions between different cell types 
+        If True, only consider interactions between different cell types
         (exclude self-interactions).
 
     Returns
@@ -125,7 +131,7 @@ def _compute_vector_fields(adata_slice, categories, window_key, cell_type_col,
     V_dict = {cat: np.zeros_like(grid_x) for cat in categories}
 
     windows = adata_slice.obs[window_key].unique()
-    
+
     for win in windows:
         win_mask = adata_slice.obs[window_key] == win
         adata_win = adata_slice[win_mask]
@@ -133,14 +139,15 @@ def _compute_vector_fields(adata_slice, categories, window_key, cell_type_col,
         if cell_list is not None:
             cell_mask = adata_win.obs[cell_type_col].isin(cell_list)
             adata_win = adata_win[cell_mask].copy()
-        
+
         n_win = len(adata_win.obs)
         if n_win < 2:
             continue
 
         # Attention Matrix processing
-        M = pd.DataFrame(adata_win.obsm["_attn_matrix"][:, :n_win], 
-                         index=adata_win.obs_names, columns=adata_win.obs_names)
+        M = pd.DataFrame(
+            adata_win.obsm["_attn_matrix"][:, :n_win], index=adata_win.obs_names, columns=adata_win.obs_names
+        )
         M_net = M - M.T
 
         if inter_only:
@@ -159,11 +166,13 @@ def _compute_vector_fields(adata_slice, categories, window_key, cell_type_col,
 
         for j, cell_j_name in enumerate(adata_win.obs_names):
             cell_type = types_win[j]
-            if cell_type not in categories: continue
-            
+            if cell_type not in categories:
+                continue
+
             net_flows = M_net.iloc[:, j].values
             positive_flows = np.maximum(net_flows, 0)
-            if np.sum(positive_flows) == 0: continue
+            if np.sum(positive_flows) == 0:
+                continue
 
             # Vector calculation
             s_coord = pos_win[j]
@@ -171,29 +180,41 @@ def _compute_vector_fields(adata_slice, categories, window_key, cell_type_col,
             dist = np.linalg.norm(diff, axis=1)
             unit_diff = diff / (dist[:, np.newaxis] + 1e-6)
             s_weight = np.exp(-(dist**2) / (2 * max_dist**2))
-            
+
             v_cell = np.sum(unit_diff * (positive_flows * s_weight)[:, np.newaxis], axis=0)
 
             # Grid distribution
-            g_dist_sq = (grid_x - s_coord[0])**2 + (grid_y - s_coord[1])**2
-            kernel = np.exp(-g_dist_sq / (2 * (max_dist / 4)**2))
+            g_dist_sq = (grid_x - s_coord[0]) ** 2 + (grid_y - s_coord[1]) ** 2
+            kernel = np.exp(-g_dist_sq / (2 * (max_dist / 4) ** 2))
 
             U_dict[cell_type] += v_cell[0] * kernel
             V_dict[cell_type] += v_cell[1] * kernel
-            
+
     return U_dict, V_dict
 
+
 def plot_all_spatial_net_streams(
-    adata, fov_id, fov_key="fov", window_key="sliding_window_assignment",
-    cell_type_col="cell_type_coarse", grid_res=50, max_dist=None,
-    k_dist=0.05, density=1.5, ax=None, additional_embeddings=None,
-    return_streams=False, cell_list=None, inter_only=False, **kwargs
+    adata,
+    fov_id,
+    fov_key="fov",
+    window_key="sliding_window_assignment",
+    cell_type_col="cell_type_coarse",
+    grid_res=50,
+    max_dist=None,
+    k_dist=0.05,
+    density=1.5,
+    ax=None,
+    additional_embeddings=None,
+    return_streams=False,
+    cell_list=None,
+    inter_only=False,
+    **kwargs,
 ):
     """
     Visualize spatial interaction flows using streamplots overlaid on a spatial scatter plot.
 
-    This function coordinates the extraction of spatial metadata, computation of vector 
-    fields based on attention matrices, and the final rendering of directional flows 
+    This function coordinates the extraction of spatial metadata, computation of vector
+    fields based on attention matrices, and the final rendering of directional flows
     (streams) for different cell types.
 
     Parameters
@@ -246,10 +267,9 @@ def plot_all_spatial_net_streams(
     # 3. Compute Vectors
     if max_dist is None:
         max_dist = (X_lin.max() - X_lin.min()) * k_dist
-    
+
     U_dict, V_dict = _compute_vector_fields(
-        adata_slice, categories, window_key, cell_type_col, 
-        cell_list, sf, grid_x, grid_y, max_dist, inter_only
+        adata_slice, categories, window_key, cell_type_col, cell_list, sf, grid_x, grid_y, max_dist, inter_only
     )
 
     if return_streams:
@@ -261,15 +281,22 @@ def plot_all_spatial_net_streams(
 
     emb = additional_embeddings or cell_type_col
     sq.pl.spatial_scatter(
-        adata_slice, color=emb, library_key=fov_key, library_id=[fov_id],
-        ax=ax, spatial_key="spatial", img=False, **kwargs
+        adata_slice,
+        color=emb,
+        library_key=fov_key,
+        library_id=[fov_id],
+        ax=ax,
+        spatial_key="spatial",
+        img=False,
+        **kwargs,
     )
 
     legend_elements = []
     for cat in categories:
         U, V = U_dict[cat], V_dict[cat]
         mag = np.sqrt(U**2 + V**2)
-        if np.max(mag) == 0: continue
+        if np.max(mag) == 0:
+            continue
 
         thresh = 0.01 * np.max(mag)
         Un = np.divide(U, mag, out=np.full_like(U, np.nan), where=mag > thresh)
@@ -279,16 +306,21 @@ def plot_all_spatial_net_streams(
             rgb = to_rgb(color_map[cat])
             hsv = rgb_to_hsv(rgb)
             dark_color = to_hex(hsv_to_rgb([hsv[0], hsv[1], hsv[2] * 0.7]))
-            
-            ax.streamplot(X_lin, Y_lin, Un, Vn, color=dark_color, 
-                          linewidth=1.2, density=density, arrowsize=1.2)
+
+            ax.streamplot(X_lin, Y_lin, Un, Vn, color=dark_color, linewidth=1.2, density=density, arrowsize=1.2)
             legend_elements.append(Line2D([0], [0], color=dark_color, lw=2, label=f"Flow: {cat}"))
 
     if legend_elements:
-        ax.legend(handles=legend_elements, loc="upper center", ncol=4,
-                  bbox_to_anchor=(0.5, -0.15), title=f"Net Flow Directions - {cell_type_col}")
+        ax.legend(
+            handles=legend_elements,
+            loc="upper center",
+            ncol=4,
+            bbox_to_anchor=(0.5, -0.15),
+            title=f"Net Flow Directions - {cell_type_col}",
+        )
 
     return ax
+
 
 def calculate_divergence(U, V):
     return np.gradient(U, axis=1) + np.gradient(V, axis=0)
@@ -298,8 +330,8 @@ def cluster_spatial_flows(U_dict, V_dict, n_clusters=5):
     """
     Perform unsupervised clustering of spatial regions based on multi-type flow signatures.
 
-    This function builds a high-dimensional feature matrix for each grid point, 
-    incorporating flow magnitude and divergence for all cell types, and clusters 
+    This function builds a high-dimensional feature matrix for each grid point,
+    incorporating flow magnitude and divergence for all cell types, and clusters
     them to identify distinct functional spatial domains.
 
     Parameters
@@ -317,7 +349,7 @@ def cluster_spatial_flows(U_dict, V_dict, n_clusters=5):
         A 2D array (matching the grid shape) where each pixel contains its cluster ID.
     X_scaled : numpy.ndarray
         The standardized feature matrix used for clustering (n_points, n_features).
-    
+
     """
     categories = list(U_dict.keys())
     grid_shape = list(U_dict.values())[0].shape
@@ -362,8 +394,8 @@ def plot_flow_clusters(cluster_grid, X_lin, Y_lin, adata_slice, fov_id, fov_key=
     """
     Visualize identified flow domains as a segmented background for spatial transcriptomics data.
 
-    This function overlays a Voronoi-like heatmap (representing clustered interaction 
-    patterns) with the actual cell positions to provide spatial context to the 
+    This function overlays a Voronoi-like heatmap (representing clustered interaction
+    patterns) with the actual cell positions to provide spatial context to the
     unsupervised domains.
 
     Parameters
@@ -435,7 +467,7 @@ def plot_flow_clusters(cluster_grid, X_lin, Y_lin, adata_slice, fov_id, fov_key=
 
 def characterize_flow_clusters(U_dict, V_dict, cluster_grid, k=1):
     """
-    Characterize identified spatial domains by identifying the role of each cell type 
+    Characterize identified spatial domains by identifying the role of each cell type
     (Source, Sink, or Neutral) based on their divergence values.
 
     Parameters
@@ -447,13 +479,13 @@ def characterize_flow_clusters(U_dict, V_dict, cluster_grid, k=1):
     cluster_grid : numpy.ndarray
         2D array of cluster IDs assigned to each grid point.
     k : float, optional
-        Sensitivity multiplier for the standard deviation threshold. 
+        Sensitivity multiplier for the standard deviation threshold.
         Higher values make role assignment more stringent. Defaults to 1.
 
     Returns
     -------
     pd.DataFrame
-        A summary table containing the cell type, cluster ID, average divergence, 
+        A summary table containing the cell type, cluster ID, average divergence,
         and the assigned functional role for each domain.
     """
     results = []
@@ -489,7 +521,7 @@ def characterize_flow_clusters(U_dict, V_dict, cluster_grid, k=1):
 
 def map_clusters_to_cells(cluster_grid, X_lin, Y_lin, adata, fov_id, fov_key="fov"):
     """
-    Assign grid-based flow domain annotations to individual cells using 
+    Assign grid-based flow domain annotations to individual cells using
     nearest-neighbor matching.
 
     Parameters
@@ -557,10 +589,10 @@ def compute_hierarchical_net_flow(
     compute_net=True,
 ):
     """
-    Compute net communication flows across a hierarchy: 
+    Compute net communication flows across a hierarchy:
     Windows -> Samples (FOVs) -> Experimental Conditions.
 
-    This function aggregates attention-based interactions into a directed flow 
+    This function aggregates attention-based interactions into a directed flow
     matrix, allowing for statistical comparison between different experimental groups.
 
     Parameters
@@ -577,13 +609,13 @@ def compute_hierarchical_net_flow(
     cell_type_col : str, optional
         Key in `.obs` for cell type annotations.
     compute_net : bool, optional
-        If True, computes net flow (A->B minus B->A). If False, returns raw 
+        If True, computes net flow (A->B minus B->A). If False, returns raw
         aggregated attention directed from sender to receiver.
 
     Returns
     -------
     dict
-        A dictionary where keys are conditions and values are dictionaries 
+        A dictionary where keys are conditions and values are dictionaries
         containing 'mean' and 'std' DataFrames of the flows.
     """
     cell_types = sorted(adata.obs[cell_type_col].unique())
@@ -665,10 +697,10 @@ def compute_hierarchical_net_flow(
 def plot_global_directionality(mean_df, std_df, only_positive=True, title="Net Flow", figsize=(8, 6)):
     """
     Visualize aggregated net flow between cell types using a dot plot.
-    
-    The plot represents the flow from a 'Sender' to a 'Receiver'. 
+
+    The plot represents the flow from a 'Sender' to a 'Receiver'.
     - The color intensity represents the average flow magnitude.
-    - The size of the dot represents the consistency (inverse of standard deviation) 
+    - The size of the dot represents the consistency (inverse of standard deviation)
       across samples/windows.
 
     Parameters
