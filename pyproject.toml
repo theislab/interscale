@@ -7,7 +7,7 @@ name = "interscale"
 version = "0.0.1"
 description = "Multi-scale cell interaction model for spatial transcriptomics data."
 readme = "README.md"
-license = { file = "LICENSE" }
+license = "BSD-3-Clause"
 maintainers = [
   { name = "Francesca Drummer", email = "Francesca.Drummer@helmholtz-munich.de" },
 ]
