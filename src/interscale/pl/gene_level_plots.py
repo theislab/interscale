@@ -1,9 +1,10 @@
+import os
+
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import seaborn as sns
 from evaluation import _get_Z
-import pandas as pd
-import os
 
 from .config import ensure_plotting_config
 
@@ -204,6 +205,7 @@ def dim_importance_elbow_stdexpr(
         plt.show()
 
     return ax
+
 
 @ensure_plotting_config
 def gene_ranks(

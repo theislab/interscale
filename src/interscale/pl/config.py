@@ -1,11 +1,13 @@
 # src/interscale/pl/config.py
-import yaml
-from pathlib import Path
-import matplotlib.pyplot as plt
-import seaborn as sns
-import scanpy as sc
-import numpy as np
 from functools import wraps
+from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import scanpy as sc
+import seaborn as sns
+import yaml
+
 
 class Plotting:
     """Class to create figures with default or custom configuration"""
@@ -74,7 +76,7 @@ class Plotting:
         if config_path is None:
             return self.DEFAULT_CONFIG.copy()
         elif isinstance(config_path, str):
-            with open(config_path, 'r') as f:
+            with open(config_path) as f:
                 return yaml.safe_load(f)
         elif isinstance(config_path, dict):
             return config_path
@@ -83,12 +85,12 @@ class Plotting:
 
     def _setup_plotting_params(self):
         """Set up matplotlib and scanpy plotting parameters"""
-        cfg = self.config['plot_configs']['general']
-        plt.rcParams['figure.dpi'] = cfg['dpi']
-        plt.rcParams['savefig.dpi'] = cfg['dpi_save']
-        plt.rcParams['legend.fontsize'] = cfg['legend_fontsize']
-        plt.rcParams['axes.titlesize'] = cfg['title_fontsize']
-        plt.rcParams['font.family'] = cfg["font_family"]
+        cfg = self.config["plot_configs"]["general"]
+        plt.rcParams["figure.dpi"] = cfg["dpi"]
+        plt.rcParams["savefig.dpi"] = cfg["dpi_save"]
+        plt.rcParams["legend.fontsize"] = cfg["legend_fontsize"]
+        plt.rcParams["axes.titlesize"] = cfg["title_fontsize"]
+        plt.rcParams["font.family"] = cfg["font_family"]
         cmap_cfg = cfg.get("cmap", "viridis")
         if isinstance(cmap_cfg, str):
             cm = plt.get_cmap(cmap_cfg)
@@ -99,13 +101,12 @@ class Plotting:
             raise ValueError("plot_configs.general.cmap must be a colormap name, not a list or tuple")
         plt.rcParams["axes.prop_cycle"] = plt.cycler(color=palette)
         sns.set_theme(style="white", font=cfg["font_family"])
-        sc.settings.set_figure_params(
-            dpi_save=cfg['dpi_save'],
-            fontsize=cfg['legend_fontsize']
-        )
+        sc.settings.set_figure_params(dpi_save=cfg["dpi_save"], fontsize=cfg["legend_fontsize"])
+
 
 # Module-level variable to store the global plotting config
 _global_plotting_config: Plotting = None
+
 
 def set_plotting_config(config_path=None, output_dir="figures"):
     """
@@ -122,6 +123,7 @@ def set_plotting_config(config_path=None, output_dir="figures"):
     global _global_plotting_config
     _global_plotting_config = Plotting(config_path, output_dir)
 
+
 def get_plotting_config() -> Plotting:
     """
     Get the global plotting configuration.
@@ -133,11 +135,14 @@ def get_plotting_config() -> Plotting:
         _global_plotting_config = Plotting()  # Initialize with defaults
     return _global_plotting_config
 
+
 def ensure_plotting_config(func):
     """Decorator to ensure plotting configuration is applied before function execution"""
+
     @wraps(func)
     def wrapper(*args, **kwargs):
         # Auto-initialize if not done yet (no error raised)
         get_plotting_config()
         return func(*args, **kwargs)
+
     return wrapper
