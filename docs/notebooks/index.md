@@ -7,6 +7,4 @@ Our tutorials demonstrate the practical application of InterScale to analyse the
 
 shh/1_set_up_data
 shh/2_train_model
-shh/3_tissue_and_cell_level
-shh/4_gene_level
 ```

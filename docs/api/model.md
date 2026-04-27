@@ -4,12 +4,13 @@ InterScale is a model descigned for spatial transcpriptomics analysis. It provid
 
 ## Overview
 
-## Core components
+InterScale is a two component model. The local model learns cell representation of a local, spatial neighborhood and the global compponent learns tissue wide interactions between these neighborhoods.
 
+![InterScale model](../_static/img/InterScale_model.png)
 
 ### InterScale model
 
-This is the main model class that can be used to define, train, and evaluate the model on an anndata.
+This is the main model class that can be used to define, train, and evaluate the model on an anndata. InterScale's `model` uses `module` to initialize the local and global components in the model (see below).
 
 ```{eval-rst}
 .. module:: interscale.model
@@ -27,13 +28,65 @@ This is the main model class that can be used to define, train, and evaluate the
 
 ### InterScale module
 
-This is the pytorch neural network module and contains InterScale logic.
+InterScale is built from composable local and global modules. The combined modules wire them together into a full model. The base classes (`LocalModule`, `GlobalModule`) define the interface — subclass either to implement a custom architecture and pass it to any model class.
+
+#### Combined modules
+
+Two combined modules are available. `DualDecoderCombinedModule` is the default and trains a separate decoder for each scale. `CombinedModule` uses a single shared (global) decoder.
+
+```{eval-rst}
+.. module:: interscale.module
+    :no-index:
+.. currentmodule:: interscale
+
+.. autosummary::
+    :nosignatures:
+    :toctree: generated
+
+    module.DualDecoderCombinedModule
+    module.CombinedModule
+```
+
+#### Local modules
+
+`LocalModule` is the base class. Four ready-made implementations are provided; subclass `LocalModule` to define your own.
+
+```{eval-rst}
+.. currentmodule:: interscale
+
+.. autosummary::
+    :nosignatures:
+    :toctree: generated
+
+    module.GIN
+    module.GCN
+    module.SCVILocalModule
+    module.PrecomputedEmbeddingModule
+```
+
+#### Global modules
+
+`GlobalModule` is the base class. The default implementation is a transformer encoder with self-attention relevance hooks; subclass `GlobalModule` to define your own.
+
+```{eval-rst}
+.. currentmodule:: interscale
+
+.. autosummary::
+    :nosignatures:
+    :toctree: generated
+
+    module.TransformerNodeEncoderHook
+```
+
+
 
 ## Usage example
 
 ```
 import scanpy as sc
 from interscale
+from interscale.tl import prepare_geome_dataset
+from interscale.geome_dataloader import GraphAnnDataModule
 
 # Load your model and training configurations
 cfg = load_config(cfg_path)
