@@ -27,7 +27,7 @@ Find a detailed description of InterScales APIs.
 :::
 
 :::{grid-item-card} Release Notes {octicon}`tag;1em;`
-:link: release_notes/index
+:link: changelog
 :link-type: doc
 
 Follow the latest changes to InterScale.
