@@ -198,3 +198,83 @@ def dim_importance_elbow_stdexpr(
         plt.show()
 
     return ax
+
+def gene_ranks(
+    merged_df: pd.DataFrame,
+    *,
+    top_n: int = 5,
+    save_dir: str = None,
+    post_fix: str = None,
+    color_local: str = "EE9B00",
+    color_global: str = "005F73",
+):
+    """Plot gene ranks comparing local and global model predictions.
+
+    Creates a scatter plot visualizing the ranking relationships between local and global
+    model predictions, highlighting top genes in various categories.
+
+    Parameters
+    ----------
+        merged_df : pd.DataFrame
+            DataFrame with columns: gene, Local Rank, Global Rank, Rank Difference, Avg Rank
+        top_n : int, optional
+            Number of top genes to highlight in each category. Defaults to 5.
+        save_dir : str, optional
+            Directory to save the figure. If None, figure is not saved. Defaults to None.
+        post_fix : str, optional
+            Post-fix to append to the saved figure filename. Defaults to None.
+        color_local : str, optional
+            Hex color code for local-driven genes. Defaults to 'EE9B00'.
+        color_global : str, optional
+            Hex color code for global-driven genes. Defaults to '005F73'.
+    """
+    # Get top_n genes in each category
+    top_local_genes = merged_df.nsmallest(top_n, "Rank Difference")  # More local-driven
+    top_global_genes = merged_df.nlargest(top_n, "Rank Difference")  # More global-driven
+    top_best_genes = merged_df.nlargest(top_n, "Avg Rank")  # Best overall predicted genes
+
+    # Ensure colors have '#' prefix
+    if not color_local.startswith("#"):
+        color_local = f"#{color_local}"
+    if not color_global.startswith("#"):
+        color_global = f"#{color_global}"
+
+    # Plot all genes
+    plt.figure(figsize=(8, 8))
+    plt.scatter(merged_df["Local Rank"], merged_df["Global Rank"], alpha=0.6, label="All Genes", color="gray")
+
+    # Plot and label top local genes
+    plt.scatter(top_local_genes["Local Rank"], top_local_genes["Global Rank"], color=color_local, label="Top Local")
+    for _, row in top_local_genes.iterrows():
+        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=10, color=color_local)
+
+    # Plot and label top global genes
+    plt.scatter(top_global_genes["Local Rank"], top_global_genes["Global Rank"], color=color_global, label="Top Global")
+    for _, row in top_global_genes.iterrows():
+        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=10, color=color_global)
+
+    # Plot and label best-predicted genes
+    plt.scatter(top_best_genes["Local Rank"], top_best_genes["Global Rank"], color="green", label="Best Predicted")
+    for _, row in top_best_genes.iterrows():
+        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=10, color="green")
+
+    # Reference diagonal
+    min_rank, max_rank = (
+        merged_df[["Local Rank", "Global Rank"]].values.min(),
+        merged_df[["Local Rank", "Global Rank"]].values.max(),
+    )
+    plt.plot([min_rank, max_rank], [min_rank, max_rank], "r--", label="Equal Ranking (y=x)")
+
+    # Labels and legend
+    plt.xlabel("Local Model Rank")
+    plt.ylabel("Global Model Rank")
+    plt.title("Gene Prediction Rank: Local vs. Global")
+    plt.legend()
+
+    # Save figure if save_dir is provided
+    if save_dir is not None:
+        save_path = os.path.join(save_dir, f"gene_rank_analysis_{post_fix}.png")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        print(f"Figure saved to: {save_path}")
+
+    plt.show()

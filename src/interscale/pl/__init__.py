@@ -1,3 +1,3 @@
-from .gene_level_plots import dim_importance_elbow_stdexpr, latent_correlation
+from .gene_level_plots import dim_importance_elbow_stdexpr, latent_correlation, gene_ranks
 
-all = ["latent_correlation", "dim_importance_elbow_stdexpr"]
+__all__ = ["latent_correlation", "dim_importance_elbow_stdexpr", "gene_ranks"]
