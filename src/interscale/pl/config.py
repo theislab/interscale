@@ -1,10 +1,11 @@
 # src/interscale/pl/config.py
-import yaml
 from pathlib import Path
+
 import matplotlib.pyplot as plt
-import seaborn as sns
-import scanpy as sc
 import numpy as np
+import scanpy as sc
+import seaborn as sns
+import yaml
 
 
 class Plotting:
@@ -102,9 +103,9 @@ class Plotting:
         sc.settings.set_figure_params(dpi_save=cfg["dpi_save"], fontsize=cfg["legend_fontsize"])
 
 
-
 class _SettingsMeta(type):
     """Metaclass for singleton settings"""
+
     _instance = None
 
     def __call__(cls):

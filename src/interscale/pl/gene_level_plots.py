@@ -4,11 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-from interscale.evaluation import _get_Z
-import pandas as pd
-import os
 
-from .config import settings
+from interscale.evaluation import _get_Z
 
 
 def latent_correlation(
@@ -205,6 +202,7 @@ def dim_importance_elbow_stdexpr(
         plt.show()
 
     return ax
+
 
 def gene_ranks(
     merged_df: pd.DataFrame,
