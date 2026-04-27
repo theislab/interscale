@@ -4,13 +4,9 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
-<<<<<<< HEAD
 from interscale.evaluation import _get_Z
 import pandas as pd
 import os
-=======
-from evaluation import _get_Z
->>>>>>> 29e5f864033bbc502adb8e17ea978dbe37e57ec3
 
 from .config import settings
 

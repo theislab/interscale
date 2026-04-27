@@ -1,21 +1,10 @@
 # src/interscale/pl/config.py
-<<<<<<< HEAD
 import yaml
 from pathlib import Path
 import matplotlib.pyplot as plt
 import seaborn as sns
 import scanpy as sc
 import numpy as np
-=======
-from functools import wraps
-from pathlib import Path
-
-import matplotlib.pyplot as plt
-import numpy as np
-import scanpy as sc
-import seaborn as sns
-import yaml
->>>>>>> 29e5f864033bbc502adb8e17ea978dbe37e57ec3
 
 
 class Plotting:
