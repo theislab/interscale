@@ -1,14 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
-from evaluation import _get_Z
+from interscale.evaluation import _get_Z
 import pandas as pd
 import os
 
-from .config import ensure_plotting_config
+from .config import settings
 
 
-@ensure_plotting_config
 def latent_correlation(
     adata,
     z_key="_global_emb",
@@ -60,7 +59,6 @@ def latent_correlation(
     return g
 
 
-@ensure_plotting_config
 def dim_importance_elbow_stdexpr(
     adata,
     s_key="_global_std_gene_loadings",
@@ -205,7 +203,6 @@ def dim_importance_elbow_stdexpr(
 
     return ax
 
-@ensure_plotting_config
 def gene_ranks(
     merged_df: pd.DataFrame,
     *,

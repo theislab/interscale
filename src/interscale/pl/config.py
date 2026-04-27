@@ -5,10 +5,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import scanpy as sc
 import numpy as np
-from functools import wraps
+
 
 class Plotting:
-    """Class to create figures with default or custom configuration"""
+    """Class to store plotting configuration and apply matplotlib/scanpy settings"""
 
     DEFAULT_CONFIG = {
         "plot_configs": {
@@ -104,40 +104,47 @@ class Plotting:
             fontsize=cfg['legend_fontsize']
         )
 
-# Module-level variable to store the global plotting config
-_global_plotting_config: Plotting = None
 
-def set_plotting_config(config_path=None, output_dir="figures"):
-    """
-    Initialize global plotting configuration.
+class _SettingsMeta(type):
+    """Metaclass for singleton settings"""
+    _instance = None
 
-    Parameters
-    ----------
-    config_path : str, dict, or None
-        Path to YAML config file, dict with config, or None to use defaults.
-        Defaults to None (uses DEFAULT_CONFIG).
-    output_dir : str
-        Output directory for saving figures. Defaults to "figures".
-    """
-    global _global_plotting_config
-    _global_plotting_config = Plotting(config_path, output_dir)
+    def __call__(cls):
+        if cls._instance is None:
+            cls._instance = super().__call__()
+        return cls._instance
 
-def get_plotting_config() -> Plotting:
-    """
-    Get the global plotting configuration.
 
-    Auto-initializes with default configuration if not already set.
-    """
-    global _global_plotting_config
-    if _global_plotting_config is None:
-        _global_plotting_config = Plotting()  # Initialize with defaults
-    return _global_plotting_config
+class settings(metaclass=_SettingsMeta):
+    """Global settings for plotting functions - singleton pattern matching scanpy's approach"""
 
-def ensure_plotting_config(func):
-    """Decorator to ensure plotting configuration is applied before function execution"""
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        # Auto-initialize if not done yet (no error raised)
-        get_plotting_config()
-        return func(*args, **kwargs)
-    return wrapper
+    def __init__(self):
+        self._plotting_config = Plotting()
+
+    def set_plotting_config(self, config_path=None, output_dir="figures"):
+        """
+        Set global plotting configuration.
+
+        Parameters
+        ----------
+        config_path : str, dict, or None
+            Path to YAML config file, dict with config, or None to use defaults.
+        output_dir : str
+            Output directory for saving figures.
+        """
+        self._plotting_config = Plotting(config_path, output_dir)
+
+    @property
+    def plotting_config(self) -> Plotting:
+        """Get the current plotting configuration"""
+        return self._plotting_config
+
+    @property
+    def output_dir(self) -> Path:
+        """Get the output directory for figures"""
+        return self._plotting_config.output_dir
+
+    @property
+    def config(self) -> dict:
+        """Get the configuration dictionary"""
+        return self._plotting_config.config
