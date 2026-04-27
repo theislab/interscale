@@ -199,6 +199,7 @@ def dim_importance_elbow_stdexpr(
 
     return ax
 
+
 def gene_ranks(
     merged_df: pd.DataFrame,
     *,
