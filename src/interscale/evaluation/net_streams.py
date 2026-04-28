@@ -219,35 +219,35 @@ def plot_all_spatial_net_streams(
 
     Parameters
     ----------
-    adata : AnnData
+    adata : anndata.AnnData
         The complete AnnData object.
     fov_id : str
         The specific Field of View to visualize.
-    fov_key : str, optional
+    fov_key : str
         Key in `adata.obs` identifying FOVs. Defaults to "fov".
-    window_key : str, optional
+    window_key : str
         Key identifying local windows for flow computation.
-    cell_type_col : str, optional
+    cell_type_col : str
         Column in `adata.obs` with cell type labels.
-    grid_res : int, optional
+    grid_res : int
         Resolution of the interpolation grid. Defaults to 50.
-    max_dist : float, optional
+    max_dist : float
         Maximum influence distance for vectors. If None, calculated via `k_dist`.
-    k_dist : float, optional
+    k_dist : float
         Fraction of the FOV width to use as `max_dist` if `max_dist` is None.
-    density : float, optional
+    density : float
         Density of the streamplot lines. Defaults to 1.5.
-    ax : matplotlib.axes.Axes, optional
+    ax : matplotlib.axes.Axes
         Pre-existing axes for plotting.
-    additional_embeddings : str, optional
+    additional_embeddings : str
         Additional color mapping for the background scatter plot.
-    return_streams : bool, optional
+    return_streams : bool
         If True, returns the computed vector fields instead of plotting.
-    cell_list : list, optional
+    cell_list : list
         Subset of cell types to include in the flow analysis.
-    inter_only : bool, optional
+    inter_only : bool
         If True, excludes self-interactions from the vector fields.
-    **kwargs : dict
+    **kwargs
         Passed to `squidpy.pl.spatial_scatter`.
 
     Returns
@@ -406,15 +406,15 @@ def plot_flow_clusters(cluster_grid, X_lin, Y_lin, adata_slice, fov_id, fov_key=
         1D array of X-axis coordinates for the grid.
     Y_lin : numpy.ndarray
         1D array of Y-axis coordinates for the grid.
-    adata_slice : AnnData
+    adata_slice : anndata.AnnData
         The sliced AnnData object for the current FOV.
     fov_id : str
         The specific Field of View identifier.
-    fov_key : str, optional
+    fov_key : str
         The key in `adata.obs` for FOVs. Defaults to "fov".
-    cell_type_col : str, optional
+    cell_type_col : str
         The column to use for coloring cells in the scatter plot.
-    **kwargs : dict
+    **kwargs
         Additional arguments passed to `squidpy.pl.spatial_scatter`.
 
     Returns

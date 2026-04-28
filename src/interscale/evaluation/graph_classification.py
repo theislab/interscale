@@ -19,31 +19,25 @@ def scale_cls_by_sample(
     inplace: bool = True,
     suffix: str = "_scaled",
 ):
-    """
-    Scale CLS token values to [0, 1] within each sample/window to make them comparable
-    across windows of different sizes.
+    """Scale CLS token values to [0, 1] within each sample/window to make them comparable across windows of different sizes.
 
     Parameters
     ----------
-        adata: AnnData
-            Annotated data object
-        sample_key: str
-            Column name in adata.obs containing the sample/window identifiers
-        window_key: str
-            Column name in adata.obs containing the window identifiers. If None, no windowing is performed.
-        cls_columns: str | list
-            Column name(s) of CLS values to scale (e.g., 'combined_cls_horizontal')
-        inplace: bool, default=True
-            If True, add scaled columns to adata.obs with suffix
-            If False, return DataFrame with scaled values
-        suffix: str, default='_scaled'
-            Suffix to add to column names when inplace=True
+    adata
+        Annotated data object.
+    sample_key
+        Column name in ``adata.obs`` containing the sample/window identifiers.
+    cls_columns
+        Column name(s) of CLS values to scale (e.g., ``"combined_cls_horizontal"``).
+    inplace
+        If True, add scaled columns to ``adata.obs`` with ``suffix``;
+        if False, return a DataFrame with scaled values.
+    suffix
+        Suffix to add to column names when ``inplace=True``.
 
     Returns
     -------
-        DataFrame or None
-            If inplace=False, returns DataFrame with scaled values
-            If inplace=True, returns None and modifies adata.obs
+    DataFrame with scaled values if ``inplace=False``, otherwise ``None``.
     """
     # Convert to list if single string
     if isinstance(cls_columns, str):

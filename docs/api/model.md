@@ -6,8 +6,6 @@ InterScale is a model descigned for spatial transcpriptomics analysis. It provid
 
 InterScale is a two component model. The local model learns cell representation of a local, spatial neighborhood and the global compponent learns tissue wide interactions between these neighborhoods.
 
-![InterScale model](../_static/img/InterScale_model.png)
-
 ### InterScale model
 
 This is the main model class that can be used to define, train, and evaluate the model on an anndata. InterScale's `model` uses `module` to initialize the local and global components in the model (see below).

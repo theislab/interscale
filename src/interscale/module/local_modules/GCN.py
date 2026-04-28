@@ -47,15 +47,18 @@ class GCN(LocalModule):
         self.final_norm = nn.LayerNorm(self.n_embed, elementwise_affine=False)
 
     def forward(self, x, edge_index):
-        """
+        """Compute node embeddings.
+
         Parameters
         ----------
-            x: gene expression (var x obs)
-            edge_index: Adjacency matrix (n x obs)
+        x
+            Gene expression (``var × obs``).
+        edge_index
+            Adjacency matrix (``n × obs``).
 
         Returns
         -------
-            h: Embeddings (n x embed_dim)
+        Embeddings (``n × embed_dim``).
         """
         identity = self.input_proj(x)
         identity = self.input_norm(identity)
@@ -77,12 +80,7 @@ class GCN(LocalModule):
         return h
 
     def get_model_summary(self) -> str:
-        """Returns a string containing the model's parameters summary.
-
-        Returns
-        -------
-            str: Summary string with model parameters
-        """
+        """Return a string summary of the model's parameters."""
         summary = (
             f"GCN Local Component: \n"
             f"n_layers: {self.n_layers}, \n"

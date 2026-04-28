@@ -5,6 +5,7 @@ Our tutorials demonstrate the practical application of InterScale to analyse the
 ```{toctree}
 :maxdepth: 1
 
-shh/1_set_up_data
-shh/2_train_model
+0_setup_legnini
+1_model_training
+2_gene_level_evaluation
 ```

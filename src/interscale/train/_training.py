@@ -42,51 +42,32 @@ class NodeMaskingTrainingPlan:
         Parameters
         ----------
         max_epochs
-            The maximum number of epochs to train the model. The actual number of epochs may be
-            less if early stopping is enabled. If ``None``, defaults to a heuristic based on
-            :func:`~scvi.model.get_max_epochs_heuristic`. Must be passed in if ``datamodule`` is
-            passed in, and it does not have an ``n_obs`` attribute.
-        train_size
-            Float, or None. Size of training set in the range ``[0.0, 1.0]``. default is 0.7 and
-            potentially adding small last batch to validation cells.
-            Passed into :class:`DataSplitter`.
-            Not used if ``datamodule`` is passed in.
-        validation_size
-            Size of the test set. If ``None``, defaults to ``1 - train_size``. If
-            ``train_size + validation_size < 1``, the remaining cells belong to a test set. Passed
-            into :class:`DataSplitter`. Not used if ``datamodule`` is passed in.
+            The maximum number of epochs to train the model. The actual number of
+            epochs may be less if early stopping is enabled.
         shuffle_set_split
-            Whether to shuffle indices before splitting. If ``False``, the val, train, and test set
-            are split in the sequential order of the data according to ``validation_size`` and
-            ``train_size`` percentages. Passed into :class:`~DataSplitter`. Not
-            used if ``datamodule`` is passed in.
-        batch_size
-            Minibatch size to use during training. Passed into
-            :class:`~scvi.dataloaders.DataSplitter`. Not used if ``datamodule`` is passed in.
+            Whether to shuffle indices before splitting. If ``False``, the val,
+            train, and test set are split in the sequential order of the data.
+        load_sparse_tensor
+            Whether to load data as sparse tensors.
         early_stopping
-            Perform early stopping. Additional arguments can be passed in through ``**kwargs``.
-            See :class:`~scvi.train.Trainer` for further options.
+            Perform early stopping. Additional arguments can be passed in through
+            ``**trainer_kwargs``.
         patience
-            Patience for early stopping. Nr of epochs to wait for improvement before stopping. Passed into :class:`~scvi.train.EarlyStopping`.
+            Patience for early stopping: number of epochs to wait for improvement
+            before stopping.
         datasplitter_kwargs
-            Additional keyword arguments passed into :class:`~scvi.dataloaders.DataSplitter`.
-            Values in this argument can be overwritten by arguments directly passed into this
-            method, when appropriate. Not used if ``datamodule`` is passed in.
+            Additional keyword arguments passed into the data splitter. Not used
+            if ``datamodule`` is passed in.
         plan_kwargs
-            Additional keyword arguments passed into :class:`~scvi.train.TrainingPlan`. Values in
-            this argument can be overwritten by arguments directly passed into this method, when
-            appropriate.
+            Additional keyword arguments passed into the training plan.
         datamodule
-            ``EXPERIMENTAL`` A :class:`~lightning.pytorch.core.LightningDataModule` instance to use
-            for training in place of the default :class:`~scvi.dataloaders.DataSplitter`. Can only
-            be passed in if the model was not initialized with :class:`~anndata.AnnData`.
-        **kwargs
-           Additional keyword arguments passed into :class:`~scvi.train.Trainer`.
-
-        Returns
-        -------
-        runner: TrainRunner
-            The runner object. Wraps around Pytorch Lightning Trainer.
+            A :class:`~lightning.pytorch.core.LightningDataModule` instance to use
+            for training.
+        wandb_use
+            Whether to log to Weights & Biases. Defaults to the project config.
+        **trainer_kwargs
+            Additional keyword arguments passed into the
+            :class:`~lightning.pytorch.trainer.trainer.Trainer`.
         """
         # if datamodule is not None and not self._module_init_on_train:
         #     raise ValueError(

@@ -43,7 +43,7 @@ dependencies = [
   "yacs"
 ]
 # https://docs.pypi.org/project_metadata/#project-urls
-urls.Documentation = "https://InterScale.readthedocs.io/"
+urls.Documentation = "https://icb-interscale.readthedocs.io/"
 urls.Homepage = "https://github.com/theislab/interscale"
 urls.Source = "https://github.com/theislab/interscale"
 

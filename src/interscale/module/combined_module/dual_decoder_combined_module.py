@@ -230,28 +230,33 @@ class DualDecoderCombinedModule(BaseModule):
 
         return {"local": local, "global": global_pred}
 
-    def compute_separate_losses(self, loss_fn, loss_type, y_pred_combined, y_true_combined):
+    def compute_separate_losses(
+        self,
+        loss_fn,
+        loss_type: Literal["GaussianNLL", "MSELoss", "CrossEntropy", "WeightedCE"],
+        y_pred_combined: torch.Tensor,
+        y_true_combined: torch.Tensor,
+    ):
         """Compute separate losses for local and global predictions.
 
         Parameters
         ----------
-        loss_fn: callable
-            Loss function that takes (y_pred, y_true) and returns a scalar loss.
+        loss_fn
+            Loss function that takes ``(y_pred, y_true)`` and returns a scalar loss.
             Should be compatible with the prediction task (classification or regression).
-        loss_type: Literal["GaussianNLL", "MSELoss", "CrossEntropy", "WeightedCE"]
-            Type of loss function to use.
-        y_pred_combined: torch.Tensor
-            Combined predictions from _common_step. For node-level: [2*N_masked, C],
-            for graph-level: [B, C] where B is batch size.
-        y_true_combined: torch.Tensor
-            Combined ground truth from _common_step. Same shape as y_pred_combined.
+        loss_type
+            Type of loss function to use. One of ``"GaussianNLL"``, ``"MSELoss"``,
+            ``"CrossEntropy"``, ``"WeightedCE"``.
+        y_pred_combined
+            Combined predictions from ``_common_step``. For node-level:
+            ``[2*N_masked, C]``; for graph-level: ``[B, C]`` where ``B`` is batch size.
+        y_true_combined
+            Combined ground truth from ``_common_step``. Same shape as ``y_pred_combined``.
 
         Returns
         -------
-        dict: Dictionary with keys:
-            - 'local_loss': scalar loss for local predictions or None
-            - 'global_loss': scalar loss for global predictions or None
-            - 'combined_loss': combined loss (average of local and global) or None
+        Dictionary with keys ``"local_loss"``, ``"global_loss"``, ``"combined_loss"``
+        (average of local and global), and ``"kl_loss"``. Any value may be ``None``.
         """
         losses = {"local_loss": None, "global_loss": None, "combined_loss": None, "kl_loss": None}
 

@@ -1,5 +1,15 @@
 from .base._base_module import BaseModule
 from .combined_module import CombinedModule, DualDecoderCombinedModule
-from .local_modules import GCN, GIN
+from .global_modules import TransformerNodeEncoderHook
+from .local_modules import GCN, GIN, PrecomputedEmbeddingModule, SCVILocalModule
 
-__all__ = ["BaseModule", "GCN", "GIN", "CombinedModule", "DualDecoderCombinedModule"]
+__all__ = [
+    "BaseModule",
+    "CombinedModule",
+    "DualDecoderCombinedModule",
+    "GCN",
+    "GIN",
+    "PrecomputedEmbeddingModule",
+    "SCVILocalModule",
+    "TransformerNodeEncoderHook",
+]

@@ -52,27 +52,31 @@ class TransformerNodeEncoderHook(GlobalModule):
         # Register self-attention relevance hook
         self.self_attn_relevance = SelfAttentionRelevance(self.transformer_encoder)
 
-    def common_step_local_to_global(self, batched_data, emb, eval_step: bool = False):
-        """
-        Convert local node embeddings [N, E] to padded local node embeddings [max_seq_len, E]
-        with N being the number of nodes in the graph and E being the embedding dimension.
+    def common_step_local_to_global(self, batched_data, emb: torch.Tensor, eval_step: bool = False):
+        """Convert local node embeddings ``[N, E]`` to padded local node embeddings ``[max_seq_len, E]``.
+
+        ``N`` is the number of nodes in the graph and ``E`` the embedding dimension.
 
         Parameters
         ----------
-            batched_data: Pytorch geometric object
-            emb: torch.Tensor [N, E]
-                Embedding of the local model or user-provided embeddings.
-            eval: bool
-                Whether to evaluate the transformer encoder. If True, the transformer encoder will not be masked.
+        batched_data
+            PyTorch Geometric batch object.
+        emb
+            ``torch.Tensor`` of shape ``[N, E]``: embedding of the local model
+            or user-provided embeddings.
+        eval_step
+            If True, the transformer encoder is not masked.
 
         Returns
         -------
-            padded_emb: torch.Tensor [max_seq_len, B, E]
-                Padded local node embeddings
-            src_padding_mask: torch.Tensor [max_seq_len]
-                Mask indicating padding nodes
-            index_nodes: torch.Tensor [N]
-                Indices of the nodes in the original graph
+        Tuple of ``(padded_emb, src_padding_mask, index_nodes)``:
+
+        - ``padded_emb`` (``torch.Tensor`` of shape ``[max_seq_len, B, E]``):
+          padded local node embeddings.
+        - ``src_padding_mask`` (``torch.Tensor`` of shape ``[max_seq_len]``):
+          mask indicating padding nodes.
+        - ``index_nodes`` (``torch.Tensor`` of shape ``[N]``): indices of the
+          nodes in the original graph.
         """
         # Layer normalization
         emb = self.norm_input(emb)

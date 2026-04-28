@@ -96,10 +96,15 @@ source_suffix = {
 }
 
 intersphinx_mapping = {
-    "python": ("https://docs.python.org/3", None),
     "anndata": ("https://anndata.readthedocs.io/en/stable/", None),
-    "scanpy": ("https://scanpy.readthedocs.io/en/stable/", None),
+    "matplotlib": ("https://matplotlib.org/stable/", None),
     "numpy": ("https://numpy.org/doc/stable/", None),
+    "pandas": ("https://pandas.pydata.org/docs/", None),
+    "python": ("https://docs.python.org/3", None),
+    "pytorch_lightning": ("https://lightning.ai/docs/pytorch/stable/", None),
+    "scanpy": ("https://scanpy.readthedocs.io/en/stable/", None),
+    "scvi": ("https://docs.scvi-tools.org/en/stable/", None),
+    "torch": ("https://pytorch.org/docs/stable/", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -134,4 +139,45 @@ nitpick_ignore = [
     # If building the documentation fails because of a missing link that is outside your control,
     # you can add an exception to this list.
     #     ("py:class", "igraph.Graph"),
+    ("py:class", "yacs.config.CfgNode"),
 ]
+# Regex-based ignores for references inherited from third-party packages whose
+# Sphinx inventories use module paths that don’t match what their own
+# docstrings reference (e.g. `pytorch_lightning.*` vs the documented
+# `lightning.pytorch.*`, or torch internals not exposed in the public inv).
+nitpick_ignore_regex = [
+    # pytorch_lightning inherited members
+    (r"py:.*", r"pytorch_lightning\..*"),
+    (r"py:.*", r"LightningModule"),
+    # torch inherited members not in the public inventory
+    (r"py:.*", r"torch\.jit(\..*)?"),
+    (r"py:.*", r"torch\.ScriptModule"),
+    (r"py:.*", r"torch\.nn\.Parameter"),
+    (r"py:.*", r"torch\.utils\.hooks\..*"),
+    (r"py:meth", r"torch\.mean"),
+    # Bare names referenced in inherited torch.nn.Module / Lightning docstrings
+    (r"py:class", r"Module"),
+    (r"py:class", r"Dropout"),
+    (r"py:class", r"BatchNorm"),
+    (r"py:class", r"torchmetrics\.Metric"),
+    (r"py:meth", r"nn\.Module\.load_state_dict"),
+    (r"py:meth", r"forward"),
+    (r"py:meth", r"training_step"),
+    (r"py:meth", r"toggle_optimizer"),
+    (r"py:meth", r"save_hyperparameters"),
+    (r"py:meth", r"move_data_to_device"),
+    (r"py:meth", r"apply_to_collection"),
+    (r"py:func", r"add_module"),
+    (r"py:func", r"register_module_.*"),
+    (r"py:attr", r"state_dict"),
+    (r"py:attr", r"strict"),
+    (r"py:attr", r"assign"),
+    (r"py:attr", r"persistent"),
+    (r"py:attr", r"requires_grad"),
+    (r"py:attr", r"grad_input"),
+    (r"py:attr", r"grad_output"),
+    (r"py:attr", r"checkpoint_path"),
+]
+# Suppress docutils-level parse warnings emitted from third-party docstrings
+# (torch / pytorch_lightning) — they’re upstream issues we can’t fix.
+suppress_warnings = ["docutils"]
