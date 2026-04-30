@@ -471,6 +471,7 @@ class TrainingPlan(pl.LightningModule):
         # return self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
 
     def configure_optimizers(self):
+        """Configure optimizers and learning rate schedulers."""
         params = []
         params.extend(filter(lambda p: p.requires_grad, self.module.parameters()))
         # if self.model.local_component is not None:

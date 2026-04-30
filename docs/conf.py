@@ -110,7 +110,7 @@ intersphinx_mapping = {
     "pytorch_lightning": ("https://lightning.ai/docs/pytorch/stable/", None),
     "scanpy": ("https://scanpy.readthedocs.io/en/stable/", None),
     "scvi": ("https://docs.scvi-tools.org/en/stable/", None),
-    "torch": ("https://docs.pytorch.org/docs/stable/", None),
+    # "torch": ("https://pytorch.org/docs/stable/", None),
 }
 
 # List of patterns, relative to source directory, that match files and
