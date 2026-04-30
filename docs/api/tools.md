@@ -4,7 +4,7 @@ InterScale tools provides utilities for analyzing and interpreting 1) local and 
 
 Downstream InterScale's output can be used for gene, cell and tissue level analysis.
 
-![InterScale concept](_static/img/InterScale_tools.png)
+![InterScale concept](../_static/img/InterScale_tools.png)
 
 ## Tissue level
 
