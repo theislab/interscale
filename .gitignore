@@ -20,6 +20,7 @@ docs/api/generated
 figures/
 wandb/
 logs/
+data/
 lightning_logs/
 artifacts/
 results/
