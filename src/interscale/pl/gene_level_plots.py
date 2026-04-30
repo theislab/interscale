@@ -243,7 +243,11 @@ def gene_ranks(
     # Labels and legend
     plt.xlabel("Local Model Rank", fontsize=fontsize)
     plt.ylabel("Global Model Rank", fontsize=fontsize)
-    plt.title("Gene Prediction Rank: Local vs. Global", fontsize=fontsize, fontweight=general_cfg.get("title_fontweight", "bold"))
+    plt.title(
+        "Gene Prediction Rank: Local vs. Global",
+        fontsize=fontsize,
+        fontweight=general_cfg.get("title_fontweight", "bold"),
+    )
     plt.legend(fontsize=legend_fontsize)
 
     # Save figure if save_dir is provided

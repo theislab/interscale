@@ -152,6 +152,7 @@ class Plotting:
 #             fontsize=cfg['legend_fontsize']
 #         )
 
+
 class _SettingsMeta(type):
     """Metaclass for singleton settings"""
 

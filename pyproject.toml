@@ -73,7 +73,7 @@ doc = [
   "sphinxext-opengraph",
 ]
 enrichment = [
-  "gseapy>=0.10.0",
+  "gseapy>=0.10",
 ]
 
 [tool.hatch]

@@ -271,6 +271,7 @@ def get_genes_dim(
 
     return df if not plot else (df, ax)
 
+
 def calculate_dim_importance(
     adata,
     s_key="_global_std_gene_loadings",
