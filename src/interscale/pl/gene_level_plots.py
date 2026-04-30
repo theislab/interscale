@@ -70,7 +70,7 @@ def dim_importance_elbow(
     ax=None,
 ):
     """Plot dimension importance elbow plot with cumulative cutoff.
-    
+
     Parameters
     ----------
     results : dict
@@ -85,7 +85,7 @@ def dim_importance_elbow(
         Whether to show the plot.
     ax : matplotlib.axes.Axes, optional
         Axes to plot on. If None, creates new figure.
-    
+
     Returns
     -------
     ax : matplotlib.axes.Axes
@@ -130,7 +130,7 @@ def dim_importance_elbow(
 
     if title is None:
         title = f"Elbow (std-expr, {mode}): {s_key} + Corr({z_key})"
-    
+
     ax.set_title(title, fontsize=fontsize + 1)
     ax.set_xlabel("Embedding dim (sorted)", fontsize=fontsize)
     ax.set_ylabel(ylab, fontsize=fontsize)
@@ -191,12 +191,12 @@ def gene_ranks(
     # Get plotting parameters from config
     general_cfg = plotting_config.config["plot_configs"]["general"]
     rank_cfg = plotting_config.config["plot_configs"].get("rank_genes_plots", {})
-    
+
     figsize = (10, 10)
     fontsize = general_cfg.get("title_fontsize", 14)
     legend_fontsize = general_cfg.get("legend_fontsize", 12)
     dpi_save = general_cfg.get("dpi_save", 300)
-    
+
     # Use defaults if colors not provided
     if color_local is None:
         color_local = rank_cfg.get("color_local", "EE9B00")

@@ -282,7 +282,7 @@ def calculate_dim_importance(
     n_top=None,
 ):
     """Calculate dimension importance scores.
-    
+
     Parameters
     ----------
     adata : AnnData
@@ -301,7 +301,7 @@ def calculate_dim_importance(
         Spacing between points on x-axis.
     n_top : int, optional
         Maximum number of dimensions to include.
-    
+
     Returns
     -------
     dict
