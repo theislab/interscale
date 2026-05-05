@@ -15,9 +15,6 @@ concurrency:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash -e {0} # -e to fail on error
 
     strategy:
       fail-fast: false
@@ -39,9 +36,9 @@ jobs:
       PYTHON: ${{ matrix.python }}
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v6
       - name: Set up Python ${{ matrix.python }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
           cache: "pip"
@@ -64,4 +61,4 @@ jobs:
         run: |
           coverage report
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v6
