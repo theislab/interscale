@@ -1,10 +1,9 @@
 [build-system]
 build-backend = "hatchling.build"
-requires = [ "hatchling" ]
+requires = [ "hatch-vcs", "hatchling" ]
 
 [project]
 name = "interscale"
-version = "0.0.1"
 description = "Multi-scale cell interaction model for spatial transcriptomics data."
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -16,6 +15,7 @@ authors = [
   { name = "Sara Jimenez" },
 ]
 requires-python = ">=3.11"
+dynamic = [ "version" ]
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
   "Programming Language :: Python :: 3.11",
@@ -95,6 +95,7 @@ envs.hatch-test.matrix = [
 envs.hatch-test.overrides.matrix.deps.env-vars = [
   { key = "UV_PRERELEASE", value = "allow", if = [ "pre" ] },
 ]
+version.source = "vcs"
 
 [tool.uv]
 # fix build deps when building from source
