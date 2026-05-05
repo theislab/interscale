@@ -97,6 +97,7 @@ envs.hatch-test.overrides.matrix.deps.env-vars = [
 ]
 
 [tool.uv]
+# fix build deps when building from source
 extra-build-dependencies.torch-cluster = [ "torch" ]
 extra-build-dependencies.torch-scatter = [ "torch" ]
 extra-build-dependencies.torch-sparse = [ "torch" ]

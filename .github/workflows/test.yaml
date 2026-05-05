@@ -65,6 +65,8 @@ jobs:
         with:
           python-version: ${{ matrix.env.python }}
       - name: create hatch environment
+        env:  # use CPU wheels in testing
+          UV_FIND_LINKS: https://data.pyg.org/whl/torch-2.11.0+cpu.html
         run: uvx hatch env create ${{ matrix.env.name }}
       - name: run tests using hatch
         env:
