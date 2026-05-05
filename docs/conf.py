@@ -67,6 +67,12 @@ extensions = [
 
 autosummary_generate = True
 autodoc_member_order = "groupwise"
+autodoc_inherit_docstrings = False
+autodoc_type_aliases = {
+    "AnnData": "anndata.AnnData",
+    "pd.DataFrame": "pandas.DataFrame",
+    "np.ndarray": "numpy.ndarray",
+}
 default_role = "literal"
 napoleon_google_docstring = False
 napoleon_numpy_docstring = True
@@ -104,7 +110,7 @@ intersphinx_mapping = {
     "pytorch_lightning": ("https://lightning.ai/docs/pytorch/stable/", None),
     "scanpy": ("https://scanpy.readthedocs.io/en/stable/", None),
     "scvi": ("https://docs.scvi-tools.org/en/stable/", None),
-    "torch": ("https://pytorch.org/docs/stable/", None),
+    # "torch": ("https://pytorch.org/docs/stable/", None),
 }
 
 # List of patterns, relative to source directory, that match files and
@@ -136,26 +142,27 @@ pygments_style = "default"
 katex_prerender = shutil.which(katex.NODEJS_BINARY) is not None
 
 nitpick_ignore = [
-    # If building the documentation fails because of a missing link that is outside your control,
-    # you can add an exception to this list.
-    #     ("py:class", "igraph.Graph"),
     ("py:class", "yacs.config.CfgNode"),
+    ("py:class", "optional"),
+    # Type aliases used in docstring text that napoleon converts to cross-references;
+    # these can’t be resolved by intersphinx since the inventory uses fully qualified names.
+    ("py:class", "AnnData"),
+    ("py:class", "pd.DataFrame"),
+    ("py:class", "np.ndarray"),
+    # Undefined cross-doc labels in torch’s own documentation
+    ("ref", "locally-disable-grad-doc"),
+    ("ref", "nn-init-doc"),
 ]
-# Regex-based ignores for references inherited from third-party packages whose
-# Sphinx inventories use module paths that don’t match what their own
-# docstrings reference (e.g. `pytorch_lightning.*` vs the documented
-# `lightning.pytorch.*`, or torch internals not exposed in the public inv).
+# Suppress all cross-reference warnings from third-party inherited docstrings
+# (torch, pytorch_lightning, lightning_fabric) — these are upstream issues.
 nitpick_ignore_regex = [
-    # pytorch_lightning inherited members
     (r"py:.*", r"pytorch_lightning\..*"),
     (r"py:.*", r"LightningModule"),
-    # torch inherited members not in the public inventory
-    (r"py:.*", r"torch\.jit(\..*)?"),
-    (r"py:.*", r"torch\.ScriptModule"),
-    (r"py:.*", r"torch\.nn\.Parameter"),
-    (r"py:.*", r"torch\.utils\.hooks\..*"),
-    (r"py:meth", r"torch\.mean"),
-    # Bare names referenced in inherited torch.nn.Module / Lightning docstrings
+    (r"py:.*", r"torch\..*"),
+    (r"py:.*", r"torch"),
+    (r"py:.*", r"lightning_fabric\..*"),
+    (r"py:.*", r"pandas\.core\..*"),
+    # Bare names from inherited torch.nn.Module / Lightning docstrings
     (r"py:class", r"Module"),
     (r"py:class", r"Dropout"),
     (r"py:class", r"BatchNorm"),
@@ -178,6 +185,4 @@ nitpick_ignore_regex = [
     (r"py:attr", r"grad_output"),
     (r"py:attr", r"checkpoint_path"),
 ]
-# Suppress docutils-level parse warnings emitted from third-party docstrings
-# (torch / pytorch_lightning) — they’re upstream issues we can’t fix.
-suppress_warnings = ["docutils"]
+suppress_warnings = ["docutils", "intersphinx"]

@@ -3,15 +3,12 @@
 __pycache__/
 *.py[cod]
 
-# ignore ALL .out files
+# output files
 *.out
 *.csv
-*.png
 *.yaml
 *.log
 *.txt
-*.pyc
-*.cpython-310
 *.sh
 
 # ignore ALL files in ANY directory named
@@ -20,6 +17,7 @@ docs/api/generated
 figures/
 wandb/
 logs/
+data/
 lightning_logs/
 artifacts/
 results/

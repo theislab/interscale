@@ -6,10 +6,12 @@ import pandas as pd
 import seaborn as sns
 
 from interscale.evaluation import _get_Z
+from interscale.pl.config import Plotting
 
 
 def latent_correlation(
     adata,
+    *,
     z_key="_global_emb",
     vmax=1.0,
     cmap="BrBG_r",
@@ -59,115 +61,56 @@ def latent_correlation(
     return g
 
 
-def dim_importance_elbow_stdexpr(
-    adata,
-    s_key="_global_std_gene_loadings",
-    z_key="_global_emb",
-    mode="full",
-    use_ratio=True,
-    cumulative_cutoff=0.90,
-    spacing=2,
-    n_top=None,  # NEW
+def dim_importance_elbow(
+    results,
     figsize=(8, 4.5),
     fontsize=12,
     title=None,
     show=True,
+    ax=None,
 ):
+    """Plot dimension importance elbow plot with cumulative cutoff.
 
-    if s_key not in adata.varm:
-        raise KeyError(f"{s_key} not found in adata.varm")
-    if z_key not in adata.obsm:
-        raise KeyError(f"{z_key} not found in adata.obsm")
+    Parameters
+    ----------
+    results : dict
+        Dictionary returned from calculate_dim_importance().
+    figsize : tuple
+        Figure size (only used if ax is None).
+    fontsize : int
+        Font size for labels.
+    title : str, optional
+        Plot title. If None, auto-generated.
+    show : bool
+        Whether to show the plot.
+    ax : matplotlib.axes.Axes, optional
+        Axes to plot on. If None, creates new figure.
 
-    S = np.asarray(adata.varm[s_key], dtype=float)
-    Z = np.asarray(adata.obsm[z_key], dtype=float)
+    Returns
+    -------
+    ax : matplotlib.axes.Axes
+        The axes object.
+    """
+    y_plot = results["y_plot"]
+    dim_plot = results["dim_plot"]
+    cutoff_x = results["cutoff_x"]
+    cutoff_idx = results["cutoff_idx"]
+    n_dims_left = results["n_dims_left"]
+    dims_left = results["dims_left"]
+    cumulative_cutoff = results["cumulative_cutoff"]
+    mode = results["mode"]
+    s_key = results["s_key"]
+    z_key = results["z_key"]
+    use_ratio = results["use_ratio"]
+    spacing = results["spacing"]
 
-    if Z.ndim == 1:
-        Z = Z[:, None]
+    ylab = "Importance ratio (std-expr)" if use_ratio else "Importance (std-expr)"
 
-    if S.ndim != 2 or S.shape[1] != Z.shape[1]:
-        raise ValueError(f"Shape mismatch: S is {S.shape}, Z is {Z.shape}")
-
-    ok = np.isfinite(Z).all(axis=1)
-    if ok.sum() < 3:
-        raise ValueError(f"Need >=3 finite rows in adata.obsm['{z_key}']")
-
-    Z = Z[ok]
-
-    # -------------------
-    # scoring
-    # -------------------
-
-    if mode == "diag":
-        score = np.sum(S * S, axis=0)
-
-    elif mode == "full":
-        Corr = np.corrcoef(Z, rowvar=False)
-        StS = S.T @ S
-        A = StS * Corr
-        A = 0.5 * (A + A.T)
-        score = A.sum(axis=0)
-
-    else:
-        raise ValueError("mode must be 'diag' or 'full'")
-
-    # -------------------
-    # y values
-    # -------------------
-
-    if use_ratio:
-        total = float(np.sum(score))
-        y = score / total if total > 0 else np.zeros_like(score)
-        ylab = "Importance ratio (std-expr)"
-    else:
-        y = score
-        ylab = "Importance (std-expr)"
-
-    # -------------------
-    # sorting
-    # -------------------
-
-    order = np.argsort(y)[::-1]
-    y_sorted = y[order]
-    dim_sorted = order
-
-    # -------------------
-    # cutoff
-    # -------------------
-
-    cutoff_x = None
-    cutoff_idx = None
-
-    if use_ratio and cumulative_cutoff is not None and y.sum() > 0:
-        cum = np.cumsum(y_sorted)
-        cutoff_idx = int(np.searchsorted(cum, cumulative_cutoff, side="left"))
-        cutoff_x = cutoff_idx * spacing
-
-        n_dims_left = cutoff_idx + 1
-        dims_left = dim_sorted[:n_dims_left]
-
-        print(f"\n{int(cumulative_cutoff * 100)}% cumulative variance reached with {n_dims_left} dimensions:")
-        print("Embedding dimensions (sorted by importance):")
-        print(dims_left.tolist())
-
-    # -------------------
-    # apply n_top filter
-    # -------------------
-
-    K = len(y_sorted)
-
-    if n_top is not None:
-        K = min(n_top, K)
-
-    y_plot = y_sorted[:K]
-    dim_plot = dim_sorted[:K]
+    K = len(y_plot)
     x = np.arange(K) * spacing
 
-    # -------------------
-    # plotting
-    # -------------------
-
-    fig, ax = plt.subplots(figsize=figsize)
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
 
     ax.plot(x, y_plot, marker="o", linewidth=1)
 
@@ -185,21 +128,26 @@ def dim_importance_elbow_stdexpr(
         )
         ax.legend(fontsize=fontsize - 2, loc="best")
 
-    ax.set_title(
-        title or f"Elbow (std-expr, {mode}): {s_key} + Corr({z_key})",
-        fontsize=fontsize + 1,
-    )
+    if title is None:
+        title = f"Elbow (std-expr, {mode}): {s_key} + Corr({z_key})"
 
+    ax.set_title(title, fontsize=fontsize + 1)
     ax.set_xlabel("Embedding dim (sorted)", fontsize=fontsize)
     ax.set_ylabel(ylab, fontsize=fontsize)
-
     ax.tick_params(axis="both", labelsize=fontsize - 1)
     ax.grid(False)
 
-    plt.tight_layout()
+    if ax is None:
+        plt.tight_layout()
 
-    if show:
+    if show and ax is None:
         plt.show()
+
+    # Print cutoff info
+    if n_dims_left is not None:
+        print(f"\n{int(cumulative_cutoff * 100)}% cumulative variance reached with {n_dims_left} dimensions:")
+        print("Embedding dimensions (sorted by importance):")
+        print(dims_left.tolist())
 
     return ax
 
@@ -210,8 +158,9 @@ def gene_ranks(
     top_n: int = 5,
     save_dir: str = None,
     post_fix: str = None,
-    color_local: str = "EE9B00",
-    color_global: str = "005F73",
+    color_local: str = None,
+    color_global: str = None,
+    plotting_config: Plotting = None,
 ):
     """Plot gene ranks comparing local and global model predictions.
 
@@ -229,10 +178,31 @@ def gene_ranks(
         post_fix : str, optional
             Post-fix to append to the saved figure filename. Defaults to None.
         color_local : str, optional
-            Hex color code for local-driven genes. Defaults to 'EE9B00'.
+            Hex color code for local-driven genes. If None, uses default from plotting config.
         color_global : str, optional
-            Hex color code for global-driven genes. Defaults to '005F73'.
+            Hex color code for global-driven genes. If None, uses default from plotting config.
+        plotting_config : Plotting, optional
+            Plotting configuration object. If None, uses default configuration.
     """
+    # Initialize plotting config if not provided
+    if plotting_config is None:
+        plotting_config = Plotting()
+
+    # Get plotting parameters from config
+    general_cfg = plotting_config.config["plot_configs"]["general"]
+    rank_cfg = plotting_config.config["plot_configs"].get("rank_genes_plots", {})
+
+    figsize = (10, 10)
+    fontsize = general_cfg.get("title_fontsize", 14)
+    legend_fontsize = general_cfg.get("legend_fontsize", 12)
+    dpi_save = general_cfg.get("dpi_save", 300)
+
+    # Use defaults if colors not provided
+    if color_local is None:
+        color_local = rank_cfg.get("color_local", "EE9B00")
+    if color_global is None:
+        color_global = rank_cfg.get("color_global", "005F73")
+
     # Get top_n genes in each category
     top_local_genes = merged_df.nsmallest(top_n, "Rank Difference")  # More local-driven
     top_global_genes = merged_df.nlargest(top_n, "Rank Difference")  # More global-driven
@@ -245,23 +215,23 @@ def gene_ranks(
         color_global = f"#{color_global}"
 
     # Plot all genes
-    plt.figure(figsize=(8, 8))
+    plt.figure(figsize=figsize)
     plt.scatter(merged_df["Local Rank"], merged_df["Global Rank"], alpha=0.6, label="All Genes", color="gray")
 
     # Plot and label top local genes
     plt.scatter(top_local_genes["Local Rank"], top_local_genes["Global Rank"], color=color_local, label="Top Local")
     for _, row in top_local_genes.iterrows():
-        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=10, color=color_local)
+        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=fontsize - 4, color=color_local)
 
     # Plot and label top global genes
     plt.scatter(top_global_genes["Local Rank"], top_global_genes["Global Rank"], color=color_global, label="Top Global")
     for _, row in top_global_genes.iterrows():
-        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=10, color=color_global)
+        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=fontsize - 4, color=color_global)
 
     # Plot and label best-predicted genes
     plt.scatter(top_best_genes["Local Rank"], top_best_genes["Global Rank"], color="green", label="Best Predicted")
     for _, row in top_best_genes.iterrows():
-        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=10, color="green")
+        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=fontsize - 4, color="green")
 
     # Reference diagonal
     min_rank, max_rank = (
@@ -271,15 +241,19 @@ def gene_ranks(
     plt.plot([min_rank, max_rank], [min_rank, max_rank], "r--", label="Equal Ranking (y=x)")
 
     # Labels and legend
-    plt.xlabel("Local Model Rank")
-    plt.ylabel("Global Model Rank")
-    plt.title("Gene Prediction Rank: Local vs. Global")
-    plt.legend()
+    plt.xlabel("Local Model Rank", fontsize=fontsize)
+    plt.ylabel("Global Model Rank", fontsize=fontsize)
+    plt.title(
+        "Gene Prediction Rank: Local vs. Global",
+        fontsize=fontsize,
+        fontweight=general_cfg.get("title_fontweight", "bold"),
+    )
+    plt.legend(fontsize=legend_fontsize)
 
     # Save figure if save_dir is provided
     if save_dir is not None:
         save_path = os.path.join(save_dir, f"gene_rank_analysis_{post_fix}.png")
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.savefig(save_path, dpi=dpi_save, bbox_inches="tight")
         print(f"Figure saved to: {save_path}")
 
     plt.show()

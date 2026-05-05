@@ -1,0 +1,28 @@
+model:
+  local_component:
+    name: GCN
+  global_component:
+    name: self-attn-transformer
+    parameters:
+      max_seq_len: 4299
+  decoder:
+    type: linear
+    dual_decoder: True
+  save: /Users/francesca.drummer/Documents/1_Projects/A3-InterScale/results/legnini23/ #Options: local, wandb, None
+optim:
+  lr: 0.001
+  loss: SmoothL1
+  seed: 44
+  accelerator: cpu
+dataset:
+  h5ad_data: /Users/francesca.drummer/Documents/1_Projects/A3-InterScale/data/legnini23.h5ad
+  name: legnini23
+  prediction_task: regression
+  prediction_level: node
+  layer_key: log1p_norm
+  sample_key: ['sample']
+  spatial_neigbors_kwargs:
+    radius: 200
+    library_key: sample
+  batch_size: 3
+  pct_mask_nodes: 0.3

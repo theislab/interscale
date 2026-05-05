@@ -13,6 +13,7 @@ maintainers = [
 ]
 authors = [
   { name = "Francesca Drummer" },
+  { name = "Sara Jimenez" },
 ]
 requires-python = ">=3.11"
 classifiers = [
@@ -70,6 +71,9 @@ doc = [
   "sphinxcontrib-bibtex>=1",
   "sphinxcontrib-katex",
   "sphinxext-opengraph",
+]
+enrichment = [
+  "gseapy>=0.10",
 ]
 
 [tool.hatch]

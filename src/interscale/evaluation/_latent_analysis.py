@@ -270,3 +270,153 @@ def get_genes_dim(
             plt.show()
 
     return df if not plot else (df, ax)
+
+
+def calculate_dim_importance(
+    adata,
+    s_key="_global_std_gene_loadings",
+    z_key="_global_emb",
+    mode="full",
+    use_ratio=True,
+    cumulative_cutoff=0.90,
+    spacing=2,
+    n_top=None,
+):
+    """Calculate dimension importance scores.
+
+    Parameters
+    ----------
+    adata : AnnData
+        Annotated data matrix.
+    s_key : str
+        Key in adata.varm containing gene loadings.
+    z_key : str
+        Key in adata.obsm containing embedding.
+    mode : str
+        "full" (uses Corr(Z) off-diagonals) or "diag" (assumes dims uncorrelated).
+    use_ratio : bool
+        If True, normalize to sum to 1.
+    cumulative_cutoff : float
+        Threshold for cumulative variance.
+    spacing : int
+        Spacing between points on x-axis.
+    n_top : int, optional
+        Maximum number of dimensions to include.
+
+    Returns
+    -------
+    dict
+        Dictionary containing:
+        - y_plot : importance scores (subset)
+        - dim_plot : dimension indices (subset)
+        - y_sorted : all sorted scores
+        - dim_sorted : all sorted indices
+        - cutoff_x : x-coordinate of cutoff line (or None)
+        - cutoff_idx : index of cutoff (or None)
+        - n_dims_left : number of dims at cutoff (or None)
+        - dims_left : dimension indices at cutoff (or None)
+        - cumulative_cutoff : threshold used
+        - mode : mode used
+        - s_key : loadings key used
+        - z_key : embedding key used
+    """
+    if s_key not in adata.varm:
+        raise KeyError(f"{s_key} not found in adata.varm")
+    if z_key not in adata.obsm:
+        raise KeyError(f"{z_key} not found in adata.obsm")
+
+    S = np.asarray(adata.varm[s_key], dtype=float)
+    Z = np.asarray(adata.obsm[z_key], dtype=float)
+
+    if Z.ndim == 1:
+        Z = Z[:, None]
+
+    if S.ndim != 2 or S.shape[1] != Z.shape[1]:
+        raise ValueError(f"Shape mismatch: S is {S.shape}, Z is {Z.shape}")
+
+    ok = np.isfinite(Z).all(axis=1)
+    if ok.sum() < 3:
+        raise ValueError(f"Need >=3 finite rows in adata.obsm['{z_key}']")
+
+    Z = Z[ok]
+
+    # -------------------
+    # scoring
+    # -------------------
+
+    if mode == "diag":
+        score = np.sum(S * S, axis=0)
+
+    elif mode == "full":
+        Corr = np.corrcoef(Z, rowvar=False)
+        StS = S.T @ S
+        A = StS * Corr
+        A = 0.5 * (A + A.T)
+        score = A.sum(axis=0)
+
+    else:
+        raise ValueError("mode must be 'diag' or 'full'")
+
+    # -------------------
+    # y values
+    # -------------------
+
+    if use_ratio:
+        total = float(np.sum(score))
+        y = score / total if total > 0 else np.zeros_like(score)
+    else:
+        y = score
+
+    # -------------------
+    # sorting
+    # -------------------
+
+    order = np.argsort(y)[::-1]
+    y_sorted = y[order]
+    dim_sorted = order
+
+    # -------------------
+    # cutoff calculation
+    # -------------------
+
+    cutoff_x = None
+    cutoff_idx = None
+    n_dims_left = None
+    dims_left = None
+
+    if use_ratio and cumulative_cutoff is not None and y.sum() > 0:
+        cum = np.cumsum(y_sorted)
+        cutoff_idx = int(np.searchsorted(cum, cumulative_cutoff, side="left"))
+        cutoff_x = cutoff_idx * spacing
+
+        n_dims_left = cutoff_idx + 1
+        dims_left = dim_sorted[:n_dims_left]
+
+    # -------------------
+    # apply n_top filter
+    # -------------------
+
+    K = len(y_sorted)
+
+    if n_top is not None:
+        K = min(n_top, K)
+
+    y_plot = y_sorted[:K]
+    dim_plot = dim_sorted[:K]
+
+    return {
+        "y_plot": y_plot,
+        "dim_plot": dim_plot,
+        "y_sorted": y_sorted,
+        "dim_sorted": dim_sorted,
+        "cutoff_x": cutoff_x,
+        "cutoff_idx": cutoff_idx,
+        "n_dims_left": n_dims_left,
+        "dims_left": dims_left,
+        "cumulative_cutoff": cumulative_cutoff,
+        "mode": mode,
+        "s_key": s_key,
+        "z_key": z_key,
+        "use_ratio": use_ratio,
+        "spacing": spacing,
+    }

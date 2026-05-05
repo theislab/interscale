@@ -600,7 +600,7 @@ class BaseModel(metaclass=BaseModelMeta):
             state_dict = torch.load(model_save_path, map_location=map_location)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
         else:
             print("Try with .ckpt extension.")
-            model_save_path = os.path.join(dir_path, f"{file_name_prefix}.ckpt")
+            model_save_path = model_save_path.replace(".pt", ".ckpt")
             if os.path.exists(model_save_path):
                 state_dict = torch.load(model_save_path, map_location=map_location)[SAVE_KEYS.MODEL_STATE_DICT_KEY]
             else:

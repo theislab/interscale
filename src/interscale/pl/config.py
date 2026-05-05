@@ -49,6 +49,8 @@ class Plotting:
                 "var_group_rotation": 90,
                 "min_logfoldchange": 2,
                 "cmap": "bwr",
+                "color_local": "EE9B00",
+                "color_global": "005F73",
             },
         }
     }
@@ -101,6 +103,54 @@ class Plotting:
         plt.rcParams["axes.prop_cycle"] = plt.cycler(color=palette)
         sns.set_theme(style="white", font=cfg["font_family"])
         sc.settings.set_figure_params(dpi_save=cfg["dpi_save"], fontsize=cfg["legend_fontsize"])
+
+
+# class Plotting:
+#     """
+#         Class to create atlas figures with config yml
+#     """
+
+#     def __init__(self, config_path, output_dir="figures"):
+#         self.config = self._load_config(config_path)
+#         self.output_dir = Path(output_dir)
+#         self.output_dir.mkdir(parents=True, exist_ok=True)
+#         self._setup_plotting_params()
+
+#     def _load_config(self, config_path):
+#         """Load configuration from YAML file"""
+#         if isinstance(config_path, str):
+#             with open(config_path, 'r') as f:
+#                 return yaml.safe_load(f)
+#         elif isinstance(config_path, dict):
+#             return config_path
+#         else:
+#             raise ValueError("Config must be a file path or dictionary")
+
+#     def _setup_plotting_params(self):
+#         """Set up matplotlib and scanpy plotting parameters"""
+#         cfg = self.config['plot_configs']['general']
+#         plt.rcParams['figure.dpi'] = cfg['dpi']
+#         plt.rcParams['savefig.dpi'] = cfg['dpi_save']
+#         plt.rcParams['legend.fontsize'] = cfg['legend_fontsize']
+#         plt.rcParams['axes.titlesize'] = cfg['title_fontsize']
+#         plt.rcParams['font.family'] = cfg["font_family"]
+#         cmap_cfg = cfg.get("cmap", "viridis")
+#         if isinstance(cmap_cfg, str):
+#             cm = plt.get_cmap(cmap_cfg)
+#             # Sample a categorical cycle from the continuous cmap
+#             palette = [cm(x) for x in np.linspace(0.1, 0.9, 10)]
+#         elif isinstance(cmap_cfg, (list, tuple)):
+#             palette = list(cmap_cfg)
+#             cmap_name = "viridis"  # Default fallback for image.cmap
+#         else:
+#             raise ValueError("plot_configs.general.cmap must be a colormap name, not a list or tuple")
+#         plt.rcParams["axes.prop_cycle"] = plt.cycler(color=palette)
+#         plt.rcParams["image.cmap"] = cmap_name
+#         sns.set_theme(style="white",font=cfg["font_family"])
+#         sc.settings.set_figure_params(
+#             dpi_save=cfg['dpi_save'],
+#             fontsize=cfg['legend_fontsize']
+#         )
 
 
 class _SettingsMeta(type):

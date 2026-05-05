@@ -1,6 +1,6 @@
 # InterScale
 
-InterScale is a package for multi-scale analysis of cellular interactions in spatial transcriptomics data. It is built on top of [geome](https://github.com/theislab/geome) (single-cell building on top of [PyG](https://pytorch-geometric.readthedocs.io/en/latest/)), [AnnData](https://anndata.readthedocs.io/en/latest/) and [scvi-toold](https://scvi-tools.org/).
+InterScale is a package for multi-scale analysis of cellular interactions in spatial transcriptomics data. It is built on top of [geome](https://github.com/theislab/geome) (single-cell building on top of [PyG](https://pytorch-geometric.readthedocs.io/en/latest/)), [AnnData](https://anndata.readthedocs.io/en/latest/) and [scvi-tools](https://scvi-tools.org/).
 
 ![InterScale concept](_static/img/InterScale_concept.png)
 

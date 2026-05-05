@@ -2,6 +2,8 @@
 
 InterScale is a model descigned for spatial transcpriptomics analysis. It provides, 1) **local and global embeddings** for gene level analysis and 2) **attention matrix** for cell-to-cell analysis.
 
+![InterScale concept](../_static/img/InterScale_model.png)
+
 ## Overview
 
 InterScale is a two component model. The local model learns cell representation of a local, spatial neighborhood and the global compponent learns tissue wide interactions between these neighborhoods.
