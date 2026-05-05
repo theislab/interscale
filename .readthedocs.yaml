@@ -12,5 +12,6 @@ build:
       - asdf global uv latest
     build:
       html:
+        - export UV_FIND_LINKS=https://data.pyg.org/whl/torch-2.11.0+cpu.html
         - uvx hatch run docs:build
         - mv docs/_build $READTHEDOCS_OUTPUT
