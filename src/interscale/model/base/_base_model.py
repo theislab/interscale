@@ -173,8 +173,8 @@ class BaseModel(metaclass=BaseModelMeta):
         """
         anndata_fields = [fields.LayerField("x", layer=layer_key)]
 
-        for i, sample_key in enumerate(sample_key_list):
-            anndata_fields.append(fields.CategoricalObsField(registry_key=f"sample_key_{i}", attr_key=sample_key))
+        for i, key in enumerate(sample_key_list):
+            anndata_fields.append(fields.CategoricalObsField(registry_key=f"sample_key_{i}", attr_key=key))
 
         if prediction_task == "classification":
             anndata_fields.append(fields.CategoricalObsField(registry_key="prediction_obs", attr_key=prediction_obs))
@@ -195,7 +195,7 @@ class BaseModel(metaclass=BaseModelMeta):
         if _SCVI_UUID_KEY not in adata.uns:
             adata.uns[_SCVI_UUID_KEY] = str(id(adata))
         cls._setup_adata_manager_store[adata.uns[_SCVI_UUID_KEY]] = manager
-        cls.sample_key = sample_key
+        cls.sample_key_list = sample_key_list
 
     # adjusted from scvi-tools
     # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
