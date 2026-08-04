@@ -14,7 +14,6 @@ from scvi.data._constants import (
     _SCVI_UUID_KEY,
 )
 from scvi.data._utils import _assign_adata_uuid, _check_if_view
-from sklearn.utils.class_weight import compute_class_weight
 from yacs.config import CfgNode as CN
 
 from interscale.module.base import GlobalModule, LocalModule
@@ -126,14 +125,74 @@ class BaseModel(metaclass=BaseModelMeta):
 
         self.class_weights = None
         if self._cfg.optim.loss == "WeightedCE":
-            self.class_weights = torch.tensor(
-                compute_class_weight(
-                    "balanced",
-                    classes=np.unique(self._adata.obs[self._cfg.dataset.prediction_obs]),
-                    y=self._adata.obs[self._cfg.dataset.prediction_obs],
+            self.class_weights = self._compute_train_class_weights()
+
+    def _training_unit_labels(self) -> pd.Series:
+        """Labels of the units the loss is computed over, restricted to the train split.
+
+        For ``prediction_level == "node"`` a unit is a cell. For ``"graph"`` a unit is one PyG
+        graph, i.e. one category of each key in ``cfg.dataset.sample_key`` -- matching how
+        :func:`interscale.tl.prepare_geome_dataset` builds and concatenates graphs.
+
+        Returns
+        -------
+        pd.Series
+            One label per training unit.
+        """
+        obs = self._adata.obs
+        pred_col = self._cfg.dataset.prediction_obs
+        split_col = self._cfg.dataset.split_key
+
+        if split_col is not None and split_col in obs:
+            train_obs = obs.loc[obs[split_col].astype(str) == "train"]
+        else:
+            logger.warning("split_key '%s' not in adata.obs -- class weights use all cells.", split_col)
+            train_obs = obs
+        if len(train_obs) == 0:
+            raise ValueError(f"No observations with {split_col} == 'train'; cannot compute class weights.")
+
+        if self.prediction_level == "node":
+            return train_obs[pred_col].astype(str)
+
+        labels = []
+        for key in self._cfg.dataset.sample_key:
+            grouped = train_obs.groupby(key, observed=True)[pred_col]
+            n_per_graph = grouped.nunique()
+            if (n_per_graph > 1).any():
+                logger.warning(
+                    "%d graphs of '%s' contain more than one '%s'; using the majority label.",
+                    int((n_per_graph > 1).sum()),
+                    key,
+                    pred_col,
                 )
-            )
-            print("WeightedCE with class weights: ", self.class_weights)
+            labels.append(grouped.agg(lambda s: s.value_counts().idxmax()).astype(str))
+        return pd.concat(labels)
+
+    def _compute_train_class_weights(self) -> torch.Tensor:
+        """Compute ``"balanced"`` class weights over the training units.
+
+        Weights are ordered like :attr:`class_labels` (i.e. ``.cat.categories``), which is also
+        the column order of the one-hot ``data.y`` produced by ``geome``, so index *i* of the
+        returned tensor lines up with logit column *i*.
+
+        Returns
+        -------
+        torch.Tensor
+            Float32 tensor of per-class weights.
+        """
+        y = self._training_unit_labels()
+        classes = [str(c) for c in self.class_labels]
+        counts = y.value_counts().reindex(classes).fillna(0.0).to_numpy(dtype=np.float64)
+        if (counts == 0).any():
+            missing = [c for c, n in zip(classes, counts, strict=True) if n == 0]
+            raise ValueError(f"Classes {missing} have no training units; WeightedCE weights undefined.")
+        # Same formula as sklearn's compute_class_weight("balanced").
+        weights = counts.sum() / (len(classes) * counts)
+        print(
+            f"WeightedCE ({self.prediction_level}-level, train split '{self._cfg.dataset.split_key}'): "
+            + ", ".join(f"{c}: n={int(n)} w={w:.4f}" for c, n, w in zip(classes, counts, weights, strict=True))
+        )
+        return torch.as_tensor(weights, dtype=torch.float32)
 
     @classmethod
     def _setup_anndata(

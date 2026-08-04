@@ -1,5 +1,6 @@
 import argparse
 import os
+import warnings
 
 import psutil
 import scanpy as sc
@@ -13,6 +14,11 @@ from interscale.geome_dataloader import GraphAnnDataModule
 from interscale.pp.segmentation_noise import apply_segmentation_noise
 from interscale.tl import prepare_geome_dataset
 from interscale.tl.utils import get_model_filename_prefix
+
+# geome calls the deprecated `sq.gr.spatial_neighbors` entrypoint; silence its
+# FutureWarnings so they don't flood the training logs.
+warnings.filterwarnings("ignore", category=FutureWarning, message=r".*spatial_neighbors.*")
+warnings.filterwarnings("ignore", category=FutureWarning, message=r".*n_neighs.*")
 
 
 def print_memory_usage(stage=""):

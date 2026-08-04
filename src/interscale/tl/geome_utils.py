@@ -168,16 +168,16 @@ def prepare_geome_dataset(adata, cfg: CN):
             save_preprocessed_adata=True,
         )
 
-        pyg_train, adata_train = list(a2d(adata[adata.obs[split_key] == "train"]))
-        pyg_val, adata_val = list(a2d(adata[adata.obs[split_key] == "val"]))
+        pyg_train, _ = list(a2d(adata[adata.obs[split_key] == "train"]))
+        pyg_val, _ = list(a2d(adata[adata.obs[split_key] == "val"]))
         datas_train.extend(pyg_train)
         datas_val.extend(pyg_val)
         if "test" in np.unique(adata.obs[split_key]):
-            pyg_test, adata_test = list(a2d(adata[adata.obs[split_key] == "test"]))
+            pyg_test, _ = list(a2d(adata[adata.obs[split_key] == "test"]))
             datas_test.extend(pyg_test)
 
     if "test" in np.unique(adata.obs[split_key]):
-        datas_test, adata_test = list(a2d(adata[adata.obs[split_key] == "test"]))
-        return [datas_train, datas_val, datas_test], [adata_train, adata_val, adata_test]
+        #datas_test, adata_test = list(a2d(adata[adata.obs[split_key] == "test"]))
+        return [datas_train, datas_val, datas_test], _
 
-    return [datas_train, datas_val], [adata_train, adata_val]
+    return [datas_train, datas_val], _

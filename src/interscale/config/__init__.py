@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from yacs.config import CfgNode as CN
 
 from .dataset_config import get_dataset_cfg
@@ -26,7 +28,7 @@ def load_config(cfg_path=None):
 
     Parameters
     ----------
-    cfg_path : str, optional
+    cfg_path : str or pathlib.Path, optional
         Path to the config file to load. If None, only default values are used.
 
     Returns
@@ -36,6 +38,17 @@ def load_config(cfg_path=None):
     """
     # First get all default configs including local component defaults
     cfg = get_cfg_defaults()
+
+    # Documented as defaults-only, but the code below dereferences cfg_path
+    # unconditionally, so None used to raise AttributeError too.
+    if cfg_path is None:
+        cfg.freeze()
+        return cfg
+
+    # Callers pass a str: main.py and main_sweep.py both declare --cfg as
+    # type=str, and the docstring says str. Normalise instead of requiring
+    # every caller to wrap it.
+    cfg_path = Path(cfg_path)
 
     with cfg_path.open() as f:
         # Create a temporary config to load the model type

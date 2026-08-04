@@ -98,7 +98,9 @@ class TrainingPlan(pl.LightningModule):
         if "classification" in self.prediction_task:
             metrics = self._setup_classification_metrics(self.module.n_output)
             self.loss = self._setup_classification_loss(self.loss_type, self.class_weights)
-            self.monitor_metric = "val_f1"
+            # Must name a metric that is actually logged -- this is handed to Lightning as the
+            # LR-scheduler monitor. "val_f1" never existed; only val_f1_micro/macro/<class> do.
+            self.monitor_metric = "val_f1_macro"
         elif "regression" in self.prediction_task:
             metrics = self._setup_regression_metrics(self.module.n_output)
             self.loss = self._setup_regression_loss(self.loss_type)
@@ -121,7 +123,8 @@ class TrainingPlan(pl.LightningModule):
         elif loss == "WeightedCE":
             assert class_weights is not None, "Class weights must be provided for WeightedCE loss."
             assert isinstance(class_weights, torch.Tensor), "class_weights must be a torch tensor"
-            return nn.CrossEntropyLoss(class_weights)
+            # .float() guards against a float64 weight buffer meeting float32 logits.
+            return nn.CrossEntropyLoss(weight=class_weights.float())
 
     def _setup_regression_loss(self, loss: Literal[REGRESSION_LOSSES]):
         """Setup loss function based on prediction task and configuration."""

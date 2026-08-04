@@ -23,4 +23,10 @@ def get_optim_cfg(cfg):
     cfg.optim.cross_corr = "cell"  # Currently cell is the only one that really works
     cfg.optim.n_epochs = 100
     cfg.optim.early_stopping = True
+    cfg.optim.patience = 5  # EarlyStopping patience in epochs
+    cfg.optim.min_delta = 0.0  # EarlyStopping min_delta
+    cfg.optim.min_epochs = 1  # floor on training length; set above lr_warmup to clear warm-up
+    # Metric driving EarlyStopping / ModelCheckpoint / the LR scheduler.
+    # "auto" -> val_f1_macro for classification, val_loss for regression.
+    cfg.optim.monitor = "auto"
     return cfg

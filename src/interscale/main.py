@@ -1,4 +1,5 @@
 import argparse
+import warnings
 
 import scanpy as sc
 import squidpy as sq
@@ -8,6 +9,11 @@ from interscale.config import load_config
 from interscale.geome_dataloader import GraphAnnDataModule
 from interscale.pp import apply_segmentation_noise
 from interscale.tl import prepare_geome_dataset, remove_zero_expression_cells, set_full_reproducibility
+
+# geome calls the deprecated `sq.gr.spatial_neighbors` entrypoint; silence its
+# FutureWarnings so they don't flood the training logs.
+warnings.filterwarnings("ignore", category=FutureWarning, message=r".*spatial_neighbors.*")
+warnings.filterwarnings("ignore", category=FutureWarning, message=r".*n_neighs.*")
 
 
 def main(cfg_path, model_type):
