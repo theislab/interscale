@@ -127,8 +127,44 @@ class GraphAnnDataModule(pl.LightningDataModule):
         lengths = [data.num_nodes for data in data_list]
         return min(lengths)
 
+    def _assign_random_mask(self, data: BaseData, num_nodes_to_mask: int) -> None:
+        """Overwrites `data.mask` in place with a fresh, uniformly random selection of masked nodes.
+
+        This is the single seam where a future non-uniform sampling strategy (e.g. downweighting
+        nodes that were already masked in previous epochs) would be substituted in.
+        """
+        if data.num_nodes < num_nodes_to_mask:
+            raise ValueError("Cannot sample more nodes than available in any graph.")
+
+        mask_indices = random.sample(range(data.num_nodes), num_nodes_to_mask)
+        data.mask = torch.zeros(data.num_nodes, dtype=torch.bool)
+        data.mask[mask_indices] = True
+
+    def _num_nodes_to_mask(self, data_list: list[BaseData]) -> int:
+        """Number of nodes to mask per graph, derived from the smallest graph in `data_list`."""
+        num_nodes_to_mask = int(self._smallest_data_batch_length(data_list) * self.pct_mask_nodes)
+        return max(1, num_nodes_to_mask)  # must mask at least one node
+
+    def resample_train_mask(self) -> None:
+        """Redraws the masked node set for every training graph, in place.
+
+        `_spatial_node_loader` only ever assigns `.mask` once (when the train dataloader is first
+        built in `setup()`), so without this the same fixed subset of nodes is masked for the
+        entire training run. Call this once per epoch (see `NodeMaskResampleCallback` in
+        `interscale.train`) so every node eventually gets used as a supervision target.
+
+        Mutates the `Data` objects already held in `self.train_data` in place — no cloning, no
+        dataloader rebuild, so this adds no meaningful memory overhead beyond the `.mask` boolean
+        tensor that is already allocated.
+        """
+        if not self.setup_called:
+            return
+        num_nodes_to_mask = self._num_nodes_to_mask(self.train_data)
+        for data in self.train_data:
+            self._assign_random_mask(data, num_nodes_to_mask)
+
     def _spatial_node_loader(self, data_list: list[BaseData], shuffle: bool = False, **kwargs) -> DataListLoader:
-        """Adds a one-node mask to each Data object. TODO: load each graph multiple times with a different mask.
+        """Adds a node mask to each Data object.
 
         Args:
         ----
@@ -140,19 +176,9 @@ class GraphAnnDataModule(pl.LightningDataModule):
         -------
             NeighborLoader: the node dataloader
         """
-        smallest_length = self._smallest_data_batch_length(data_list)
-        num_nodes_to_mask = int(smallest_length * self.pct_mask_nodes)
-        if num_nodes_to_mask == 0:  # must mask at least one node
-            num_nodes_to_mask = 1
-
+        num_nodes_to_mask = self._num_nodes_to_mask(data_list)
         for data in data_list:
-            if data.num_nodes < num_nodes_to_mask:
-                raise ValueError("Cannot sample more nodes than available in any graph.")
-
-            # Randomly select a ndoe to mask
-            mask_indices = random.sample(range(data.num_nodes), num_nodes_to_mask)
-            data.mask = torch.zeros(data.num_nodes, dtype=torch.bool)
-            data.mask[mask_indices] = True
+            self._assign_random_mask(data, num_nodes_to_mask)
 
         return DataLoader(
             dataset=data_list,

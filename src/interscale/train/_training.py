@@ -9,7 +9,7 @@ from lightning.pytorch.trainer import seed_everything
 
 from interscale.tl.utils import get_model_filename_prefix
 from interscale.train._trainingplans import TrainingPlan
-from interscale.train._utils import MetricsHistory
+from interscale.train._utils import MetricsHistory, NodeMaskResampleCallback
 
 # from interscale.model.base._trainer import TrainRunner
 
@@ -104,6 +104,7 @@ class NodeMaskingTrainingPlan:
         print("Steps per epoch", steps_per_epoch)
         lr_monitor = LearningRateMonitor(logging_interval="epoch")
         self.history_ = MetricsHistory()
+        mask_resample_callback = NodeMaskResampleCallback() if self._cfg.dataset.pct_mask_nodes > 0 else None
         checkpoint_callback = None
         loss_callback = None
         performance_callback = None
@@ -185,7 +186,14 @@ class NodeMaskingTrainingPlan:
         # Create list of callbacks and filter out None values
         callbacks = [
             callback
-            for callback in [lr_monitor, performance_callback, loss_callback, self.history_, checkpoint_callback]
+            for callback in [
+                lr_monitor,
+                performance_callback,
+                loss_callback,
+                self.history_,
+                mask_resample_callback,
+                checkpoint_callback,
+            ]
             if callback is not None
         ]
 
