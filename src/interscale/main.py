@@ -71,7 +71,7 @@ def main(cfg_path, model_type):
         num_workers=1,
         batch_size=int(cfg.dataset.batch_size),
         pct_mask_nodes=cfg.dataset.pct_mask_nodes,
-        learning_type="node",
+        learning_type=cfg.dataset.prediction_level,
     )
 
     model.train(max_epochs=cfg.optim.n_epochs, datamodule=dm, early_stopping=cfg.optim.early_stopping)

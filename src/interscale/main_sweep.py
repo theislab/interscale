@@ -61,7 +61,7 @@ def print_memory_debug():
         print(f"Memory debug failed: {e}")
 
 
-def main_sweep(cfg_path, model_type, sweep_goal):
+def main_sweep(cfg_path, model_type, sweep_goal, sweep_params=None):
 
     print_memory_usage("Start of main_sweep")
 
@@ -103,38 +103,61 @@ def main_sweep(cfg_path, model_type, sweep_goal):
             cfg.optim.seed = sweep_config["optim.seed"]
         elif sweep_goal == "hyperparmeter":
             print("hyperparameter sweep")
-            cfg.optim.lr = sweep_config["optim.lr"]
-            cfg.optim.lr_warmup = sweep_config["optim.lr_warmup"]
-            cfg.optim.wd = sweep_config["optim.wd"]
-            cfg.dataset.batch_size = sweep_config["dataset.batch_size"]
-            cfg.dataset.pct_mask_nodes = sweep_config["dataset.pct_mask_nodes"]
-            cfg.model.n_embed = sweep_config["model.n_embed"]
-            if model_type == "LocalModel" or model_type == "CombinedModel":
+            applied = []
+
+            def _apply(node, attr, key):
+                """Assign a swept value only if the sweep actually declares that key.
+
+                Staged sweeps vary a subset of the parameters (e.g. optimiser only), so an
+                unconditional lookup would KeyError on every key the stage omits.
+                """
+                if key in sweep_config.keys():
+                    setattr(node, attr, sweep_config[key])
+                    applied.append(key)
+
+            _apply(cfg.optim, "lr", "optim.lr")
+            _apply(cfg.optim, "lr_warmup", "optim.lr_warmup")
+            _apply(cfg.optim, "wd", "optim.wd")
+            _apply(cfg.dataset, "batch_size", "dataset.batch_size")
+            _apply(cfg.dataset, "pct_mask_nodes", "dataset.pct_mask_nodes")
+            _apply(cfg.model, "n_embed", "model.n_embed")
+
+            # Two separate `if`s, not if/elif: CombinedModel has BOTH components, and an
+            # `elif model_type == "GlobalModel" or model_type == "CombinedModel"` is
+            # unreachable for CombinedModel, so its transformer was never swept.
+            local = cfg.model.local_component.parameters
+            glob = cfg.model.global_component.parameters
+            if model_type in ("LocalModel", "CombinedModel"):
                 print("LocalModel configs")
-                cfg.model.local_component.parameters.num_layers = sweep_config[
-                    "model.local_component.parameters.num_layers"
-                ]
-                cfg.model.local_component.parameters.hidden_dim = sweep_config[
-                    "model.local_component.parameters.hidden_dim"
-                ]
-            elif model_type == "GlobalModel" or model_type == "CombinedModel":
+                _apply(local, "num_layers", "model.local_component.parameters.num_layers")
+                _apply(local, "hidden_dim", "model.local_component.parameters.hidden_dim")
+                _apply(local, "dropout_local", "model.local_component.parameters.dropout_local")
+            if model_type in ("GlobalModel", "CombinedModel"):
                 print("transformer configs")
-                cfg.model.global_component.parameters.dim_feedforward = sweep_config[
-                    "model.global_component.parameters.dim_feedforward"
-                ]
-                cfg.model.global_component.parameters.num_layers = sweep_config[
-                    "model.global_component.parameters.num_layers"
-                ]
-                cfg.model.global_component.parameters.n_heads = sweep_config[
-                    "model.global_component.parameters.n_heads"
-                ]
-                cfg.model.global_component.parameters.dropout = sweep_config[
-                    "model.global_component.parameters.dropout"
-                ]
-                # cfg.transformer.max_seq_len = sweep_run.config.transformer.max_seq_len
+                _apply(glob, "dim_feedforward", "model.global_component.parameters.dim_feedforward")
+                _apply(glob, "num_layers", "model.global_component.parameters.num_layers")
+                _apply(glob, "n_heads", "model.global_component.parameters.n_heads")
+                # The config key is `dropout_global` (see global_component_config.py); assigning
+                # to `dropout` silently created a dead key because set_new_allowed(True) is on.
+                _apply(glob, "dropout_global", "model.global_component.parameters.dropout_global")
+
+            if sweep_params is not None:
+                ignored = sorted(set(sweep_params) - set(applied))
+                if ignored:
+                    print(
+                        f"WARNING: sweep declares parameters that nothing applies, so they vary "
+                        f"between trials with no effect: {ignored}"
+                    )
+            print(f"applied sweep parameters: {sorted(applied)}")
         elif sweep_goal == "loss":
             print("loss sweep")
             cfg.optim.loss = sweep_config["optim.loss"]
+        else:
+            raise ValueError(
+                f"Unknown --sweep_goal '{sweep_goal}'. Must be one of: "
+                "robustness, segmentation, hyperparmeter, loss. "
+                "(Nothing would be swept otherwise -- every trial would train the base config.)"
+            )
         cfg.freeze()
 
     ####### PREPROCESSING #######
@@ -196,7 +219,7 @@ def main_sweep(cfg_path, model_type, sweep_goal):
         num_workers=1,
         batch_size=int(cfg.dataset.batch_size),
         pct_mask_nodes=cfg.dataset.pct_mask_nodes,
-        learning_type="node",
+        learning_type=cfg.dataset.prediction_level,
     )
     print_memory_usage("After datamodule creation")
 
@@ -216,7 +239,25 @@ if __name__ == "__main__":
         dest="sweep_goal",
         type=str,
         required=True,
-        help="Choose sweep goal: (1) hyperparameter or (2) robustness.",
+        # Note the spelling of "hyperparmeter" -- it is what main_sweep() matches on. Without
+        # choices=, a typo silently trained the unmodified base config on every trial.
+        choices=["robustness", "segmentation", "hyperparmeter", "loss"],
+        help="Choose sweep goal: robustness, segmentation, hyperparmeter (sic) or loss.",
+    )
+    parser.add_argument(
+        "--count",
+        dest="count",
+        type=int,
+        default=30,
+        help="Number of sweep trials this agent runs before exiting. Without a bound the agent "
+        "runs until the SLURM walltime kills it.",
+    )
+    parser.add_argument(
+        "--sweep_project",
+        dest="sweep_project",
+        type=str,
+        default="InterScale_hyperparameter_sweep",
+        help="wandb project the sweep is registered under.",
     )
     parser.add_argument(
         "--prediction_task",
@@ -234,31 +275,43 @@ if __name__ == "__main__":
 
     sweep_config = yaml_config["sweep_config"]
 
+    # "val_acc" was never a logged metric name -- the classification MetricCollection logs
+    # val_accuracy / val_f1_micro / val_f1_macro / val_f1_<class>. val_f1_macro also matches
+    # what EarlyStopping and ModelCheckpoint monitor. Only override the yaml when the flag
+    # is given, so a sweep config carrying its own metric block still works without it.
     if args.prediction_task == "classification":
-        sweep_config.update(
-            {
-                "metric": {"name": "val_acc", "goal": "maximize"},
-            }
-        )
+        sweep_config["metric"] = {"name": "val_f1_macro", "goal": "maximize"}
     elif args.prediction_task == "regression":
-        sweep_config.update(
-            {
-                "metric": {"name": "val_r2", "goal": "maximize"},  # Use 'val_r2' for regression tasks
-            }
+        sweep_config["metric"] = {"name": "val_r2", "goal": "maximize"}
+
+    if "metric" not in sweep_config:
+        raise ValueError(
+            "Sweep config declares no `metric`, and --prediction_task was not given to supply "
+            "one. wandb would have nothing to rank trials by (and method: bayes cannot run)."
         )
 
-    if "GlobalModel" not in args.model_type or "CombinedModel" not in args.model_type:
-        transformer_keys = [key for key in sweep_config["parameters"] if key.startswith("transformer.")]
-        for key in transformer_keys:
-            del sweep_config["parameters"][key]
+    # Drop parameters for components this model_type does not have, so wandb does not sample
+    # values that nothing consumes. The previous filter looked for a `transformer.` prefix,
+    # which no key has ever used, under a condition that is true for every model_type.
+    drop_prefixes = []
+    if args.model_type not in ("LocalModel", "CombinedModel"):
+        drop_prefixes.append("model.local_component.")
+    if args.model_type not in ("GlobalModel", "CombinedModel"):
+        drop_prefixes.append("model.global_component.")
+    for key in [k for k in sweep_config["parameters"] if any(k.startswith(p) for p in drop_prefixes)]:
+        print(f"dropping sweep parameter not used by {args.model_type}: {key}")
+        del sweep_config["parameters"][key]
 
+    sweep_params = list(sweep_config["parameters"])
     print(sweep_config)
 
-    sweep_id = wandb.sweep(sweep_config, project="InterScale_hyperparameter_sweep")
+    sweep_id = wandb.sweep(sweep_config, project=args.sweep_project)
 
     def train_sweep_function():
         # Pass the sweep run object to main
-        main_sweep(args.cfg, args.model_type, args.sweep_goal)
+        main_sweep(args.cfg, args.model_type, args.sweep_goal, sweep_params=sweep_params)
 
-    # Run the sweep agent
-    wandb.agent(sweep_id, function=train_sweep_function)
+    # Without an explicit count the agent runs until the job's walltime kills it: `random`
+    # over this grid has ~1.5M combinations, so it never exhausts them on its own.
+    print(f"running {args.count} sweep trials (sweep_id={sweep_id})")
+    wandb.agent(sweep_id, function=train_sweep_function, count=args.count)
