@@ -1,7 +1,7 @@
 # InterScale
 
 [![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://github.com/theislab/interscale/blob/main/LICENSE)
-[![Stars](https://img.shields.io/github/stars/Lotfollahi-lab/interscale?logo=GitHub&color=yellow)](https://github.com/Lotfollahi-lab/interscale/stargazers)
+[![Stars](https://img.shields.io/github/stars/theislab/interscale?logo=GitHub&color=yellow)](https://github.com/theislab/interscale/stargazers)
 [![PyPI](https://img.shields.io/pypi/v/interscale.svg)](https://pypi.org/project/interscale)
 [![PyPIDownloads](https://static.pepy.tech/badge/interscale)](https://pepy.tech/project/interscale)
 [![Docs](https://readthedocs.org/projects/interscale/badge/?version=latest)](https://interscale.readthedocs.io/en/stable/?badge=stable)
