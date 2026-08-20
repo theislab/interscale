@@ -1,4 +1,4 @@
-from ._preprocessing import remove_zero_expression_cells
+from ._preprocessing import get_average_local_and_global_size, remove_zero_expression_cells
 from .geome_utils import prepare_a2d_dataset, prepare_geome_dataset
 from .masking import apply_mask, attn_mask_diagonal, create_transformer_attention_mask_from_edges
 from .padding import pad_batch
@@ -16,4 +16,5 @@ __all__ = [
     "create_transformer_attention_mask_from_edges",
     "attn_mask_diagonal",
     "remove_zero_expression_cells",
+    "get_average_local_and_global_size",
 ]

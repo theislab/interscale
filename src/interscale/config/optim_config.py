@@ -25,7 +25,12 @@ def get_optim_cfg(cfg):
     cfg.optim.early_stopping = True
     cfg.optim.patience = 5  # EarlyStopping patience in epochs
     cfg.optim.min_delta = 0.0  # EarlyStopping min_delta
-    cfg.optim.min_epochs = 1  # floor on training length; set above lr_warmup to clear warm-up
+    # Floor on training length. MUST stay above lr_warmup: CosineWarmupScheduler ramps the LR
+    # linearly over lr_warmup epochs, so a run that stops inside the ramp has only ever seen a
+    # fraction of cfg.optim.lr and is measured at (near) initialisation. The default is 2x
+    # lr_warmup, matching chen22. `_validate_optim` enforces the invariant at config-load time
+    # rather than leaving it to each dataset to remember.
+    cfg.optim.min_epochs = 40
     # Metric driving EarlyStopping / ModelCheckpoint / the LR scheduler.
     # "auto" -> val_f1_macro for classification, val_loss for regression.
     cfg.optim.monitor = "auto"
