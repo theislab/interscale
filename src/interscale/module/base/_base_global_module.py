@@ -158,13 +158,24 @@ class GlobalModule(BaseModule):
             else torch.tensor([], device=device, dtype=torch.long)
         )
 
-        # Assertions
+        # Every adjusted index must address a valid row of y_true. This is the invariant the
+        # offset arithmetic can actually violate, so it stays.
+        #
+        # A second assertion used to sit here requiring `adjusted_mask_idx.max() >
+        # len(pad_index_nodes[0])` whenever nr_batches > 1, i.e. that masked nodes came from more
+        # than just the first graph. It was wrong twice over. Graph i's indices start at
+        # cumulative_offsets[i], so a masked node that is the *first kept node* of graph 1 gets
+        # index exactly len(pad_index_nodes[0]) -- a valid position that `>` rejected. That is
+        # reachable whenever the last batch of an epoch holds two graphs and the second is small
+        # enough for its single masked node to be node 0, which killed a legnini23 run at epoch 22.
+        # It also asserted a property that is not invariant: if a graph's masked set exceeds
+        # max_seq_len, _select_masked_nodes legitimately drops some, and that case is caught with
+        # an accurate message by the length checks in the combined modules' _common_step, where
+        # the local branch's masked-node count is compared against the global branch's.
         if len(adjusted_mask_idx) > 0:
             assert adjusted_mask_idx.max() < len(y_true), (
                 f"Mismatch: max(adjusted_mask_idx): {adjusted_mask_idx.max()}, len(y_true): {len(y_true)}"
             )
-            if nr_batches > 1:
-                assert adjusted_mask_idx.max() > len(pad_index_nodes[0]), "No masked node included from all batches"
 
         return y_true, adjusted_mask_idx
 

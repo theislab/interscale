@@ -177,30 +177,22 @@ class NodeMaskingTrainingPlan:
                     save_top_k=1,
                 )  # save the best model according to `monitor`
             elif "regression" in self._cfg.dataset.prediction_task:
-                if self._cfg.optim.loss == "MSELoss":
-                    checkpoint_callback = ModelCheckpoint(
-                        dirpath=self._cfg.model.save,
-                        filename=run_name,
-                        monitor="val_loss",
-                        mode="min",
-                    )
-                elif (
-                    self._cfg.optim.loss == "GaussianNLL"
-                    or self._cfg.optim.loss == "SmoothL1"
-                    or self._cfg.optim.loss == "BalancedPearsonCorrelationLoss"
-                    or self._cfg.optim.loss == "SCELoss"
-                    or self._cfg.optim.loss == "SCE_EntropyATT_Loss"
-                ):
-                    checkpoint_callback = ModelCheckpoint(
-                        dirpath=self._cfg.model.save,
-                        filename=run_name,
-                        monitor="val_loss",
-                        mode="min",
-                    )
-                else:
-                    raise Exception(
-                        f"Regression must be run with MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss or SCELoss loss. instead of {self._cfg.optim.loss}"
-                    )
+                # Every arm of the former if/elif chain built the same callback with a hardcoded
+                # monitor="val_loss", so `optim.monitor` was silently ignored for regression while
+                # classification honoured it. That is not cosmetic: train() restores the best
+                # checkpoint before trainer.validate(), so every metric reported for the run --
+                # and therefore whatever a sweep ranks on -- came from the lowest-val_loss epoch,
+                # no matter which metric the run was supposed to be selecting for.
+                #
+                # `auto` still resolves to val_loss/min for regression, so existing configs are
+                # unaffected; only a config that explicitly sets optim.monitor changes behaviour.
+                checkpoint_callback = ModelCheckpoint(
+                    dirpath=self._cfg.model.save,
+                    filename=run_name,
+                    monitor=monitor,
+                    mode=mode,
+                    save_top_k=1,
+                )
 
         # Create list of callbacks and filter out None values
         callbacks = [

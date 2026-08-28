@@ -13,6 +13,43 @@ from interscale.nn import CosineWarmupScheduler
 
 from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss
 
+class RunningCosineSimilarity(torchmetrics.Metric):
+    """Mean per-cell cosine similarity, with state that does not grow with the dataset.
+
+    ``torchmetrics.CosineSimilarity`` is a *list-state* metric: it keeps every prediction and
+    target it is shown and concatenates them at compute time. Every other regression metric here
+    holds a few kilobytes of running sums, and this one holds ``n_cells x n_genes x 2`` floats --
+    which ``MetricCollection.forward`` then duplicates via ``_copy_state_dict`` on every step.
+
+    On legnini23 (43k cells, 88 genes) that is ~30 MB and invisible. On the CosMx pancreas
+    (387k cells, 979 genes) one epoch is ~850 MB before the copy, and it OOMed a 20 GB card
+    inside ``_regression_metrics`` on the very first trial, regardless of batch size -- the total
+    per epoch is the same however the cells are batched.
+
+    This computes the same quantity (the mean over cells of the per-cell cosine) from a running
+    sum and count, so the state is two scalars.
+    """
+
+    is_differentiable = False
+    higher_is_better = True
+    full_state_update = False
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.add_state("total", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("count", default=torch.tensor(0.0), dist_reduce_fx="sum")
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
+        """Accumulate the summed per-cell cosine similarity and the number of cells."""
+        cos = nn.functional.cosine_similarity(preds, target, dim=1)
+        self.total = self.total + cos.sum()
+        self.count = self.count + cos.numel()
+
+    def compute(self) -> torch.Tensor:
+        """Mean per-cell cosine similarity over everything seen since the last reset."""
+        return self.total / self.count
+
+
 CLASSIFICATION_LOSSES = ["CrossEntropy", "WeightedCE"]
 REGRESSION_LOSSES = [
     "MSELoss",
@@ -162,7 +199,17 @@ class TrainingPlan(pl.LightningModule):
                 "mse": torchmetrics.MeanSquaredError(),
                 "r2": torchmetrics.R2Score(multioutput="uniform_average"),
                 "pearson_corr": torchmetrics.PearsonCorrCoef(num_outputs=num_outputs),
-                "cosine_similarity": torchmetrics.CosineSimilarity(reduction="mean"),
+                # Pearson is invariant to any per-gene affine rescaling of the predictions, so a
+                # model whose outputs are (say) 11x too spread out still scores a high r while
+                # its R2 goes to -113. Writing predictions as k times the true sd with offset d,
+                # R2 = 2*r*k - k^2 - d^2/sigma^2, maximised at k = r -- so R2 <= r^2, and the gap
+                # between them is purely calibration. Concordance correlation folds that penalty
+                # back in, which makes it the metric to select on when both the co-variation
+                # structure AND the expression scale have to be usable.
+                "concordance_corr": torchmetrics.ConcordanceCorrCoef(num_outputs=num_outputs),
+                # Not torchmetrics.CosineSimilarity: see RunningCosineSimilarity for why its
+                # list state cannot be used on a dataset this size. Same value, O(1) memory.
+                "cosine_similarity": RunningCosineSimilarity(),
             }
         )
 
@@ -225,6 +272,9 @@ class TrainingPlan(pl.LightningModule):
 
         # Take mean across pearson correlation
         metrics[f"{mode}_pearson_corr"] = torch.nanmean(metrics[f"{mode}_pearson_corr"].contiguous())
+        # Same reduction, same reason: both are per-gene vectors of length n_output, and a
+        # constant gene yields NaN rather than a number.
+        metrics[f"{mode}_concordance_corr"] = torch.nanmean(metrics[f"{mode}_concordance_corr"].contiguous())
         metrics[f"{mode}_loss"] = loss
         return loss, metrics
 
