@@ -8,6 +8,7 @@ def gene_loadings(
     adata: ad.AnnData,
     model,
     layer_key: str,
+    *,
     local_latent_key: str = "_local_emb",
     global_latent_key: str = "_global_emb",
     local_varm_key: str = "_local_std_gene_loadings",

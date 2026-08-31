@@ -36,18 +36,29 @@ def _gene_expression_stats(X, ddof=1):
     return frac, sd
 
 
-def _infer_which(s_key):
-    """Infer the component ('local'/'global') from a loading key, or None if ambiguous."""
-    if s_key.startswith("_local"):
-        return "local"
-    if s_key.startswith("_global"):
-        return "global"
-    return None
+def _infer_which(s_key, prefix=""):
+    """Infer the component ('local'/'global') from a loading key, or None if ambiguous.
+
+    `prefix` is stripped first, so both "_local_std_gene_loadings" and a prefixed
+    "seed0_local_std_gene_loadings" resolve to "local".
+    """
+    body = s_key[len(prefix) :] if prefix and s_key.startswith(prefix) else s_key
+    hits = [
+        c
+        for c in ("local", "global")
+        if body.startswith(f"_{c}") or body.startswith(f"{c}_") or f"_{c}_" in body
+    ]
+    return hits[0] if len(hits) == 1 else None
 
 
-def _dim_importance_uns_key(which):
+def _component_key(which, suffix, prefix=""):
+    """Compose an adata key for a component, following the f"{prefix}_{which}_..." convention."""
+    return f"{prefix}_{which}_{suffix}"
+
+
+def _dim_importance_uns_key(which, prefix=""):
     """Key under which `calculate_dim_importance` stores its selection in adata.uns."""
-    return f"_{which}_dim_importance"
+    return _component_key(which, "dim_importance", prefix=prefix)
 
 
 def _resolve_dims_from_uns(adata, uns_key, s_key):
@@ -152,11 +163,12 @@ def get_genes_dim(
     adata,
     which: Literal["global", "local"],  # required
     *,
+    prefix: str = "",  # e.g. "seed0" -> keys "seed0_global_..."; "" -> "_global_..."
     dims: Sequence[int] | None = None,  # None -> read the selection stored by calculate_dim_importance
     n_top: int = 20,
     s_key: str | None = None,  # e.g. "_global_std_gene_loadings"
     z_key: str | None = None,  # e.g. "_global_emb" (only used if residualize=True)
-    uns_key: str | None = None,  # e.g. "_global_dim_importance"; None -> f"_{which}_dim_importance"
+    uns_key: str | None = None,  # e.g. "_global_dim_importance"; None -> f"{prefix}_{which}_dim_importance"
     # expression-based filtering
     X_layer=None,  # e.g. "log1p_norm"; None -> adata.X
     min_frac=0.05,  # fraction of cells with expr>0
@@ -191,6 +203,12 @@ def get_genes_dim(
         Which component to analyse. Required, because it selects the defaults for
         `s_key`, `z_key` and `uns_key` — it is the only argument needed to switch
         components.
+    prefix : str, default ""
+        Prefix of the stored keys, following the f"{prefix}_{which}_..." convention used
+        when the model output was saved. The default "" gives the plain "_global_emb" /
+        "_local_emb" keys; pass e.g. prefix="seed0" to analyse a run whose embeddings
+        were saved as "seed0_global_emb" / "seed0_local_emb". Ignored for any key you
+        pass explicitly.
     dims : sequence of int, optional
         Latent dimensions to analyse. **Leave as None (recommended)** to read the
         selection `calculate_dim_importance` stored in adata.uns[uns_key], which keeps
@@ -198,13 +216,17 @@ def get_genes_dim(
         exists, the two are compared and a mismatch raises a warning.
     uns_key : str, optional
         Record written by `calculate_dim_importance`. Defaults to
-        f"_{which}_dim_importance". A record built from a different component than the
-        resolved `s_key` raises ValueError rather than silently mixing the two.
+        f"{prefix}_{which}_dim_importance". A record built from a different component
+        than the resolved `s_key` raises ValueError rather than silently mixing the two.
 
     Examples
     --------
     >>> calculate_dim_importance(adata, "global", cumulative_cutoff=0.60)
     >>> df = get_genes_dim(adata, "global", n_top=20)  # dims resolved from adata.uns
+
+    >>> # a run whose embeddings were saved with prefix="seed0"
+    >>> calculate_dim_importance(adata, "global", prefix="seed0", cumulative_cutoff=0.60)
+    >>> df = get_genes_dim(adata, "global", prefix="seed0", n_top=20)
 
     Notes
     -----
@@ -225,11 +247,11 @@ def get_genes_dim(
         raise ValueError(f"which must be 'global' or 'local', got {which!r}")
 
     if s_key is None:
-        s_key = f"_{which}_std_gene_loadings"
+        s_key = _component_key(which, "std_gene_loadings", prefix=prefix)
     if z_key is None:
-        z_key = f"_{which}_emb"
+        z_key = _component_key(which, "emb", prefix=prefix)
     if uns_key is None:
-        uns_key = _dim_importance_uns_key(which)
+        uns_key = _dim_importance_uns_key(which, prefix=prefix)
 
     # --- load/check S
     if s_key not in adata.varm:
@@ -436,6 +458,7 @@ def calculate_dim_importance(
     adata,
     which: Literal["global", "local"] | None = None,
     *,
+    prefix: str = "",
     s_key: str | None = None,
     z_key: str | None = None,
     mode: Literal["full", "diag"] = "full",
@@ -460,11 +483,19 @@ def calculate_dim_importance(
         only argument needed. Defaults to "global" when `s_key` is not given; when
         `s_key` is given instead, the component is inferred from it. Passing a `which`
         that contradicts `s_key` is an error.
+    prefix : str, default ""
+        Prefix of the stored keys, following the f"{prefix}_{which}_..." convention used
+        when the model output was saved. The default "" gives the plain "_global_emb" /
+        "_local_emb" keys; pass e.g. prefix="seed0" to score a run whose embeddings were
+        saved as "seed0_global_emb" / "seed0_local_emb". The selection is then stored
+        under adata.uns["seed0_global_dim_importance"], so several runs can live in the
+        same AnnData without overwriting each other. Ignored for any key you pass
+        explicitly.
     s_key : str, optional
         Key in adata.varm containing gene loadings. Defaults to
-        f"_{which}_std_gene_loadings"; only needed for non-standard keys.
+        f"{prefix}_{which}_std_gene_loadings"; only needed for non-standard keys.
     z_key : str, optional
-        Key in adata.obsm containing embedding. Defaults to f"_{which}_emb".
+        Key in adata.obsm containing embedding. Defaults to f"{prefix}_{which}_emb".
     mode : str
         "full" (uses Corr(Z) off-diagonals) or "diag" (assumes dims uncorrelated).
     use_ratio : bool
@@ -476,7 +507,7 @@ def calculate_dim_importance(
     n_top : int, optional
         Maximum number of dimensions to include.
     uns_key : str, optional
-        Where to store the result. Defaults to f"_{which}_dim_importance".
+        Where to store the result. Defaults to f"{prefix}_{which}_dim_importance".
     store : bool
         If True (default), write the selection to adata.uns[uns_key] so that
         `get_genes_dim(adata, which=which)` can resolve `dims` without being told.
@@ -498,6 +529,7 @@ def calculate_dim_importance(
         - s_key : loadings key used
         - z_key : embedding key used
         - which : component inferred or given ("local"/"global", or None)
+        - prefix : key prefix used
         - uns_key : where the selection was stored (or None if not stored)
     """
     # --- resolve component and keys. `which` is the normal entry point; s_key/z_key
@@ -506,7 +538,7 @@ def calculate_dim_importance(
     if which is not None and which not in ("local", "global"):
         raise ValueError(f"which must be 'global' or 'local', got {which!r}")
 
-    inferred = _infer_which(s_key) if s_key is not None else None
+    inferred = _infer_which(s_key, prefix=prefix) if s_key is not None else None
 
     if which is None:
         # infer from an explicit s_key, else keep the historical "global" default
@@ -523,9 +555,9 @@ def calculate_dim_importance(
         )
 
     if s_key is None:
-        s_key = f"_{which}_std_gene_loadings"
+        s_key = _component_key(which, "std_gene_loadings", prefix=prefix)
     if z_key is None:
-        z_key = f"_{which}_emb"
+        z_key = _component_key(which, "emb", prefix=prefix)
 
     if s_key not in adata.varm:
         raise KeyError(f"{s_key} not found in adata.varm")
@@ -616,7 +648,7 @@ def calculate_dim_importance(
     # -------------------
 
     if uns_key is None and which is not None:
-        uns_key = _dim_importance_uns_key(which)
+        uns_key = _dim_importance_uns_key(which, prefix=prefix)
 
     if store:
         if uns_key is None:
@@ -637,6 +669,7 @@ def calculate_dim_importance(
                 "mode": str(mode),
                 "s_key": str(s_key),
                 "z_key": str(z_key),
+                "prefix": str(prefix),
                 "use_ratio": bool(use_ratio),
             }
             if which is not None:
@@ -665,5 +698,6 @@ def calculate_dim_importance(
         "use_ratio": use_ratio,
         "spacing": spacing,
         "which": which,
+        "prefix": prefix,
         "uns_key": uns_key,
     }

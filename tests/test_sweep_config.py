@@ -662,3 +662,110 @@ def test_arm_trial_does_not_leak_into_the_base_config(arm_cfg, arm_yaml):
     )
     assert list(arm_cfg.dataset.sample_key) == before
     assert list(clone.dataset.sample_key) == ["sliding_window_3000"]
+
+
+# --------------------------------------------------------------------------------------------
+# Every arm-bearing sweep yaml in the repo, not just the one this file was written against.
+#
+# Discovered rather than listed: a new ablation adds a yaml and inherits these checks, which is
+# the point. Each is resolved against the (dataset, task) pair its own header names, so the test
+# proves the arms apply to the config they will actually be run with.
+# --------------------------------------------------------------------------------------------
+
+# sweep yaml -> the registered pair it is written for. Kept explicit because the yaml does not
+# name its dataset: --dataset/--task are passed on the command line.
+ARM_SWEEP_PAIRS = {
+    "sliding_window_melton25.yaml": ("melton25_sw", "node_reg"),
+    "overlap_ladder_legnini.yaml": ("legnini23_overlap", "node_reg"),
+}
+
+
+def arm_sweep_yamls():
+    """Every yaml under config_files/sweeps that declares an `arms:` block."""
+    found = []
+    for path in sorted((CONFIG_DIR / "sweeps").glob("*.yaml")):
+        with path.open() as f:
+            if "arms" in (yaml.safe_load(f) or {}):
+                found.append(path)
+    return found
+
+
+def test_every_arm_sweep_yaml_is_registered_in_this_test():
+    """A new arm sweep must be added to ARM_SWEEP_PAIRS, or it goes untested."""
+    undeclared = [p.name for p in arm_sweep_yamls() if p.name not in ARM_SWEEP_PAIRS]
+    assert not undeclared, (
+        f"arm sweep yaml(s) with no (dataset, task) declared in ARM_SWEEP_PAIRS: {undeclared}. "
+        f"Add them so the checks below cover them."
+    )
+
+
+@pytest.mark.parametrize("yaml_name", sorted(ARM_SWEEP_PAIRS))
+def test_arm_sweep_applies_to_its_registered_pair(yaml_name):
+    """Every arm of every arm sweep resolves and applies against its own dataset/task pair.
+
+    This is the check that would have caught a step of the overlap ladder naming an obs column that
+    the registry's dataset file does not point at, or a max_seq_len key that moved.
+    """
+    dataset, task = ARM_SWEEP_PAIRS[yaml_name]
+    with (CONFIG_DIR / "sweeps" / yaml_name).open() as f:
+        yaml_config = yaml.safe_load(f)
+
+    base = resolve_config(dataset, task, registry_path=REGISTRY)
+    sweep_config, sweep_params = build_sweep_config(
+        yaml_config, prediction_task=base.dataset.prediction_task, model_type="CombinedModel"
+    )
+    arms = load_arms(yaml_config, sweep_config)
+    assert arms, f"{yaml_name} declares no arms"
+
+    for arm_name in sweep_config["parameters"][ARM_PARAM]["values"]:
+        trial = {k: v["values"][0] for k, v in sweep_config["parameters"].items()}
+        trial[ARM_PARAM] = arm_name
+        cfg, applied = apply_sweep_config(
+            base.clone(), "robustness", trial, model_type="CombinedModel",
+            sweep_params=sweep_params, arms=arms,
+        )
+        for key, expected in arms[arm_name].items():
+            assert get_dotted(cfg, key) == expected, f"{yaml_name} {arm_name}: {key} not applied"
+        # A sample_key that is empty would train on nothing; one that is a bare string would be
+        # iterated character by character by prepare_geome_dataset.
+        assert isinstance(cfg.dataset.sample_key, list) and cfg.dataset.sample_key, (
+            f"{yaml_name} {arm_name}: dataset.sample_key must be a non-empty list, "
+            f"got {cfg.dataset.sample_key!r}"
+        )
+
+
+@pytest.mark.parametrize("yaml_name", sorted(ARM_SWEEP_PAIRS))
+def test_arm_sweep_gives_every_trial_its_own_checkpoint(yaml_name):
+    """No two trials of an arm sweep may write the same checkpoint filename.
+
+    get_model_filename_prefix keys on dataset.name, task, level and seed. An arm that forgets to
+    set dataset.name silently overwrites its predecessor's checkpoint, and the sweep then reports
+    metrics for models that no longer exist on disk.
+    """
+    from interscale.tl.utils import get_model_filename_prefix
+
+    dataset, task = ARM_SWEEP_PAIRS[yaml_name]
+    with (CONFIG_DIR / "sweeps" / yaml_name).open() as f:
+        yaml_config = yaml.safe_load(f)
+    base = resolve_config(dataset, task, registry_path=REGISTRY)
+    sweep_config, sweep_params = build_sweep_config(
+        yaml_config, prediction_task=base.dataset.prediction_task, model_type="CombinedModel"
+    )
+    arms = load_arms(yaml_config, sweep_config)
+
+    seeds = sweep_config["parameters"].get("optim.seed", {}).get("values", [None])
+    prefixes = {}
+    for arm_name in sweep_config["parameters"][ARM_PARAM]["values"]:
+        for seed in seeds:
+            trial = {k: v["values"][0] for k, v in sweep_config["parameters"].items()}
+            trial[ARM_PARAM] = arm_name
+            if seed is not None:
+                trial["optim.seed"] = seed
+            cfg, _ = apply_sweep_config(
+                base.clone(), "robustness", trial, model_type="CombinedModel",
+                sweep_params=sweep_params, arms=arms,
+            )
+            prefixes[(arm_name, seed)] = get_model_filename_prefix(cfg, True, True)
+
+    collisions = {v for v in prefixes.values() if list(prefixes.values()).count(v) > 1}
+    assert not collisions, f"{yaml_name}: trials sharing a checkpoint filename: {collisions}"
