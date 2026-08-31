@@ -11,7 +11,7 @@ def _make_data(num_nodes: int, num_features: int = 3) -> Data:
     return Data(x=x, edge_index=edge_index)
 
 
-def _build_datamodule(pct_mask_nodes: float = 0.5) -> GraphAnnDataModule:
+def _build_datamodule(mask_percentage: float = 0.5) -> GraphAnnDataModule:
     train_data = [_make_data(20), _make_data(20), _make_data(20)]
     val_data = [_make_data(10)]
     test_data = [_make_data(10)]
@@ -19,7 +19,7 @@ def _build_datamodule(pct_mask_nodes: float = 0.5) -> GraphAnnDataModule:
         datas=[train_data, val_data, test_data],
         batch_size=1,
         num_workers=0,
-        pct_mask_nodes=pct_mask_nodes,
+        mask_percentage=mask_percentage,
         learning_type="node",
     )
     dm.setup(stage="fit")

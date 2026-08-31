@@ -10,6 +10,7 @@ from torchmetrics import MetricCollection
 
 from interscale.module.base._base_module import BaseModule
 from interscale.nn import CosineWarmupScheduler
+from interscale.tl.masking import masked_loss
 
 from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss
 
@@ -48,6 +49,82 @@ class RunningCosineSimilarity(torchmetrics.Metric):
     def compute(self) -> torch.Tensor:
         """Mean per-cell cosine similarity over everything seen since the last reset."""
         return self.total / self.count
+
+
+def masked_regression_metrics(
+    y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torch.Tensor, eps: float = 1e-8
+) -> dict[str, torch.Tensor]:
+    """The regression metrics of ``_setup_regression_metrics``, restricted to the masked entries.
+
+    Under gene masking the scored rows are mostly entries the model was *given*. Feeding the full
+    rows to the ``MetricCollection`` would score the identity map on those and inflate every
+    number -- including ``val_r2``, which drives early stopping and checkpoint selection. There
+    is no way to express "these entries only" to a torchmetrics per-output metric (the surviving
+    entries are ragged across genes), so the same quantities are computed here from masked sums.
+
+    Every entry that is not masked is multiplied by zero before any sum is taken, and zeros
+    contribute nothing to a sum, so each moment below is exactly the moment over the masked
+    entries -- no approximation.
+
+    Parameters
+    ----------
+    y_pred, y_true
+        ``[N, G]`` predictions and targets for the scored rows.
+    entry_mask
+        ``[N, G]`` boolean marking the masked entries.
+    eps
+        Guard for degenerate (zero-variance) genes.
+
+    Returns
+    -------
+    dict
+        Unprefixed metric names mapped to scalar tensors, matching the keys that
+        ``_setup_regression_metrics`` produces: ``mse``, ``r2`` (per-gene, uniform average),
+        ``pearson_corr``, ``concordance_corr``, ``cosine_similarity`` (per cell).
+    """
+    m = entry_mask.to(y_pred.dtype)
+    p_ = y_pred * m
+    t_ = y_true * m
+
+    n_gene = m.sum(dim=0)  # [G] masked cells per gene
+    n_total = m.sum()
+
+    mse = ((p_ - t_) ** 2).sum() / n_total.clamp(min=1)
+
+    # Per-gene first and second moments over that gene's masked cells.
+    ng = n_gene.clamp(min=1)
+    mean_p = p_.sum(dim=0) / ng
+    mean_t = t_.sum(dim=0) / ng
+    var_p = (p_**2).sum(dim=0) / ng - mean_p**2
+    var_t = (t_**2).sum(dim=0) / ng - mean_t**2
+    cov = (p_ * t_).sum(dim=0) / ng - mean_p * mean_t
+
+    # A gene with fewer than two masked cells, or with no spread in either vector, has no
+    # correlation defined; NaN it out and let nanmean skip it, exactly as the unmasked path
+    # already does for constant genes.
+    nan = torch.tensor(float("nan"), device=y_pred.device, dtype=y_pred.dtype)
+    usable = (n_gene >= 2) & (var_t > eps)
+
+    pearson = torch.where(usable & (var_p > eps), cov / (var_p.clamp(min=eps) * var_t.clamp(min=eps)).sqrt(), nan)
+    concordance = torch.where(usable, 2 * cov / (var_p + var_t + (mean_p - mean_t) ** 2 + eps), nan)
+
+    # R2 per gene, then uniform average -- the same reduction torchmetrics'
+    # R2Score(multioutput="uniform_average") applies.
+    ss_res = ((p_ - t_) ** 2).sum(dim=0)
+    ss_tot = var_t * ng
+    r2 = torch.where(usable, 1 - ss_res / ss_tot.clamp(min=eps), nan)
+
+    # Per-cell cosine over that cell's masked genes: the zeroed entries drop out of both the dot
+    # product and the two norms, so this is the cosine on the masked coordinates.
+    cosine = nn.functional.cosine_similarity(p_, t_, dim=1)
+
+    return {
+        "mse": mse,
+        "r2": torch.nanmean(r2),
+        "pearson_corr": torch.nanmean(pearson),
+        "concordance_corr": torch.nanmean(concordance),
+        "cosine_similarity": cosine.mean(),
+    }
 
 
 CLASSIFICATION_LOSSES = ["CrossEntropy", "WeightedCE"]
@@ -241,6 +318,7 @@ class TrainingPlan(pl.LightningModule):
         metrics: MetricCollection,
         mask_idx: torch.Tensor | None = None,
         attn: torch.Tensor | None = None,
+        entry_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         """Calculate regression metrics.
 
@@ -259,22 +337,37 @@ class TrainingPlan(pl.LightningModule):
             The mask indices to apply to the metrics.
         attn : torch.Tensor | None
             The attention weights to apply to the metrics.
+        entry_mask : torch.Tensor | None
+            [N, G] boolean marking the entries that were actually masked. Set under
+            ``mask_strategy="gene"``; ``None`` under cell masking, where the whole row of every
+            scored cell was blanked and there is nothing to restrict. When given, BOTH the loss
+            and the metrics are computed over those entries only -- see ``masked_regression_metrics``.
         """
-        if self.loss_type == "GaussianNLL":
-            sd = torch.std(y_true, dim=1, keepdim=True)
-            loss = self.loss(y_pred, y_true, sd)
-        elif self.loss_type == "SCE_EntropyATT_Loss":
-            loss = self.loss(y_pred, y_true, attn)
+        if self.loss_type == "SCE_EntropyATT_Loss":
+            # Takes attention as a third argument, so it cannot go through masked_loss. Zeroing
+            # the unmasked entries restricts its row-wise cosine to the masked coordinates,
+            # which is what the row-structured branch of masked_loss does too.
+            if entry_mask is None:
+                loss = self.loss(y_pred, y_true, attn)
+            else:
+                m = entry_mask.to(y_pred.dtype)
+                loss = self.loss(y_pred * m, y_true * m, attn)
         else:
-            loss = self.loss(y_pred, y_true)
+            loss = masked_loss(self.loss, self.loss_type, y_pred, y_true, entry_mask)
 
-        metrics = metrics(y_pred, y_true)
+        if entry_mask is None:
+            metrics = metrics(y_pred, y_true)
+            # Take mean across pearson correlation
+            metrics[f"{mode}_pearson_corr"] = torch.nanmean(metrics[f"{mode}_pearson_corr"].contiguous())
+            # Same reduction, same reason: both are per-gene vectors of length n_output, and a
+            # constant gene yields NaN rather than a number.
+            metrics[f"{mode}_concordance_corr"] = torch.nanmean(metrics[f"{mode}_concordance_corr"].contiguous())
+        else:
+            # Same metric names, so `optim.monitor`, the sweep `--metric` flag and every existing
+            # wandb panel keep working across both strategies -- what changes is only which
+            # entries they are computed over.
+            metrics = {f"{mode}_{k}": v for k, v in masked_regression_metrics(y_pred, y_true, entry_mask).items()}
 
-        # Take mean across pearson correlation
-        metrics[f"{mode}_pearson_corr"] = torch.nanmean(metrics[f"{mode}_pearson_corr"].contiguous())
-        # Same reduction, same reason: both are per-gene vectors of length n_output, and a
-        # constant gene yields NaN rather than a number.
-        metrics[f"{mode}_concordance_corr"] = torch.nanmean(metrics[f"{mode}_concordance_corr"].contiguous())
         metrics[f"{mode}_loss"] = loss
         return loss, metrics
 
@@ -293,6 +386,7 @@ class TrainingPlan(pl.LightningModule):
         mode: str,
         metrics: MetricCollection,
         attn: torch.Tensor | None,
+        entry_mask: torch.Tensor | None = None,
     ):
         """Helper method to log metrics for training, validation, or test steps.
 
@@ -315,7 +409,7 @@ class TrainingPlan(pl.LightningModule):
             metrics.pop(f"{mode}_f1_per_class")
 
         elif "regression" in self.prediction_task:
-            loss, metrics = self._regression_metrics(y_pred, y_true, mode, metrics, attn=attn)
+            loss, metrics = self._regression_metrics(y_pred, y_true, mode, metrics, attn=attn, entry_mask=entry_mask)
 
         # Set sync_dist=True only for test mode
         sync_dist = mode == "test"
@@ -330,13 +424,15 @@ class TrainingPlan(pl.LightningModule):
         -------
             loss: torch.nn.Module
         """
-        local_embedding, global_embedding, y_pred, y_true, attn = self.module._common_step(
+        local_embedding, global_embedding, y_pred, y_true, attn, entry_mask = self.module._common_step(
             batch, self.prediction_task, self.prediction_level
         )
 
         # Check if module supports separate loss computation (e.g., DualDecoderCombinedModule)
         if hasattr(self.module, "compute_separate_losses"):
-            separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
+            separate_losses = self.module.compute_separate_losses(
+                self.loss, self.loss_type, y_pred, y_true, entry_mask
+            )
 
             # Log separate losses (on_step=False, on_epoch=True to match existing pattern)
             if separate_losses.get("local_loss") is not None:
@@ -368,7 +464,7 @@ class TrainingPlan(pl.LightningModule):
                 )
 
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, "train", self.train_metrics, attn=attn)
+            loss = self._compute_and_log_metrics(y_pred, y_true, "train", self.train_metrics, attn=attn, entry_mask=entry_mask)
 
             if separate_losses.get("kl_loss") is not None:
                 kl_loss = separate_losses["kl_loss"]
@@ -393,18 +489,20 @@ class TrainingPlan(pl.LightningModule):
             assert not torch.isnan(loss), "loss is NaN"
             return loss
         else:
-            return self._compute_and_log_metrics(y_pred, y_true, "train", self.train_metrics, attn=attn)
+            return self._compute_and_log_metrics(y_pred, y_true, "train", self.train_metrics, attn=attn, entry_mask=entry_mask)
         # return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics, attn=attn)
 
     def validation_step(self, batch):
         """Validation step for the model."""
-        local_embedding, global_embedding, y_pred, y_true, attn = self.module._common_step(
+        local_embedding, global_embedding, y_pred, y_true, attn, entry_mask = self.module._common_step(
             batch, self.prediction_task, self.prediction_level
         )
 
         # Check if module supports separate loss computation (e.g., DualDecoderCombinedModule)
         if hasattr(self.module, "compute_separate_losses"):
-            separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
+            separate_losses = self.module.compute_separate_losses(
+                self.loss, self.loss_type, y_pred, y_true, entry_mask
+            )
 
             # Log separate losses (on_step=False, on_epoch=True to match existing pattern)
             if separate_losses.get("local_loss") is not None:
@@ -427,7 +525,7 @@ class TrainingPlan(pl.LightningModule):
                 )
 
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, "val", self.valid_metrics, attn=attn)
+            loss = self._compute_and_log_metrics(y_pred, y_true, "val", self.valid_metrics, attn=attn, entry_mask=entry_mask)
 
             if separate_losses.get("kl_loss") is not None:
                 kl_loss = separate_losses["kl_loss"]
@@ -452,18 +550,20 @@ class TrainingPlan(pl.LightningModule):
             assert not torch.isnan(loss), "loss is NaN"
             return loss
         else:
-            return self._compute_and_log_metrics(y_pred, y_true, "val", self.valid_metrics, attn=attn)
+            return self._compute_and_log_metrics(y_pred, y_true, "val", self.valid_metrics, attn=attn, entry_mask=entry_mask)
 
         # return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics, attn=attn)
 
     def test_step(self, batch):
         """Test step for the model."""
-        local_embedding, global_embedding, y_pred, y_true, attn = self.module._common_step(
+        local_embedding, global_embedding, y_pred, y_true, attn, entry_mask = self.module._common_step(
             batch, self.prediction_task, self.prediction_level
         )
         # Check if module supports separate loss computation (e.g., DualDecoderCombinedModule)
         if hasattr(self.module, "compute_separate_losses"):
-            separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true)
+            separate_losses = self.module.compute_separate_losses(
+                self.loss, self.loss_type, y_pred, y_true, entry_mask
+            )
 
             # Log separate losses (on_step=False, on_epoch=True to match existing pattern, sync_dist=True for test)
             if separate_losses.get("local_loss") is not None:
@@ -495,7 +595,7 @@ class TrainingPlan(pl.LightningModule):
                 )
 
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, "test", self.test_metrics, attn=attn)
+            loss = self._compute_and_log_metrics(y_pred, y_true, "test", self.test_metrics, attn=attn, entry_mask=entry_mask)
 
             if separate_losses.get("kl_loss") is not None:
                 kl_loss = separate_losses["kl_loss"]
@@ -520,7 +620,7 @@ class TrainingPlan(pl.LightningModule):
             assert not torch.isnan(loss), "loss is NaN"
             return loss
         else:
-            return self._compute_and_log_metrics(y_pred, y_true, "test", self.test_metrics, attn=attn)
+            return self._compute_and_log_metrics(y_pred, y_true, "test", self.test_metrics, attn=attn, entry_mask=entry_mask)
         # return self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
 
     def configure_optimizers(self):

@@ -281,7 +281,7 @@ def test_every_declared_goal_is_accepted(goal, base_cfg):
 def test_robustness_goal_parameters_apply(base_cfg):
     """The robustness sweep's three keys all exist and all land."""
     trial = {
-        "dataset.pct_mask_nodes": 0.42,
+        "dataset.mask_percentage": 0.42,
         "dataset.spatial_neigbors_kwargs.radius": 77,
         "optim.seed": 7,
     }
@@ -289,7 +289,7 @@ def test_robustness_goal_parameters_apply(base_cfg):
         base_cfg.clone(), "robustness", trial, sweep_params=sorted(trial)
     )
     assert sorted(applied) == sorted(trial)
-    assert cfg.dataset.pct_mask_nodes == 0.42
+    assert cfg.dataset.mask_percentage == 0.42
     assert cfg.dataset.spatial_neigbors_kwargs.radius == 77
     assert cfg.optim.seed == 7
 
@@ -677,6 +677,14 @@ def test_arm_trial_does_not_leak_into_the_base_config(arm_cfg, arm_yaml):
 ARM_SWEEP_PAIRS = {
     "sliding_window_melton25.yaml": ("melton25_sw", "node_reg"),
     "overlap_ladder_legnini.yaml": ("legnini23_overlap", "node_reg"),
+    # Masking-granularity ablation. Resolved against the CELL-masking pair: the arms set
+    # mask_strategy/mask_token themselves, so starting from node_reg proves each arm overrides
+    # the baseline rather than relying on the genemask task file to have set it.
+    "mask_granularity_legnini.yaml": ("legnini23", "node_reg"),
+    # Rate/length follow-up. Same base pair, same reason.
+    "mask_rate_and_length_legnini.yaml": ("legnini23", "node_reg"),
+    # Cell-masking rate ladder, the counterpart to the gene ladder in mask_granularity.
+    "mask_rate_cell_ladder_legnini.yaml": ("legnini23", "node_reg"),
 }
 
 

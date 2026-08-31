@@ -26,7 +26,8 @@ class CombinedModule(BaseModule):
             decoder_type=None,  # don't need decoder for local module
             dropout_decoder=0,
             decoder_hidden_dims=[],
-            pct_mask_nodes=self.pct_mask_nodes,
+            mask_percentage=self.mask_percentage,
+            mask_strategy=self.mask_strategy,
         )
         self.global_module = GlobalModule.from_config(
             cfg,
@@ -34,7 +35,8 @@ class CombinedModule(BaseModule):
             n_output=self.n_output,
             n_embed=self.n_embed,
             decoder_type=cfg.model.decoder.type,
-            pct_mask_nodes=self.pct_mask_nodes,
+            mask_percentage=self.mask_percentage,
+            mask_strategy=self.mask_strategy,
         )
 
     def predict_local(self, local_embedding):
@@ -63,8 +65,12 @@ class CombinedModule(BaseModule):
         return local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask, attn_matrix
 
     def _common_step(self, batch, prediction_task, prediction_level: Literal["node", "graph"]):
-        """Shared step between train, val and test."""
-        batch_masked, mask_idx = self._common_step_masking(batch)
+        """Shared step between train, val and test.
+
+        The trailing `entry_mask` is `None` under cell masking and `[N_masked, F]` under gene
+        masking, where it marks the entries the loss must be restricted to.
+        """
+        batch_masked, mask_idx, _ = self._common_step_masking(batch)
 
         local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask, attn_matrix = (
             self.forward(batch_masked)
@@ -73,18 +79,21 @@ class CombinedModule(BaseModule):
 
         if prediction_task == "classification" and prediction_level == "graph":
             y_true = batch.y[batch.ptr[:-1]]
+            entry_mask = None
         else:
-            y_true, adjusted_mask_idx = self.global_module._process_batch_for_metrics(
+            y_true, adjusted_mask_idx, entry_mask = self.global_module._process_batch_for_metrics(
                 batch, prediction_task, prediction_level, pad_index_nodes, mask_idx
             )
             y_pred = y_pred[adjusted_mask_idx]
             y_true = y_true[adjusted_mask_idx]
+            if entry_mask is not None:
+                entry_mask = entry_mask[adjusted_mask_idx]
 
         assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
         assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
         assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
 
-        return local_embedding, global_embedding, y_pred, y_true, attn_matrix
+        return local_embedding, global_embedding, y_pred, y_true, attn_matrix, entry_mask
 
     def get_model_summary(self) -> str:
         """Returns a string containing the model's parameters summary.

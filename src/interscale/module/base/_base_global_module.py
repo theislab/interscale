@@ -1,6 +1,7 @@
 from abc import abstractmethod
 from typing import Literal
 
+import numpy as np
 import torch
 from sklearn.decomposition import NMF, PCA
 
@@ -17,6 +18,24 @@ class GlobalModule(BaseModule):
 
         if self.type_gex_embedding == "PCA":
             self.pca = PCA(n_components=self.n_embed)
+            # A fitted sklearn estimator is not part of `module.state_dict()`, and
+            # `BaseModel.save` persists nothing else -- so a GlobalModel reloaded for inference
+            # would arrive with an UNFITTED pca and silently refit it on the first evaluation
+            # batch. The transformer's weights were learned on the basis fitted to the first
+            # TRAINING batch; a basis refitted elsewhere differs by rotation and by component
+            # sign, so the reloaded model would decode a different space than it was trained on
+            # and produce attention that means nothing. These buffers carry the fit through the
+            # checkpoint.
+            #
+            # Registered unconditionally for the PCA branch (not lazily on first fit) because a
+            # buffer that does not exist at construction time cannot receive a value from
+            # `load_state_dict`, which is exactly when it is needed. Older checkpoints simply
+            # have no entry for them; `BaseModel.load` uses strict=False, so they stay zeroed
+            # and `pca_fitted_` stays False, reproducing the previous refit-on-load behaviour
+            # rather than failing.
+            self.register_buffer("pca_mean_", torch.zeros(self.n_input))
+            self.register_buffer("pca_components_", torch.zeros(self.n_embed, self.n_input))
+            self.register_buffer("pca_fitted_", torch.zeros(1, dtype=torch.bool))
         elif self.type_gex_embedding == "NMF":
             self.nmf = NMF(n_components=self.n_embed, init="random", random_state=0)
         elif self.type_gex_embedding == "Precomputed":
@@ -51,12 +70,23 @@ class GlobalModule(BaseModule):
             Size: [N, E]
         """
         if type == "PCA":
-            # Fit PCA only once (on first batch), then use transform for subsequent batches
-            # This avoids expensive refitting on every batch during training
-            if not hasattr(self.pca, "components_"):
-                return self.pca.fit_transform(embeddings)
-            else:
-                return self.pca.transform(embeddings)
+            # Fit PCA only once (on the first batch that arrives with no fit available), then
+            # project every later batch through the stored basis. Two sources of a fit, in
+            # order: the buffers restored from a checkpoint, then this process's own first
+            # batch. Checking the buffers FIRST is what makes a reloaded model reproduce the
+            # basis it was trained on instead of refitting on evaluation data.
+            # `_common_step` hands this a numpy array but `GlobalModel.get_model_output` hands
+            # it `batch.x` straight off the batch, which is a (possibly CUDA) tensor.
+            if isinstance(embeddings, torch.Tensor):
+                embeddings = embeddings.detach().cpu().numpy()
+            if not bool(self.pca_fitted_):
+                self.pca.fit(embeddings)
+                self.pca_mean_.copy_(torch.as_tensor(self.pca.mean_, dtype=self.pca_mean_.dtype))
+                self.pca_components_.copy_(
+                    torch.as_tensor(self.pca.components_, dtype=self.pca_components_.dtype)
+                )
+                self.pca_fitted_.fill_(True)
+            return self._pca_transform(embeddings)
         elif type == "NMF":
             if not hasattr(self.nmf, "components_"):
                 return self.nmf.fit_transform(embeddings)
@@ -64,6 +94,19 @@ class GlobalModule(BaseModule):
                 return self.nmf.transform(embeddings)
         else:
             raise ValueError(f"Invalid embedding type: {type}")
+
+    def _pca_transform(self, embeddings):
+        """Project onto the stored PCA basis: ``(X - mean_) @ components_.T``.
+
+        Written out rather than delegated to ``self.pca.transform`` so that the projection
+        depends only on the two buffers, which are the only part of the fit that survives a
+        checkpoint round trip. ``sklearn``'s own ``transform`` would additionally require the
+        estimator's private fitted attributes to be present, which after a reload they are not.
+        Equivalent to it for ``whiten=False``, which is the default this module constructs.
+        """
+        mean = self.pca_mean_.detach().cpu().numpy()
+        components = self.pca_components_.detach().cpu().numpy()
+        return (np.asarray(embeddings, dtype=np.float64) - mean) @ components.T
 
     def _process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx_tensor):
         """Process batch to extract y_true and adjusted_mask_idx for metrics calculation.
@@ -90,6 +133,10 @@ class GlobalModule(BaseModule):
             Ground truth values
         adjusted_mask_idx: torch.Tensor [N_masked nodes]
             Adjusted indices for masked nodes
+        entry_mask: torch.Tensor [N_included_nodes, F] | None
+            The batch's `gene_mask` gathered and reordered exactly like `y_true`, so that
+            `entry_mask[adjusted_mask_idx]` lines up entry-for-entry with the scored predictions.
+            `None` whenever the batch carries no gene mask (cell masking, or classification).
         """
         assert prediction_level == "node", "Node specific retrieval only necessary for node-level prediction."
 
@@ -108,6 +155,14 @@ class GlobalModule(BaseModule):
         adjusted_mask_idx_list = []
         y_true_list = []
 
+        # Gathered in lockstep with y_true below. Gated on the configured strategy, not merely on
+        # the attribute being present, so a stale `gene_mask` on a reused Data object cannot turn
+        # a cell-masking run into a gene-masking one. Only regression has entries to mask; a
+        # classification target is a label per cell, not a gene vector.
+        use_gene_mask = self.mask_strategy == "gene" and "regression" in prediction_task
+        gene_mask = getattr(batch, "gene_mask", None) if use_gene_mask else None
+        entry_mask_list = [] if gene_mask is not None else None
+
         for i in range(nr_batches):
             batch_start = batch_starts[i].item()
             batch_end = batch_ends[i].item()
@@ -123,6 +178,8 @@ class GlobalModule(BaseModule):
                     y_true_list.append(batch.y[mask][pad_index_nodes[i]])
                 elif "regression" in prediction_task:
                     y_true_list.append(batch.x[mask][pad_index_nodes[i]])
+                if entry_mask_list is not None:
+                    entry_mask_list.append(gene_mask[mask][pad_index_nodes[i]])
                 continue
 
             # Create pad_indices tensor once
@@ -149,9 +206,12 @@ class GlobalModule(BaseModule):
                 y_true_list.append(batch.x[mask][pad_index_nodes[i]])
             else:
                 raise Exception("Choose a valid prediction task (classification or regression).")
+            if entry_mask_list is not None:
+                entry_mask_list.append(gene_mask[mask][pad_index_nodes[i]])
 
         # Concatenate results
         y_true = torch.cat(y_true_list, dim=0)
+        entry_mask = torch.cat(entry_mask_list, dim=0) if entry_mask_list else None
         adjusted_mask_idx = (
             torch.cat(adjusted_mask_idx_list, dim=0)
             if adjusted_mask_idx_list
@@ -177,7 +237,12 @@ class GlobalModule(BaseModule):
                 f"Mismatch: max(adjusted_mask_idx): {adjusted_mask_idx.max()}, len(y_true): {len(y_true)}"
             )
 
-        return y_true, adjusted_mask_idx
+        if entry_mask is not None:
+            assert entry_mask.shape == y_true.shape, (
+                f"Mismatch: entry_mask.shape: {tuple(entry_mask.shape)}, y_true.shape: {tuple(y_true.shape)}"
+            )
+
+        return y_true, adjusted_mask_idx, entry_mask
 
     # def _process_batch_for_metrics(self, batch, prediction_task, prediction_level, pad_index_nodes, mask_idx_tensor):
     #     """Process batch to extract y_true and adjusted_mask_idx for metrics calculation.
@@ -290,9 +355,13 @@ class GlobalModule(BaseModule):
             Size: [N, C] (classification) or [N, F] (regression) with SEQ_LEN_MASK for padding nodes.
         y_true: torch.Tensor
             Size: [N, C] (classification) or [N, F] (regression) with SEQ_LEN_MASK for padding nodes.
+        attn_matrix: torch.Tensor
+            Stacked per-layer attention weights.
+        entry_mask: torch.Tensor | None
+            Size: [N, F] under gene masking, marking the entries the loss is scored on.
         """
         # Mask nodes  - before GEX embedding because otherwise embedding contains information about masked nodes
-        batch_masked, mask_idx = self._common_step_masking(batch)
+        batch_masked, mask_idx, _ = self._common_step_masking(batch)
         if hasattr(batch_masked, "embeddings"):
             embedding = batch_masked.embeddings
         else:
@@ -317,18 +386,21 @@ class GlobalModule(BaseModule):
 
         if prediction_task == "classification" and prediction_level == "graph":
             y_true = batch.y[batch.ptr[:-1]]
+            entry_mask = None
         else:
-            y_true, adjusted_mask_idx = self._process_batch_for_metrics(
+            y_true, adjusted_mask_idx, entry_mask = self._process_batch_for_metrics(
                 batch, prediction_task, prediction_level, pad_index_nodes, mask_idx
             )
             y_pred = y_pred[adjusted_mask_idx]
             y_true = y_true[adjusted_mask_idx]
+            if entry_mask is not None:
+                entry_mask = entry_mask[adjusted_mask_idx]
 
         assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
         assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"
         assert not torch.any(torch.isnan(y_true)), "y_true contains NaN values"
 
-        return None, global_embedding, y_pred, y_true, attn_matrix
+        return None, global_embedding, y_pred, y_true, attn_matrix, entry_mask
 
     def get_global_embeddings(self, x, edge_index):
         return self.forward(x, edge_index)

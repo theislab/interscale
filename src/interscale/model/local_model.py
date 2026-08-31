@@ -33,7 +33,8 @@ class LocalModel(NodeMaskingTrainingPlan, BaseModel):
             decoder_type=self._cfg.model.decoder.type,
             dropout_decoder=self._cfg.model.decoder.dropout_decoder,
             decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
-            pct_mask_nodes=self._cfg.dataset.pct_mask_nodes,
+            mask_percentage=self._cfg.dataset.mask_percentage,
+            mask_strategy=self._cfg.dataset.mask_strategy,
         )
 
     @torch.inference_mode()

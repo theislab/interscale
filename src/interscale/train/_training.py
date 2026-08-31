@@ -121,7 +121,7 @@ class NodeMaskingTrainingPlan:
         print("Steps per epoch", steps_per_epoch)
         lr_monitor = LearningRateMonitor(logging_interval="epoch")
         self.history_ = MetricsHistory()
-        mask_resample_callback = NodeMaskResampleCallback() if self._cfg.dataset.pct_mask_nodes > 0 else None
+        mask_resample_callback = NodeMaskResampleCallback() if self._cfg.dataset.mask_percentage > 0 else None
         checkpoint_callback = None
         loss_callback = None
         performance_callback = None

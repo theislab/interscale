@@ -208,7 +208,8 @@ def main_sweep(cfg_factory, model_type, sweep_goal, sweep_params=None, arms=None
         datas=pyg_data_list,
         num_workers=1,
         batch_size=int(cfg.dataset.batch_size),
-        pct_mask_nodes=cfg.dataset.pct_mask_nodes,
+        mask_percentage=cfg.dataset.mask_percentage,
+        mask_strategy=cfg.dataset.mask_strategy,
         learning_type=cfg.dataset.prediction_level,
     )
     print_memory_usage("After datamodule creation")

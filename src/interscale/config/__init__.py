@@ -82,7 +82,7 @@ def _coerce_override_values(cfg, overrides):
 
     ``merge_from_list`` rejects an int for a float key outright (yacs only tolerates a type
     mismatch when one side is ``None``). YAML writes ``0`` as an int, so an override of
-    ``dataset.pct_mask_nodes: 0`` against the ``0.2`` default would raise even though the
+    ``dataset.mask_percentage: 0`` against the ``0.2`` default would raise even though the
     value is perfectly valid. Promote it instead of making callers write ``0.0``.
 
     ``overrides`` is the flat ``[key, value, key, value, ...]`` form ``merge_from_list`` takes.
@@ -109,6 +109,33 @@ def _coerce_override_values(cfg, overrides):
             coerced[i + 1] = float(value)
 
     return coerced
+
+
+def _validate_masking(cfg):
+    """Reject masking settings that would silently train on an uncorrupted input.
+
+    A reconstruction task with ``mask_percentage`` at 0 has the identity map as its solution, and
+    every metric looks excellent, so it fails loudly instead.
+
+    Raises
+    ------
+    ValueError
+        If ``mask_strategy`` is unknown, or ``mask_percentage`` is not a rate in (0, 1] for a
+        regression task.
+    """
+    from interscale.tl.masking import MASK_STRATEGIES
+
+    if cfg.dataset.mask_strategy not in MASK_STRATEGIES:
+        raise ValueError(f"dataset.mask_strategy must be one of {MASK_STRATEGIES}, got {cfg.dataset.mask_strategy!r}.")
+
+    if "regression" not in cfg.dataset.prediction_task:
+        return
+
+    if not 0 < cfg.dataset.mask_percentage <= 1:
+        raise ValueError(
+            f"dataset.mask_percentage must be in (0, 1] for a regression task, got "
+            f"{cfg.dataset.mask_percentage}. With no masking a reconstruction target is its own input."
+        )
 
 
 def _validate_optim(cfg):
@@ -165,6 +192,7 @@ def load_config(cfg_path=None, overrides=None):
     # unconditionally, so None used to raise AttributeError too.
     if not cfg_paths and not overrides:
         _validate_optim(cfg)
+        _validate_masking(cfg)
         cfg.freeze()
         return cfg
 
@@ -183,5 +211,6 @@ def load_config(cfg_path=None, overrides=None):
         cfg.merge_from_list(_coerce_override_values(cfg, overrides))
 
     _validate_optim(cfg)
+    _validate_masking(cfg)
     cfg.freeze()
     return cfg

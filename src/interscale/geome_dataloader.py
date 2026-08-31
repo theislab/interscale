@@ -12,9 +12,9 @@ VALID_STAGE = {"fit", "test", "validate", None}
 VALID_SPLIT = {"node", "graph"}
 
 # TODO: Fix dataloader
-import random
-
 import torch
+
+from interscale.tl.masking import MASK_STRATEGIES, sample_gene_mask, sample_node_mask
 
 
 class GraphAnnDataModule(pl.LightningDataModule):
@@ -25,7 +25,8 @@ class GraphAnnDataModule(pl.LightningDataModule):
         datas: Sequence[Sequence[Data]] | None = None,
         batch_size: int = 1,
         num_workers: int = 1,
-        pct_mask_nodes: float = 0.5,
+        mask_percentage: float = 0.5,
+        mask_strategy: Literal["node", "gene"] = "node",
         learning_type: Literal["node", "graph"] = "node",
     ):
         """Manages loading and sampling schemes before loading to GPU.
@@ -36,6 +37,13 @@ class GraphAnnDataModule(pl.LightningDataModule):
             List of train, val (and test) data to be loaded. Defaults to None.
         batch_size (int, optional): The batch size. Defaults to 1.
         num_workers (int, optional): The number of workers. Defaults to 1.
+        mask_percentage (float, optional): Bernoulli masking probability, per cell under
+            `mask_strategy="node"` and per (cell, gene) entry under `"gene"`. One argument rather
+            than one per strategy: the strategy already says what a unit is. Defaults to 0.5.
+        mask_strategy (Literal["node", "gene"], optional): Granularity of the corruption.
+            "node" blanks whole cells (loss over all G genes of the masked cells); "gene" blanks
+            individual (cell, gene) entries in every cell (loss over those entries only). See
+            `interscale.tl.masking` for why the two behave so differently. Defaults to "node".
         learning_type (Literal["node", "graph"], optional): The type of learning to be performed.
             If "graph" is selected, `batch_size` means the number of graphs and `datas` is expected to be a list of Data.
             If "node" is selected, `batch_size` means the number of nodes and `datas` is expected to be a list of Data objects
@@ -59,7 +67,10 @@ class GraphAnnDataModule(pl.LightningDataModule):
         if learning_type not in VALID_SPLIT:
             raise ValueError("Learning type must be one of %r." % VALID_SPLIT)
         self.learning_type = learning_type
-        self.pct_mask_nodes = pct_mask_nodes
+        if mask_strategy not in MASK_STRATEGIES:
+            raise ValueError("mask_strategy must be one of %r." % (MASK_STRATEGIES,))
+        self.mask_strategy = mask_strategy
+        self.mask_percentage = mask_percentage
         self.first_time = True
 
     def _nodewise_setup(self, stage: str | None) -> None:
@@ -130,21 +141,25 @@ class GraphAnnDataModule(pl.LightningDataModule):
         return dataloader
 
     def _assign_random_mask(self, data: BaseData) -> None:
-        """Overwrites `data.mask` in place with a fresh Bernoulli draw at rate `pct_mask_nodes`.
+        """Overwrites the mask attributes of `data` in place with a fresh Bernoulli draw.
 
-        Each node is masked independently with probability `pct_mask_nodes`, so the expected
-        masked fraction is the same for every graph regardless of its size. An earlier version
-        derived a single absolute node count from the smallest graph in the split and applied it
-        to every graph, which made the realised rate depend both on a graph's size and on which
-        split it landed in.
+        Under `mask_strategy="node"` only `data.mask` `[N]` is written: each cell is masked
+        independently with probability `mask_percentage`.
 
-        This is the single seam where a future non-uniform sampling strategy (e.g. downweighting
-        nodes that were already masked in previous epochs) would be substituted in.
+        Under `mask_strategy="gene"` a second attribute `data.gene_mask` `[N, G]` is written,
+        with each (cell, gene) entry drawn independently at `mask_percentage`. `data.mask` is then
+        the row-wise OR of it -- i.e. "this cell is a supervision target" -- which is what the
+        rest of the pipeline (padding, `_process_batch_for_metrics`) keys on. 
+
+        `gene_mask` is a node-level attribute of shape `[num_nodes, ...]`, so PyG collates it by
+        concatenating along dim 0 exactly like `x` -- no custom `__cat_dim__` needed. 
         """
-        mask = torch.rand(data.num_nodes) < self.pct_mask_nodes
-        if not mask.any():  # must mask at least one node
-            mask[random.randrange(data.num_nodes)] = True
-        data.mask = mask
+        if self.mask_strategy == "gene":
+            gene_mask = sample_gene_mask(data.num_nodes, data.x.shape[1], self.mask_percentage)
+            data.gene_mask = gene_mask
+            data.mask = gene_mask.any(dim=1)
+        else:
+            data.mask = sample_node_mask(data.num_nodes, self.mask_percentage)
 
     def resample_train_mask(self) -> None:
         """Redraws the masked node set for every training graph, in place.

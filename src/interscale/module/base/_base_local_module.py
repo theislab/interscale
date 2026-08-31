@@ -40,9 +40,13 @@ class LocalModule(BaseModule):
             Size: [B, C] (classification) or [B, F] (regression)
         y_true: torch.Tensor
             Size: [B, ] (classification) or [B, F] (regression)
+        attn: None
+            This module has no attention; returned for a uniform `_common_step` contract.
+        entry_mask: torch.Tensor | None
+            Size: [B, F] under gene masking, marking the entries the loss is scored on.
         """
         # Mask nodes
-        batch_masked, mask_idx = self._common_step_masking(batch)
+        batch_masked, mask_idx, entry_mask = self._common_step_masking(batch)
 
         local_embedding = self.forward(batch_masked.x, batch_masked.edge_index)
         y_pred = self.decoder.forward(local_embedding)
@@ -60,12 +64,16 @@ class LocalModule(BaseModule):
         if "classification" in prediction_task:
             y_true = batch.y[mask_idx]  # batch without mask because constant otherwise
             assert y_true.shape == y_pred.shape
-            return local_embedding, None, y_pred, y_true
+            # Class labels are not gene entries, so there is nothing for an entry mask to select.
+            return local_embedding, None, y_pred, y_true, None, None
 
         if "regression" in prediction_task:
             y_true = batch.x[mask_idx]  # batch without mask because constant otherwise
             assert y_true.shape == y_pred.shape
-            return local_embedding, None, y_pred, y_true
+            if entry_mask is not None:
+                entry_mask = entry_mask[mask_idx]
+                assert entry_mask.shape == y_pred.shape
+            return local_embedding, None, y_pred, y_true, None, entry_mask
 
         assert False, "Prediction task not supported"
 
