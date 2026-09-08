@@ -4,7 +4,7 @@ Both halves used to live inline in ``main_sweep.py`` -- one in ``main_sweep()`` 
 ``h5ad`` load and a training call, the other in the ``__main__`` block -- which made the
 question "does this sweep actually vary the parameters it declares?" impossible to answer
 without launching a real run on a GPU. They are pure config transforms, so they live here
-and are covered by ``tests/test_sweep_config.py``.
+and can be exercised without one.
 
 Application is **generic over the dotted key**: whatever ``parameters`` the sweep yaml
 declares is written to that exact path in the config, and a path that does not exist raises.
