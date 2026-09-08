@@ -694,7 +694,18 @@ def compute_hierarchical_net_flow(
     return final_results
 
 
-def plot_global_directionality(mean_df, std_df, only_positive=True, title="Net Flow", figsize=(8, 6)):
+def plot_global_directionality(
+    mean_df,
+    std_df,
+    only_positive=True,
+    title="Net Flow",
+    figsize=(8, 6),
+    ax=None,
+    vmin=None,
+    vmax=None,
+    show=None,
+    order=None,
+):
     """
     Visualize aggregated net flow between cell types using a dot plot.
 
@@ -714,22 +725,62 @@ def plot_global_directionality(mean_df, std_df, only_positive=True, title="Net F
     title : str, optional
         Title of the plot.
     figsize : tuple, optional
-        Dimensions of the figure.
-    """
-    # 1. Melt the data
-    plot_data = mean_df.reset_index().melt(id_vars="index")
-    plot_data.columns = ["Sender", "Receiver", "Flow"]
+        Dimensions of the figure. Ignored when ``ax`` is given.
+    ax : matplotlib.axes.Axes, optional
+        Draw into an existing axes instead of a new figure. Needed to place two conditions --
+        or two model variants of an ablation -- side by side for comparison; without it every
+        call opened its own figure and the panels could only be stacked as separate outputs.
+    vmin, vmax : float, optional
+        Colour limits. Pass the same pair to every panel of a multi-panel figure: seaborn
+        otherwise normalises each panel to its own range, so equal colours in two panels would
+        stand for different flow magnitudes.
+    show : bool, optional
+        Whether to call ``plt.show()``. Defaults to True when ``ax`` is None (the previous
+        behaviour, which suits a single standalone plot) and False otherwise, since a composed
+        figure must not be shown until every panel is drawn.
+    order : list, optional
+        Category order for both axes. Defaults to alphabetical, which is right for cell-type
+        names but wrong for any label set that is already ordered -- the SHH rings sort to
+        ``SHH, far, medium, near`` alphabetically, which interleaves near and far and destroys
+        the distance axis the rings exist to represent.
 
-    # 2. Define and Enforce the same order for both axes
-    categories = sorted(mean_df.index.unique())
+    Returns
+    -------
+    matplotlib.axes.Axes
+        The axes drawn into, so a caller composing a figure can adjust it further.
+    """
+    # 1. Melt the data.
+    #
+    # The axes are renamed rather than relying on `reset_index()` producing a column literally
+    # called "index", which it only does when the index has no name. A `mean_df` built by
+    # `DataFrame.pivot` carries the pivot's index/column names, and melting it by "index" raised
+    # KeyError.
+    mean_df = mean_df.rename_axis(index="Sender", columns="Receiver")
+    std_df = std_df.rename_axis(index="Sender", columns="Receiver")
+
+    plot_data = mean_df.reset_index().melt(id_vars="Sender", var_name="Receiver", value_name="Flow")
+
+    # 2. Calculate Consistency.
+    #
+    # Merged on the (Sender, Receiver) pair, not zipped by position. `melt` emits column-major
+    # (every sender of receiver 1, then every sender of receiver 2, ...) while `.values.flatten()`
+    # is row-major, so pairing the two positionally attached each flow to the standard deviation
+    # of its TRANSPOSED entry -- invisible for a symmetric matrix, and wrong for every net flow,
+    # which is antisymmetric by construction.
+    std_long = std_df.reset_index().melt(id_vars="Sender", var_name="Receiver", value_name="Std")
+    plot_data = plot_data.merge(std_long, on=["Sender", "Receiver"], how="left")
+    plot_data["Consistency"] = 1 / (plot_data["Std"] + 1e-9)
+
+    # 3. Define and Enforce the same order for both axes
+    categories = list(order) if order is not None else sorted(mean_df.index.unique())
+    if order is not None:
+        missing = set(mean_df.index.unique()) - set(categories)
+        if missing:
+            raise ValueError(f"`order` does not cover every category in mean_df: {sorted(missing)}")
 
     # Convert to Categorical with a fixed list of categories
     plot_data["Sender"] = pd.Categorical(plot_data["Sender"], categories=categories)
     plot_data["Receiver"] = pd.Categorical(plot_data["Receiver"], categories=categories)
-
-    # 3. Calculate Consistency
-    std_flat = std_df.values.flatten()
-    plot_data["Consistency"] = 1 / (std_flat + 1e-9)
 
     # Filter only positive flows
     if only_positive:
@@ -738,7 +789,10 @@ def plot_global_directionality(mean_df, std_df, only_positive=True, title="Net F
         plot_data = plot_data[plot_data["Flow"].abs() > 0]
 
     # 4. Plotting
-    plt.figure(figsize=figsize)
+    if show is None:
+        show = ax is None
+    if ax is None:
+        _, ax = plt.subplots(figsize=figsize)
 
     # Now Seaborn will use the categorical order automatically
     sns.scatterplot(
@@ -748,16 +802,26 @@ def plot_global_directionality(mean_df, std_df, only_positive=True, title="Net F
         size="Consistency",
         hue="Flow",
         palette="YlOrRd" if only_positive else "coolwarm",
+        hue_norm=None if vmin is None and vmax is None else (vmin, vmax),
         sizes=(20, 500),
+        ax=ax,
     )
 
-    # Force axes to show all categories in the right order
-    plt.xticks(ticks=range(len(categories)), labels=categories, rotation=45)
-    plt.yticks(ticks=range(len(categories)), labels=categories)
+    # Force axes to show all categories in the right order.
+    #
+    # set_xticks BEFORE set_xticklabels, and both on the axes rather than through pyplot: with an
+    # empty `plot_data` (every flow filtered out, which `only_positive` can do for a whole panel)
+    # seaborn draws no categorical axis at all, and labelling ticks that do not exist raises.
+    ax.set_xticks(range(len(categories)))
+    ax.set_xticklabels(categories, rotation=45, ha="right")
+    ax.set_yticks(range(len(categories)))
+    ax.set_yticklabels(categories)
 
     # Move legend outside
-    plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0)
+    ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left", borderaxespad=0.0)
 
-    plt.title(title)
-    plt.tight_layout()
-    plt.show()
+    ax.set_title(title)
+    if show:
+        plt.tight_layout()
+        plt.show()
+    return ax

@@ -22,6 +22,19 @@ def _predict_gene_r2(adata: AnnData, layers_pred: str) -> pd.DataFrame:
     # Convert y_true to a dense array
     y_true = adata.X.toarray().astype(float)
 
+    # ensure y_true is on same scale as during model training (e.g. log1p normalized) and not raw counts
+    finite_true = y_true[np.isfinite(y_true)]
+    if finite_true.size:
+        max_true = float(np.max(finite_true))
+        looks_like_counts = np.allclose(finite_true, np.round(finite_true)) and max_true > 1
+        assert max_true <= 20 and not looks_like_counts, (
+            f"adata.X looks like raw or normalized counts (max={max_true:.3g}"
+            f"{', integer-valued' if looks_like_counts else ''}), but the predictions in "
+            f"adata.layers['{layers_pred}'] are on the scale of the layer the model was trained "
+            f"on. Set adata.X to that layer (e.g. adata.X = adata.layers['log1p_norm']) before "
+            f"calling calculate_gene_ranks."
+        )
+
     # Convert predictions to NumPy arrays
     y_pred = adata.layers[layers_pred]
 

@@ -25,4 +25,4 @@ src/confi_files/
 InterScale_hyperparameter_sweep/
 src/interscale/tmp/
 src/interscale/logs/
-CLAUDE.md
+CLAUDE.local.md

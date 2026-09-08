@@ -1,7 +1,9 @@
 import math
+import os
 
 import lightning as L
 import lightning.pytorch as pl
+import torch
 import wandb
 from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from lightning.pytorch.loggers import WandbLogger
@@ -9,7 +11,7 @@ from lightning.pytorch.trainer import seed_everything
 
 from interscale.tl.utils import get_model_filename_prefix
 from interscale.train._trainingplans import TrainingPlan
-from interscale.train._utils import MetricsHistory
+from interscale.train._utils import MetricsHistory, NodeMaskResampleCallback
 
 # from interscale.model.base._trainer import TrainRunner
 
@@ -23,6 +25,21 @@ class NodeMaskingTrainingPlan:
     # _data_splitter_cls = DataSplitter
     _training_plan_cls = TrainingPlan
 
+    def _resolve_monitor(self) -> tuple[str, str]:
+        """Metric driving EarlyStopping / ModelCheckpoint, and the direction to optimise it.
+
+        Returns
+        -------
+        tuple[str, str]
+            The metric name and the mode (``"min"`` or ``"max"``).
+        """
+        monitor = self._cfg.optim.monitor
+        if monitor == "auto":
+            # val_loss is a poor early-stopping criterion under class imbalance: a collapsed
+            # constant predictor is a genuine minimum of the weighted loss.
+            monitor = "val_f1_macro" if "classification" in self.prediction_task else "val_loss"
+        return monitor, ("min" if monitor.endswith("loss") else "max")
+
     # @devices_dsp.dedent -TODO: Why is this here in scvi-tools?
     def train(
         self,
@@ -30,7 +47,7 @@ class NodeMaskingTrainingPlan:
         shuffle_set_split: bool = True,
         load_sparse_tensor: bool = False,
         early_stopping: bool = True,
-        patience: int = 5,
+        patience: int | None = None,
         datasplitter_kwargs: dict | None = None,
         plan_kwargs: dict | None = None,
         datamodule: L.LightningDataModule | None = None,
@@ -104,6 +121,7 @@ class NodeMaskingTrainingPlan:
         print("Steps per epoch", steps_per_epoch)
         lr_monitor = LearningRateMonitor(logging_interval="epoch")
         self.history_ = MetricsHistory()
+        mask_resample_callback = NodeMaskResampleCallback() if self._cfg.dataset.mask_percentage > 0 else None
         checkpoint_callback = None
         loss_callback = None
         performance_callback = None
@@ -127,6 +145,8 @@ class NodeMaskingTrainingPlan:
             patience_in_steps=steps_per_epoch,
         )
 
+        monitor, mode = self._resolve_monitor()
+
         if early_stopping:
             # TODO: why does the self.history_ stop working when using loss_callback?
             # loss_callback = EarlyStopping(
@@ -136,16 +156,15 @@ class NodeMaskingTrainingPlan:
             #         verbose=False,
             #         mode="min"
             #     )
-            if "classification" in self.prediction_task:
-                performance_callback = EarlyStopping(
-                    monitor="val_loss", min_delta=0.005, patience=patience, verbose=False, mode="min"
-                )
-            elif "regression" in self.prediction_task:
-                performance_callback = EarlyStopping(
-                    monitor="val_loss", min_delta=0.005, patience=patience, verbose=False, mode="min"
-                )
-            else:
+            if not ("classification" in self.prediction_task or "regression" in self.prediction_task):
                 raise Exception("Training must be classification or regression based.")
+            performance_callback = EarlyStopping(
+                monitor=monitor,
+                min_delta=float(self._cfg.optim.min_delta),
+                patience=int(patience if patience is not None else self._cfg.optim.patience),
+                verbose=True,
+                mode=mode,
+            )
 
         if self._cfg.model.save is not None:
             run_name = get_model_filename_prefix(self._cfg, self.local_component, self.global_component)
@@ -153,39 +172,39 @@ class NodeMaskingTrainingPlan:
                 checkpoint_callback = ModelCheckpoint(
                     dirpath=self._cfg.model.save,
                     filename=run_name,
-                    monitor="val_loss",
-                    mode="min",
-                )  # save model if validation accuracy increases
+                    monitor=monitor,
+                    mode=mode,
+                    save_top_k=1,
+                )  # save the best model according to `monitor`
             elif "regression" in self._cfg.dataset.prediction_task:
-                if self._cfg.optim.loss == "MSELoss":
-                    checkpoint_callback = ModelCheckpoint(
-                        dirpath=self._cfg.model.save,
-                        filename=run_name,
-                        monitor="val_loss",
-                        mode="min",
-                    )
-                elif (
-                    self._cfg.optim.loss == "GaussianNLL"
-                    or self._cfg.optim.loss == "SmoothL1"
-                    or self._cfg.optim.loss == "BalancedPearsonCorrelationLoss"
-                    or self._cfg.optim.loss == "SCELoss"
-                    or self._cfg.optim.loss == "SCE_EntropyATT_Loss"
-                ):
-                    checkpoint_callback = ModelCheckpoint(
-                        dirpath=self._cfg.model.save,
-                        filename=run_name,
-                        monitor="val_loss",
-                        mode="min",
-                    )
-                else:
-                    raise Exception(
-                        f"Regression must be run with MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss or SCELoss loss. instead of {self._cfg.optim.loss}"
-                    )
+                # Every arm of the former if/elif chain built the same callback with a hardcoded
+                # monitor="val_loss", so `optim.monitor` was silently ignored for regression while
+                # classification honoured it. That is not cosmetic: train() restores the best
+                # checkpoint before trainer.validate(), so every metric reported for the run --
+                # and therefore whatever a sweep ranks on -- came from the lowest-val_loss epoch,
+                # no matter which metric the run was supposed to be selecting for.
+                #
+                # `auto` still resolves to val_loss/min for regression, so existing configs are
+                # unaffected; only a config that explicitly sets optim.monitor changes behaviour.
+                checkpoint_callback = ModelCheckpoint(
+                    dirpath=self._cfg.model.save,
+                    filename=run_name,
+                    monitor=monitor,
+                    mode=mode,
+                    save_top_k=1,
+                )
 
         # Create list of callbacks and filter out None values
         callbacks = [
             callback
-            for callback in [lr_monitor, performance_callback, loss_callback, self.history_, checkpoint_callback]
+            for callback in [
+                lr_monitor,
+                performance_callback,
+                loss_callback,
+                self.history_,
+                mask_resample_callback,
+                checkpoint_callback,
+            ]
             if callback is not None
         ]
 
@@ -205,7 +224,7 @@ class NodeMaskingTrainingPlan:
             print(f"Trainable parameters: {trainable_params:,}")
 
         trainer = pl.Trainer(
-            min_epochs=1,
+            min_epochs=int(self._cfg.optim.min_epochs),
             max_epochs=int(max_epochs),
             # enable_progress_bar=True,
             callbacks=callbacks,
@@ -217,6 +236,22 @@ class NodeMaskingTrainingPlan:
         )
 
         trainer.fit(training_plan, datamodule)
+
+        # EarlyStopping does not restore best weights and ModelCheckpoint only writes them to
+        # disk. Without this, the validate()/test() calls below -- and the save() further down --
+        # all report the LAST epoch, which for an early-stopped run is `patience` epochs past the
+        # best one.
+        best_ckpt = getattr(checkpoint_callback, "best_model_path", "") if checkpoint_callback else ""
+        if best_ckpt and os.path.exists(best_ckpt):
+            best_score = checkpoint_callback.best_model_score
+            print(f"Restoring best checkpoint ({monitor}={float(best_score):.4f}) from {best_ckpt}")
+            state = torch.load(best_ckpt, map_location="cpu", weights_only=False)["state_dict"]
+            missing, unexpected = training_plan.load_state_dict(state, strict=False)
+            if missing or unexpected:
+                print(f"restore: missing={missing}, unexpected={unexpected}")
+        else:
+            print("WARNING: no best checkpoint found; evaluating FINAL-epoch weights.")
+
         trainer.validate(training_plan, datamodule)
         if self.train_size + self.validation_size < 1:
             trainer.test(training_plan, datamodule)

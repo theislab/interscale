@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import torch
 from anndata import AnnData
 from yacs.config import CfgNode as CN
 
@@ -36,7 +35,8 @@ class CombinedModel(NodeMaskingTrainingPlan, BaseModel):
                 decoder_type=None,  # Container doesn't need its own decoder, only submodules do
                 dropout_decoder=self._cfg.model.decoder.dropout_decoder,
                 decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
-                pct_mask_nodes=self._cfg.dataset.pct_mask_nodes,
+                mask_percentage=self._cfg.dataset.mask_percentage,
+                mask_strategy=self._cfg.dataset.mask_strategy,
             )
         else:
             self.module = CombinedModule(
@@ -47,7 +47,8 @@ class CombinedModel(NodeMaskingTrainingPlan, BaseModel):
                 decoder_type=None,  # Container doesn't need its own decoder, only global module does
                 dropout_decoder=self._cfg.model.decoder.dropout_decoder,
                 decoder_hidden_dims=self._cfg.model.decoder.hidden_dims,
-                pct_mask_nodes=self._cfg.dataset.pct_mask_nodes,
+                mask_percentage=self._cfg.dataset.mask_percentage,
+                mask_strategy=self._cfg.dataset.mask_strategy,
             )
 
         self._model_summary_string = self._model_summary_string + self.module.get_model_summary()
@@ -112,8 +113,9 @@ class CombinedModel(NodeMaskingTrainingPlan, BaseModel):
             ## Local model output
             local_embedding = self.module.local_module.forward(batch.x, batch.edge_index)
             if self._cfg.model.decoder.dual_decoder:
-                mask_idx = torch.arange(local_embedding.size(0), device=local_embedding.device)
-                y_pred_local = self.module.predict_local(local_embedding, mask_idx)
+                # node_idx=None: inference decodes every cell, in the batch's own order. This
+                # used to pass an explicit arange, which was the same identity gather.
+                y_pred_local = self.module.predict_local(local_embedding)
 
             sample_mask_local = local_embeddings_df.index.isin(batch.obs_names.numpy().astype(int).astype(str))
             local_embeddings_df.loc[sample_mask_local] = local_embedding.detach().cpu().numpy()

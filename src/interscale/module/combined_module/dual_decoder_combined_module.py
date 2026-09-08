@@ -4,6 +4,7 @@ import torch
 from yacs.config import CfgNode as CN
 
 from interscale.module.base import BaseModule, GlobalModule, LocalModule
+from interscale.tl.masking import masked_loss
 
 
 class DualDecoderCombinedModule(BaseModule):
@@ -38,7 +39,8 @@ class DualDecoderCombinedModule(BaseModule):
             decoder_type=cfg.model.decoder.type,
             dropout_decoder=cfg.model.decoder.dropout_decoder,
             decoder_hidden_dims=cfg.model.decoder.hidden_dims,
-            pct_mask_nodes=self.pct_mask_nodes,
+            mask_percentage=self.mask_percentage,
+            mask_strategy=self.mask_strategy,
         )
         # Global module with decoder
         self.global_module = GlobalModule.from_config(
@@ -49,7 +51,8 @@ class DualDecoderCombinedModule(BaseModule):
             decoder_type=cfg.model.decoder.type,
             dropout_decoder=cfg.model.decoder.dropout_decoder,
             decoder_hidden_dims=cfg.model.decoder.hidden_dims,
-            pct_mask_nodes=self.pct_mask_nodes,
+            mask_percentage=self.mask_percentage,
+            mask_strategy=self.mask_strategy,
         )
 
         # Store split point for separating concatenated predictions
@@ -58,26 +61,33 @@ class DualDecoderCombinedModule(BaseModule):
         self._n_masked_nodes = None
         self._is_graph_level = False
 
-    def predict_local(self, local_embedding, mask_idx):
-        """Predict with the local decoder on masked nodes.
+    def predict_local(self, local_embedding, node_idx=None):
+        """Predict with the local decoder, optionally reordered/subset to ``node_idx``.
 
         Parameters
         ----------
         local_embedding: torch.Tensor
             Size: [N, E]
-        mask_idx: torch.Tensor
-            Indices of masked nodes. Size: [N_masked_nodes, ]
+        node_idx: torch.Tensor | None
+            Batch-global node indices to gather, in the order wanted. Pass
+            `_process_batch_for_metrics`'s ``padded_node_idx`` to line the local predictions up
+            with the global branch's output. ``None`` returns all nodes in batch order.
 
         Returns
         -------
         y_pred_local: torch.Tensor
-            Size: [N_masked_nodes, C] or [N_masked_nodes, F]
+            Size: [len(node_idx), C] or [len(node_idx), F]
+
+        Notes
+        -----
+        This used to take ``mask_idx`` -- the masked nodes in the *batch's* order -- while the
+        global branch was subset by ``adjusted_mask_idx``, the masked nodes in the *padded* order.
+        The two halves were then concatenated and compared row against row, which is only correct
+        when the padding keeps every cell in its original order. Gathering both branches by
+        ``padded_node_idx`` makes the pairing correct by construction.
         """
-        # Predict on all nodes
         y_pred_all = self.local_module.decoder.forward(local_embedding)
-        # Filter to masked nodes
-        y_pred_local = y_pred_all[mask_idx]
-        return y_pred_local
+        return y_pred_all if node_idx is None else y_pred_all[node_idx]
 
     def predict_global(self, global_embedding, src_padding_mask, prediction_level):
         """Predict with the global decoder.
@@ -125,66 +135,58 @@ class DualDecoderCombinedModule(BaseModule):
     def _common_step(self, batch, prediction_task, prediction_level: Literal["node", "graph"]):
         """Shared step between train, val and test.
 
-        Returns predictions and ground truth for both local and global decoders
-        on masked tokens, which can be combined in the loss function.
+        Returns predictions and ground truth for both local and global decoders over EVERY cell
+        the transformer produced -- not only the masked ones. `entry_mask_combined` marks the
+        entries the loss is restricted to; the metrics use everything.
         """
-        batch_masked, mask_idx = self._common_step_masking(batch)
+        batch_masked, _, _ = self._common_step_masking(batch)
 
         local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask, attn = self.forward(
             batch_masked
         )
 
-        # Predict from local embedding on masked nodes
-        y_pred_local = self.predict_local(local_embedding, mask_idx)
-
-        # Predict from global embedding
+        # Predict from global embedding (one row per cell the padding kept)
         y_pred_global = self.predict_global(global_embedding, src_padding_mask, prediction_level)
 
-        # Get ground truth for masked nodes
         if prediction_task == "classification" and prediction_level == "graph":
-            # For graph-level classification, we need to handle this differently
-            # since we have one prediction per graph
+            # One prediction per graph, so there is no local/global pairing to do.
             y_true = batch.y[batch.ptr[:-1]]
-            # For graph level, we can't easily combine local and global
-            # So we'll use global predictions only for graph level
             y_pred_combined = y_pred_global
             y_true_combined = y_true
-
-            # Store metadata for graph level (only global predictions)
             self._n_masked_nodes = None
             self._is_graph_level = True
+            entry_mask_combined = None
         elif prediction_level == "node":
-            # For node-level predictions, get ground truth for masked nodes
-            y_true, adjusted_mask_idx = self.global_module._process_batch_for_metrics(
-                batch, prediction_task, prediction_level, pad_index_nodes, mask_idx
+            y_true, padded_node_idx, entry_mask = self.global_module._process_batch_for_metrics(
+                batch, prediction_task, prediction_level, pad_index_nodes
             )
-            y_true_masked = y_true[adjusted_mask_idx]
 
-            # Filter global predictions to masked nodes (same indices as y_true)
-            y_pred_global_masked = y_pred_global[adjusted_mask_idx]
+            # Both branches gathered by the SAME index, so row i of each is the same cell.
+            y_pred_local = self.predict_local(local_embedding, padded_node_idx)
 
-            # Store split point: first half is local, second half is global
-            n_masked = len(y_pred_local)
-            self._n_masked_nodes = n_masked
+            if entry_mask is None:
+                # Node-level classification: the masked cells are the supervision targets, so
+                # both halves stay restricted to them. Only reconstruction scores every cell.
+                keep = batch.mask[padded_node_idx].bool()
+                y_pred_local, y_pred_global, y_true = y_pred_local[keep], y_pred_global[keep], y_true[keep]
+
+            assert y_pred_local.shape == y_pred_global.shape, (
+                f"Local and global predictions differ in shape: "
+                f"{tuple(y_pred_local.shape)} vs {tuple(y_pred_global.shape)}"
+            )
+            assert len(y_true) == len(y_pred_local), (
+                f"Ground truth and predictions differ in length: {len(y_true)} vs {len(y_pred_local)}"
+            )
+
+            self._n_masked_nodes = len(y_pred_local)
             self._is_graph_level = False
 
-            # Combine local and global predictions
-            # Both should have the same number of masked nodes
-            assert len(y_pred_local) == len(y_pred_global_masked), (
-                f"Local and global predictions have different lengths: {len(y_pred_local)} vs {len(y_pred_global_masked)}"
-            )
-            assert len(y_true_masked) == len(y_pred_local), (
-                f"Ground truth and local predictions have different lengths: {len(y_true_masked)} vs {len(y_pred_local)}"
-            )
-            assert len(y_true_masked) == len(y_pred_global_masked), (
-                f"Ground truth and global predictions have different lengths: {len(y_true_masked)} vs {len(y_pred_global_masked)}"
-            )
-
-            # Concatenate predictions: [N_masked, C] + [N_masked, C] -> [2*N_masked, C]
-            # This allows the loss function to compute loss on both predictions
-            y_pred_combined = torch.cat([y_pred_local, y_pred_global_masked], dim=0)
-            y_true_combined = torch.cat([y_true_masked, y_true_masked], dim=0)
-
+            # [N, C] + [N, C] -> [2N, C], so the loss can score both decoders.
+            y_pred_combined = torch.cat([y_pred_local, y_pred_global], dim=0)
+            y_true_combined = torch.cat([y_true, y_true], dim=0)
+            # The entry mask is per-cell, and both halves are now the same cells in the same
+            # order, so it is simply stacked twice.
+            entry_mask_combined = None if entry_mask is None else torch.cat([entry_mask, entry_mask], dim=0)
         else:
             raise ValueError(f"Invalid prediction level: {prediction_level}")
 
@@ -192,7 +194,7 @@ class DualDecoderCombinedModule(BaseModule):
         assert not torch.any(torch.isnan(y_pred_combined)), "y_pred contains NaN values"
         assert not torch.any(torch.isnan(y_true_combined)), "y_true contains NaN values"
 
-        return local_embedding, global_embedding, y_pred_combined, y_true_combined, attn
+        return local_embedding, global_embedding, y_pred_combined, y_true_combined, attn, entry_mask_combined
 
     def get_separate_predictions(self, y_pred_combined, y_true_combined):
         """Get separate predictions and ground truth for local and global decoders.
@@ -236,6 +238,7 @@ class DualDecoderCombinedModule(BaseModule):
         loss_type: Literal["GaussianNLL", "MSELoss", "CrossEntropy", "WeightedCE"],
         y_pred_combined: torch.Tensor,
         y_true_combined: torch.Tensor,
+        entry_mask_combined: torch.Tensor | None = None,
     ):
         """Compute separate losses for local and global predictions.
 
@@ -252,6 +255,11 @@ class DualDecoderCombinedModule(BaseModule):
             ``[2*N_masked, C]``; for graph-level: ``[B, C]`` where ``B`` is batch size.
         y_true_combined
             Combined ground truth from ``_common_step``. Same shape as ``y_pred_combined``.
+        entry_mask_combined
+            Optional ``[2*N_masked, F]`` boolean from ``_common_step``. When given, each half's
+            loss is computed over that half's masked entries only -- which is the whole point of
+            gene masking, since the unmasked entries were handed to the model as input and
+            reconstructing them is the identity.
 
         Returns
         -------
@@ -274,14 +282,13 @@ class DualDecoderCombinedModule(BaseModule):
             y_pred_global = y_pred_combined[self._n_masked_nodes :]
             y_true_local = y_true_combined[: self._n_masked_nodes]
             y_true_global = y_true_combined[self._n_masked_nodes :]
-            if loss_type == "GaussianNLL":
-                sd_local = torch.std(y_true_local, dim=1, keepdim=True)
-                sd_global = torch.std(y_true_global, dim=1, keepdim=True)
-                local_loss = loss_fn(y_pred_local, y_true_local, sd_local)
-                global_loss = loss_fn(y_pred_global, y_true_global, sd_global)
+            if entry_mask_combined is None:
+                mask_local = mask_global = None
             else:
-                local_loss = loss_fn(y_pred_local, y_true_local)
-                global_loss = loss_fn(y_pred_global, y_true_global)
+                mask_local = entry_mask_combined[: self._n_masked_nodes]
+                mask_global = entry_mask_combined[self._n_masked_nodes :]
+            local_loss = masked_loss(loss_fn, loss_type, y_pred_local, y_true_local, mask_local)
+            global_loss = masked_loss(loss_fn, loss_type, y_pred_global, y_true_global, mask_global)
             losses["local_loss"] = local_loss
             losses["global_loss"] = global_loss
 

@@ -14,7 +14,6 @@ from scvi.data._constants import (
     _SCVI_UUID_KEY,
 )
 from scvi.data._utils import _assign_adata_uuid, _check_if_view
-from sklearn.utils.class_weight import compute_class_weight
 from yacs.config import CfgNode as CN
 
 from interscale.module.base import GlobalModule, LocalModule
@@ -36,6 +35,11 @@ class _SAVE_KEYS_NT(NamedTuple):
 
 
 SAVE_KEYS = _SAVE_KEYS_NT()
+
+# State entries that may legitimately be absent from an older checkpoint. The PCA front-end's
+# buffers were added after some checkpoints were written; `BaseModel.load` warns and carries on
+# for these, and raises for anything else. See tests/test_global_pca_persistence.py.
+_OPTIONAL_STATE_PREFIXES = ("pca_",)
 
 
 # adjusted from scvi-tools
@@ -126,14 +130,74 @@ class BaseModel(metaclass=BaseModelMeta):
 
         self.class_weights = None
         if self._cfg.optim.loss == "WeightedCE":
-            self.class_weights = torch.tensor(
-                compute_class_weight(
-                    "balanced",
-                    classes=np.unique(self._adata.obs[self._cfg.dataset.prediction_obs]),
-                    y=self._adata.obs[self._cfg.dataset.prediction_obs],
+            self.class_weights = self._compute_train_class_weights()
+
+    def _training_unit_labels(self) -> pd.Series:
+        """Labels of the units the loss is computed over, restricted to the train split.
+
+        For ``prediction_level == "node"`` a unit is a cell. For ``"graph"`` a unit is one PyG
+        graph, i.e. one category of each key in ``cfg.dataset.sample_key`` -- matching how
+        :func:`interscale.tl.prepare_geome_dataset` builds and concatenates graphs.
+
+        Returns
+        -------
+        pd.Series
+            One label per training unit.
+        """
+        obs = self._adata.obs
+        pred_col = self._cfg.dataset.prediction_obs
+        split_col = self._cfg.dataset.split_key
+
+        if split_col is not None and split_col in obs:
+            train_obs = obs.loc[obs[split_col].astype(str) == "train"]
+        else:
+            logger.warning("split_key '%s' not in adata.obs -- class weights use all cells.", split_col)
+            train_obs = obs
+        if len(train_obs) == 0:
+            raise ValueError(f"No observations with {split_col} == 'train'; cannot compute class weights.")
+
+        if self.prediction_level == "node":
+            return train_obs[pred_col].astype(str)
+
+        labels = []
+        for key in self._cfg.dataset.sample_key:
+            grouped = train_obs.groupby(key, observed=True)[pred_col]
+            n_per_graph = grouped.nunique()
+            if (n_per_graph > 1).any():
+                logger.warning(
+                    "%d graphs of '%s' contain more than one '%s'; using the majority label.",
+                    int((n_per_graph > 1).sum()),
+                    key,
+                    pred_col,
                 )
-            )
-            print("WeightedCE with class weights: ", self.class_weights)
+            labels.append(grouped.agg(lambda s: s.value_counts().idxmax()).astype(str))
+        return pd.concat(labels)
+
+    def _compute_train_class_weights(self) -> torch.Tensor:
+        """Compute ``"balanced"`` class weights over the training units.
+
+        Weights are ordered like :attr:`class_labels` (i.e. ``.cat.categories``), which is also
+        the column order of the one-hot ``data.y`` produced by ``geome``, so index *i* of the
+        returned tensor lines up with logit column *i*.
+
+        Returns
+        -------
+        torch.Tensor
+            Float32 tensor of per-class weights.
+        """
+        y = self._training_unit_labels()
+        classes = [str(c) for c in self.class_labels]
+        counts = y.value_counts().reindex(classes).fillna(0.0).to_numpy(dtype=np.float64)
+        if (counts == 0).any():
+            missing = [c for c, n in zip(classes, counts, strict=True) if n == 0]
+            raise ValueError(f"Classes {missing} have no training units; WeightedCE weights undefined.")
+        # Same formula as sklearn's compute_class_weight("balanced").
+        weights = counts.sum() / (len(classes) * counts)
+        print(
+            f"WeightedCE ({self.prediction_level}-level, train split '{self._cfg.dataset.split_key}'): "
+            + ", ".join(f"{c}: n={int(n)} w={w:.4f}" for c, n, w in zip(classes, counts, weights, strict=True))
+        )
+        return torch.as_tensor(weights, dtype=torch.float32)
 
     @classmethod
     def _setup_anndata(
@@ -173,8 +237,8 @@ class BaseModel(metaclass=BaseModelMeta):
         """
         anndata_fields = [fields.LayerField("x", layer=layer_key)]
 
-        for i, sample_key in enumerate(sample_key_list):
-            anndata_fields.append(fields.CategoricalObsField(registry_key=f"sample_key_{i}", attr_key=sample_key))
+        for i, key in enumerate(sample_key_list):
+            anndata_fields.append(fields.CategoricalObsField(registry_key=f"sample_key_{i}", attr_key=key))
 
         if prediction_task == "classification":
             anndata_fields.append(fields.CategoricalObsField(registry_key="prediction_obs", attr_key=prediction_obs))
@@ -195,7 +259,7 @@ class BaseModel(metaclass=BaseModelMeta):
         if _SCVI_UUID_KEY not in adata.uns:
             adata.uns[_SCVI_UUID_KEY] = str(id(adata))
         cls._setup_adata_manager_store[adata.uns[_SCVI_UUID_KEY]] = manager
-        cls.sample_key = sample_key
+        cls.sample_key_list = sample_key_list
 
     # adjusted from scvi-tools
     # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
@@ -399,7 +463,8 @@ class BaseModel(metaclass=BaseModelMeta):
                 n_embed=self.n_embed,
                 decoder_type=self._cfg.model.decoder.type,
                 dropout_decoder=self._cfg.model.decoder.dropout_decoder,
-                pct_mask_nodes=self._cfg.dataset.pct_mask_nodes,
+                mask_percentage=self._cfg.dataset.mask_percentage,
+                mask_strategy=self._cfg.dataset.mask_strategy,
                 n_layers=self._cfg.model.local_component.parameters.num_layers,
                 hidden_dim=self._cfg.model.local_component.parameters.hidden_dim,
                 dropout_local=self._cfg.model.local_component.parameters.dropout_local,
@@ -428,7 +493,8 @@ class BaseModel(metaclass=BaseModelMeta):
                 n_embed=self.n_embed,
                 decoder_type=self._cfg.model.decoder.type,
                 dropout_decoder=self._cfg.model.decoder.dropout_decoder,
-                pct_mask_nodes=self._cfg.dataset.pct_mask_nodes,
+                mask_percentage=self._cfg.dataset.mask_percentage,
+                mask_strategy=self._cfg.dataset.mask_strategy,
                 max_seq_len=self._cfg.model.global_component.parameters.max_seq_len,
                 n_heads=self._cfg.model.global_component.parameters.n_heads,
                 dropout_global=self._cfg.model.global_component.parameters.dropout_global,
@@ -545,6 +611,7 @@ class BaseModel(metaclass=BaseModelMeta):
         postfix: str | None = None,
         wandb_save: bool = False,
         enable_remapping: bool = True,
+        allow_partial_load: bool = False,
     ):
         """Load a saved model.
 
@@ -564,6 +631,10 @@ class BaseModel(metaclass=BaseModelMeta):
             Whether this is a global component model.
         wandb_save
             Whether this was saved via wandb.
+        allow_partial_load
+            If False (default), a checkpoint whose keys do not match the model this cfg builds
+            raises, instead of silently leaving the unmatched tensors randomly initialised. Set
+            True only when a partly initialised model is deliberate.
         enable_remapping
             Whether to enable automatic state dict key remapping.
 
@@ -642,10 +713,33 @@ class BaseModel(metaclass=BaseModelMeta):
         # Load the state dict
         missing_keys, unexpected_keys = model.module.load_state_dict(state_dict, strict=False)
 
-        if missing_keys:
-            print(f"Warning: Missing keys when loading state dict: {missing_keys}")
-        if unexpected_keys:
-            print(f"Warning: Unexpected keys when loading state dict: {unexpected_keys}")
+        # strict=False is load_state_dict's "fill in what you can and say nothing" mode. It is
+        # needed for the legacy carve-out below, but on its own it turns an architecture mismatch
+        # -- a config that does not describe the checkpoint -- into a model whose unmatched
+        # tensors keep their random initialisation. That model runs, produces plausible-looking
+        # embeddings and gene loadings, and is wrong. Printed warnings do not survive a notebook
+        # with hundreds of lines of output, so anything but the documented benign case raises.
+        benign_missing = [k for k in missing_keys if k.rsplit(".", 1)[-1].startswith(_OPTIONAL_STATE_PREFIXES)]
+        hard_missing = [k for k in missing_keys if k not in benign_missing]
+
+        if benign_missing:
+            print(
+                f"Warning: checkpoint predates these buffers, loading without them: {benign_missing}. "
+                f"A PCA front-end will refit on the first batch it sees rather than reusing the "
+                f"basis it was trained with (see tests/test_global_pca_persistence.py)."
+            )
+
+        if (hard_missing or unexpected_keys) and not allow_partial_load:
+            raise RuntimeError(
+                f"Checkpoint does not match the model this cfg builds, so the mismatched tensors "
+                f"would keep their random initialisation and the model would be silently wrong.\n"
+                f"  missing from the checkpoint (left random): {hard_missing}\n"
+                f"  present in the checkpoint but not in the model: {unexpected_keys}\n"
+                f"  checkpoint: {model_save_path}\n"
+                f"Check that dataset/task, n_embed, decoder type and dual_decoder in cfg match the "
+                f"run that wrote it. Pass allow_partial_load=True only if a partly initialised "
+                f"model is genuinely what you want."
+            )
 
         model.is_trained_ = True
 

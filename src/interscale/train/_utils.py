@@ -3,6 +3,19 @@ import pandas as pd
 from lightning.pytorch.callbacks import Callback
 
 
+class NodeMaskResampleCallback(Callback):
+    """Redraws the training node mask at the start of every epoch.
+
+    Without this, `GraphAnnDataModule` only ever samples one fixed set of masked nodes for the
+    whole training run (see `GraphAnnDataModule.resample_train_mask`), so nodes outside that
+    initial sample never receive direct supervision. Validation/test masks are left untouched so
+    monitored metrics (e.g. `val_loss`) stay comparable across epochs.
+    """
+
+    def on_train_epoch_start(self, trainer, pl_module):
+        trainer.datamodule.resample_train_mask()
+
+
 class MetricsHistory(Callback):
     def __init__(self):
         super().__init__()

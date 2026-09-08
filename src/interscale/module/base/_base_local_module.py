@@ -37,12 +37,17 @@ class LocalModule(BaseModule):
         global_embedding: torch.Tensor
             Size: [N, E]
         y_pred: torch.Tensor
-            Size: [B, C] (classification) or [B, F] (regression)
+            Size: [B, C] (classification, masked cells) or [N, F] (regression, ALL cells)
         y_true: torch.Tensor
-            Size: [B, ] (classification) or [B, F] (regression)
+            Size: [B, ] (classification, masked cells) or [N, F] (regression, ALL cells)
+        attn: None
+            This module has no attention; returned for a uniform `_common_step` contract.
+        entry_mask: torch.Tensor | None
+            Size: [N, F] for regression, marking the entries the LOSS is scored on; the metrics
+            use every cell. None for classification.
         """
         # Mask nodes
-        batch_masked, mask_idx = self._common_step_masking(batch)
+        batch_masked, mask_idx, entry_mask = self._common_step_masking(batch)
 
         local_embedding = self.forward(batch_masked.x, batch_masked.edge_index)
         y_pred = self.decoder.forward(local_embedding)
@@ -55,17 +60,26 @@ class LocalModule(BaseModule):
         )
         assert y_pred.isnan().sum() == 0, "y_pred contains NaN values"
 
-        y_pred = y_pred[mask_idx]
-
         if "classification" in prediction_task:
+            # The masked cells ARE the supervision targets here, so both loss and metrics stay
+            # restricted to them. Only reconstruction moved to scoring every cell.
+            y_pred = y_pred[mask_idx]
             y_true = batch.y[mask_idx]  # batch without mask because constant otherwise
             assert y_true.shape == y_pred.shape
-            return local_embedding, None, y_pred, y_true
+            # Class labels are not gene entries, so there is nothing for an entry mask to select.
+            return local_embedding, None, y_pred, y_true, None, None
 
         if "regression" in prediction_task:
-            y_true = batch.x[mask_idx]  # batch without mask because constant otherwise
+            # Every cell is scored. `entry_mask` says which entries the LOSS uses: the gene mask
+            # under gene masking, the per-cell mask broadcast over all genes under cell masking
+            # (masked_loss recognises the whole-row form and subsets rows, so the loss is
+            # unchanged from when this returned masked cells only).
+            y_true = batch.x  # batch without mask because constant otherwise
             assert y_true.shape == y_pred.shape
-            return local_embedding, None, y_pred, y_true
+            if entry_mask is None:
+                entry_mask = batch.mask.bool().unsqueeze(1).expand_as(y_true)
+            assert entry_mask.shape == y_pred.shape
+            return local_embedding, None, y_pred, y_true, None, entry_mask
 
         assert False, "Prediction task not supported"
 
