@@ -86,7 +86,6 @@ def main_sweep(cfg_factory, model_type, sweep_goal, sweep_params=None, arms=None
         The sweep yaml's ``arms:`` block. Each trial's ``arm`` value expands into that arm's
         coupled dotted overrides.
     """
-
     print_memory_usage("Start of main_sweep")
 
     if callable(cfg_factory):

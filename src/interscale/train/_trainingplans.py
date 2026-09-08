@@ -14,6 +14,7 @@ from interscale.tl.masking import masked_loss
 
 from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss
 
+
 class RunningCosineSimilarity(torchmetrics.Metric):
     """Mean per-cell cosine similarity, with state that does not grow with the dataset.
 
@@ -436,9 +437,7 @@ class TrainingPlan(pl.LightningModule):
 
         # Check if module supports separate loss computation (e.g., DualDecoderCombinedModule)
         if hasattr(self.module, "compute_separate_losses"):
-            separate_losses = self.module.compute_separate_losses(
-                self.loss, self.loss_type, y_pred, y_true, entry_mask
-            )
+            separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true, entry_mask)
 
             # Log separate losses (on_step=False, on_epoch=True to match existing pattern)
             if separate_losses.get("local_loss") is not None:
@@ -470,7 +469,9 @@ class TrainingPlan(pl.LightningModule):
                 )
 
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, "train", self.train_metrics, attn=attn, entry_mask=entry_mask)
+            loss = self._compute_and_log_metrics(
+                y_pred, y_true, "train", self.train_metrics, attn=attn, entry_mask=entry_mask
+            )
 
             if separate_losses.get("kl_loss") is not None:
                 kl_loss = separate_losses["kl_loss"]
@@ -495,7 +496,9 @@ class TrainingPlan(pl.LightningModule):
             assert not torch.isnan(loss), "loss is NaN"
             return loss
         else:
-            return self._compute_and_log_metrics(y_pred, y_true, "train", self.train_metrics, attn=attn, entry_mask=entry_mask)
+            return self._compute_and_log_metrics(
+                y_pred, y_true, "train", self.train_metrics, attn=attn, entry_mask=entry_mask
+            )
         # return self._compute_and_log_metrics(y_pred, y_true, 'train', self.train_metrics, attn=attn)
 
     def validation_step(self, batch):
@@ -506,9 +509,7 @@ class TrainingPlan(pl.LightningModule):
 
         # Check if module supports separate loss computation (e.g., DualDecoderCombinedModule)
         if hasattr(self.module, "compute_separate_losses"):
-            separate_losses = self.module.compute_separate_losses(
-                self.loss, self.loss_type, y_pred, y_true, entry_mask
-            )
+            separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true, entry_mask)
 
             # Log separate losses (on_step=False, on_epoch=True to match existing pattern)
             if separate_losses.get("local_loss") is not None:
@@ -531,7 +532,9 @@ class TrainingPlan(pl.LightningModule):
                 )
 
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, "val", self.valid_metrics, attn=attn, entry_mask=entry_mask)
+            loss = self._compute_and_log_metrics(
+                y_pred, y_true, "val", self.valid_metrics, attn=attn, entry_mask=entry_mask
+            )
 
             if separate_losses.get("kl_loss") is not None:
                 kl_loss = separate_losses["kl_loss"]
@@ -556,7 +559,9 @@ class TrainingPlan(pl.LightningModule):
             assert not torch.isnan(loss), "loss is NaN"
             return loss
         else:
-            return self._compute_and_log_metrics(y_pred, y_true, "val", self.valid_metrics, attn=attn, entry_mask=entry_mask)
+            return self._compute_and_log_metrics(
+                y_pred, y_true, "val", self.valid_metrics, attn=attn, entry_mask=entry_mask
+            )
 
         # return self._compute_and_log_metrics(y_pred, y_true, 'val', self.valid_metrics, attn=attn)
 
@@ -567,9 +572,7 @@ class TrainingPlan(pl.LightningModule):
         )
         # Check if module supports separate loss computation (e.g., DualDecoderCombinedModule)
         if hasattr(self.module, "compute_separate_losses"):
-            separate_losses = self.module.compute_separate_losses(
-                self.loss, self.loss_type, y_pred, y_true, entry_mask
-            )
+            separate_losses = self.module.compute_separate_losses(self.loss, self.loss_type, y_pred, y_true, entry_mask)
 
             # Log separate losses (on_step=False, on_epoch=True to match existing pattern, sync_dist=True for test)
             if separate_losses.get("local_loss") is not None:
@@ -601,7 +604,9 @@ class TrainingPlan(pl.LightningModule):
                 )
 
             #  compute and log metrics using combined predictions
-            loss = self._compute_and_log_metrics(y_pred, y_true, "test", self.test_metrics, attn=attn, entry_mask=entry_mask)
+            loss = self._compute_and_log_metrics(
+                y_pred, y_true, "test", self.test_metrics, attn=attn, entry_mask=entry_mask
+            )
 
             if separate_losses.get("kl_loss") is not None:
                 kl_loss = separate_losses["kl_loss"]
@@ -626,7 +631,9 @@ class TrainingPlan(pl.LightningModule):
             assert not torch.isnan(loss), "loss is NaN"
             return loss
         else:
-            return self._compute_and_log_metrics(y_pred, y_true, "test", self.test_metrics, attn=attn, entry_mask=entry_mask)
+            return self._compute_and_log_metrics(
+                y_pred, y_true, "test", self.test_metrics, attn=attn, entry_mask=entry_mask
+            )
         # return self._compute_and_log_metrics(y_pred, y_true, 'test', self.test_metrics,attn=attn)
 
     def configure_optimizers(self):

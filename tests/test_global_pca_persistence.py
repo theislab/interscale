@@ -18,7 +18,7 @@ import pytest
 
 torch = pytest.importorskip("torch")
 
-from interscale.module.global_modules import TransformerNodeEncoderHook  # noqa: E402
+from interscale.module.global_modules import TransformerNodeEncoderHook
 
 N_INPUT, N_EMBED = 120, 16
 

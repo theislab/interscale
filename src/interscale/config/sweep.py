@@ -113,9 +113,7 @@ def build_sweep_config(yaml_config, prediction_task=None, model_type=None, metri
             print(f"dropping sweep parameter not used by {model_type}: {key}")
             del sweep_config["parameters"][key]
         if not sweep_config["parameters"]:
-            raise ValueError(
-                f"every sweep parameter was dropped as unused by {model_type}; nothing left to vary."
-            )
+            raise ValueError(f"every sweep parameter was dropped as unused by {model_type}; nothing left to vary.")
 
     if ARM_PARAM in sweep_config["parameters"] and "arms" not in yaml_config:
         raise ValueError(
@@ -202,8 +200,7 @@ def load_arms(yaml_config, sweep_config=None):
         declared = parameters[ARM_PARAM]
         if not isinstance(declared, dict) or "values" not in declared:
             raise ValueError(
-                f"the '{ARM_PARAM}' parameter must declare `values:` naming the arms to run "
-                f"(got {declared!r})."
+                f"the '{ARM_PARAM}' parameter must declare `values:` naming the arms to run (got {declared!r})."
             )
 
         selected = list(declared["values"])
@@ -303,8 +300,7 @@ def apply_sweep_config(cfg, sweep_goal, sweep_config, model_type=None, sweep_par
         absent = sorted(k for k in keys if k not in sweep_config)
         if absent:
             raise KeyError(
-                f"sweep declares parameters that the trial did not sample, so they cannot be "
-                f"applied: {absent}"
+                f"sweep declares parameters that the trial did not sample, so they cannot be applied: {absent}"
             )
 
     # The arm name is not a config path, so it is removed from `keys` and replaced by the dotted

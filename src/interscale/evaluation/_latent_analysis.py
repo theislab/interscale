@@ -43,11 +43,7 @@ def _infer_which(s_key, prefix=""):
     "seed0_local_std_gene_loadings" resolve to "local".
     """
     body = s_key[len(prefix) :] if prefix and s_key.startswith(prefix) else s_key
-    hits = [
-        c
-        for c in ("local", "global")
-        if body.startswith(f"_{c}") or body.startswith(f"{c}_") or f"_{c}_" in body
-    ]
+    hits = [c for c in ("local", "global") if body.startswith(f"_{c}") or body.startswith(f"{c}_") or f"_{c}_" in body]
     return hits[0] if len(hits) == 1 else None
 
 

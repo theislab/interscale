@@ -138,9 +138,7 @@ def test_all_sweep_parameters_applied_together(sweep_yaml, base_cfg):
 
 def test_sweep_parameters_are_all_known_to_the_config(sweep_yaml, base_cfg):
     """No declared parameter names a config path that does not exist."""
-    _, sweep_params = build_sweep_config(
-        sweep_yaml, prediction_task="classification", model_type="CombinedModel"
-    )
+    _, sweep_params = build_sweep_config(sweep_yaml, prediction_task="classification", model_type="CombinedModel")
     for key in sweep_params:
         # Raises KeyError with the offending key if the path is absent.
         get_dotted(base_cfg, key)
@@ -240,9 +238,7 @@ def test_whole_config_sections_are_not_clobbered(base_cfg):
         "optim.lr": 0.007,  # the actual sampled parameter
     }
 
-    cfg, applied = apply_sweep_config(
-        base_cfg.clone(), "hyperparmeter", wandb_like, sweep_params=["optim.lr"]
-    )
+    cfg, applied = apply_sweep_config(base_cfg.clone(), "hyperparmeter", wandb_like, sweep_params=["optim.lr"])
 
     assert applied == ["optim.lr"]
     assert cfg.optim.lr == 0.007
@@ -285,9 +281,7 @@ def test_robustness_goal_parameters_apply(base_cfg):
         "dataset.spatial_neigbors_kwargs.radius": 77,
         "optim.seed": 7,
     }
-    cfg, applied = apply_sweep_config(
-        base_cfg.clone(), "robustness", trial, sweep_params=sorted(trial)
-    )
+    cfg, applied = apply_sweep_config(base_cfg.clone(), "robustness", trial, sweep_params=sorted(trial))
     assert sorted(applied) == sorted(trial)
     assert cfg.dataset.mask_percentage == 0.42
     assert cfg.dataset.spatial_neigbors_kwargs.radius == 77
@@ -340,9 +334,7 @@ def test_unused_component_prefixes(model_type, expected_prefixes):
 def test_single_component_model_drops_the_other_components_parameters(
     sweep_yaml, model_type, dropped_prefix, kept_prefix
 ):
-    _, sweep_params = build_sweep_config(
-        sweep_yaml, prediction_task="classification", model_type=model_type
-    )
+    _, sweep_params = build_sweep_config(sweep_yaml, prediction_task="classification", model_type=model_type)
     assert not any(k.startswith(dropped_prefix) for k in sweep_params)
     assert any(k.startswith(kept_prefix) for k in sweep_params), (
         f"{model_type} should still sweep its own component's parameters"
@@ -350,9 +342,7 @@ def test_single_component_model_drops_the_other_components_parameters(
 
 
 def test_combined_model_sweeps_both_components(sweep_yaml):
-    _, sweep_params = build_sweep_config(
-        sweep_yaml, prediction_task="classification", model_type="CombinedModel"
-    )
+    _, sweep_params = build_sweep_config(sweep_yaml, prediction_task="classification", model_type="CombinedModel")
     assert any(k.startswith("model.local_component.") for k in sweep_params)
     assert any(k.startswith("model.global_component.") for k in sweep_params)
 
@@ -473,9 +463,7 @@ def test_load_arms_returns_none_without_an_arms_block(sweep_yaml):
 
 def test_every_arm_applies_all_of_its_coupled_keys(arm_yaml, arm_cfg):
     """Each arm's full set of dotted overrides reaches the config, for every arm."""
-    sweep_config, sweep_params = build_sweep_config(
-        arm_yaml, prediction_task="regression", model_type="CombinedModel"
-    )
+    sweep_config, sweep_params = build_sweep_config(arm_yaml, prediction_task="regression", model_type="CombinedModel")
     arms = load_arms(arm_yaml, sweep_config)
 
     for arm_name, overrides in arms.items():
@@ -491,9 +479,7 @@ def test_every_arm_applies_all_of_its_coupled_keys(arm_yaml, arm_cfg):
 
 def test_arm_name_itself_is_never_written_to_the_config(arm_yaml, arm_cfg):
     """`arm` is a selector, not a config path; writing it would need a config key called 'arm'."""
-    sweep_config, sweep_params = build_sweep_config(
-        arm_yaml, prediction_task="regression", model_type="CombinedModel"
-    )
+    sweep_config, sweep_params = build_sweep_config(arm_yaml, prediction_task="regression", model_type="CombinedModel")
     arms = load_arms(arm_yaml, sweep_config)
     trial = make_arm_trial(sweep_config, sweep_params, "w400")
     cfg, applied = apply_sweep_config(
@@ -513,9 +499,7 @@ def test_arms_give_distinct_checkpoint_prefixes(arm_yaml, arm_cfg):
     """
     from interscale.tl.utils import get_model_filename_prefix
 
-    sweep_config, sweep_params = build_sweep_config(
-        arm_yaml, prediction_task="regression", model_type="CombinedModel"
-    )
+    sweep_config, sweep_params = build_sweep_config(arm_yaml, prediction_task="regression", model_type="CombinedModel")
     arms = load_arms(arm_yaml, sweep_config)
 
     prefixes = {}
@@ -564,7 +548,10 @@ def test_max_seq_len_is_never_below_the_arms_largest_window(arm_yaml):
 def test_arm_with_a_missing_key_raises():
     """An arm that omits a key its siblings set would silently keep the base config's value."""
     yaml_config = {
-        "sweep_config": {"metric": {"name": "val_r2", "goal": "maximize"}, "parameters": {ARM_PARAM: {"values": ["a", "b"]}}},
+        "sweep_config": {
+            "metric": {"name": "val_r2", "goal": "maximize"},
+            "parameters": {ARM_PARAM: {"values": ["a", "b"]}},
+        },
         "arms": {
             "a": {"dataset.name": "a", "dataset.batch_size": 8},
             "b": {"dataset.name": "b"},
@@ -576,7 +563,10 @@ def test_arm_with_a_missing_key_raises():
 
 def test_arm_selecting_an_undefined_arm_raises():
     yaml_config = {
-        "sweep_config": {"metric": {"name": "val_r2", "goal": "maximize"}, "parameters": {ARM_PARAM: {"values": ["a", "typo"]}}},
+        "sweep_config": {
+            "metric": {"name": "val_r2", "goal": "maximize"},
+            "parameters": {ARM_PARAM: {"values": ["a", "typo"]}},
+        },
         "arms": {"a": {"dataset.name": "a"}},
     }
     with pytest.raises(ValueError, match="does not define"):
@@ -598,7 +588,10 @@ def test_arm_key_colliding_with_a_sweep_parameter_raises():
 
 def test_arms_block_without_an_arm_parameter_raises():
     yaml_config = {
-        "sweep_config": {"metric": {"name": "val_r2", "goal": "maximize"}, "parameters": {"optim.seed": {"values": [1]}}},
+        "sweep_config": {
+            "metric": {"name": "val_r2", "goal": "maximize"},
+            "parameters": {"optim.seed": {"values": [1]}},
+        },
         "arms": {"a": {"dataset.name": "a"}},
     }
     with pytest.raises(ValueError, match="no 'arm' parameter"):
@@ -619,7 +612,10 @@ def test_arm_parameter_without_an_arms_block_raises():
 
 def test_arm_overrides_must_be_dotted():
     yaml_config = {
-        "sweep_config": {"metric": {"name": "val_r2", "goal": "maximize"}, "parameters": {ARM_PARAM: {"values": ["a"]}}},
+        "sweep_config": {
+            "metric": {"name": "val_r2", "goal": "maximize"},
+            "parameters": {ARM_PARAM: {"values": ["a"]}},
+        },
         "arms": {"a": {"batch_size": 8}},
     }
     with pytest.raises(ValueError, match="non-dotted keys"):
@@ -645,9 +641,7 @@ def test_reserved_arm_parameter_without_arms_passed_to_apply_raises(arm_cfg):
 
 def test_arm_trial_does_not_leak_into_the_base_config(arm_cfg, arm_yaml):
     """wandb.agent reuses one process per agent, so a leaked arm would poison later trials."""
-    sweep_config, sweep_params = build_sweep_config(
-        arm_yaml, prediction_task="regression", model_type="CombinedModel"
-    )
+    sweep_config, sweep_params = build_sweep_config(arm_yaml, prediction_task="regression", model_type="CombinedModel")
     arms = load_arms(arm_yaml, sweep_config)
     before = list(arm_cfg.dataset.sample_key)
 
@@ -729,16 +723,19 @@ def test_arm_sweep_applies_to_its_registered_pair(yaml_name):
         trial = {k: v["values"][0] for k, v in sweep_config["parameters"].items()}
         trial[ARM_PARAM] = arm_name
         cfg, applied = apply_sweep_config(
-            base.clone(), "robustness", trial, model_type="CombinedModel",
-            sweep_params=sweep_params, arms=arms,
+            base.clone(),
+            "robustness",
+            trial,
+            model_type="CombinedModel",
+            sweep_params=sweep_params,
+            arms=arms,
         )
         for key, expected in arms[arm_name].items():
             assert get_dotted(cfg, key) == expected, f"{yaml_name} {arm_name}: {key} not applied"
         # A sample_key that is empty would train on nothing; one that is a bare string would be
         # iterated character by character by prepare_geome_dataset.
         assert isinstance(cfg.dataset.sample_key, list) and cfg.dataset.sample_key, (
-            f"{yaml_name} {arm_name}: dataset.sample_key must be a non-empty list, "
-            f"got {cfg.dataset.sample_key!r}"
+            f"{yaml_name} {arm_name}: dataset.sample_key must be a non-empty list, got {cfg.dataset.sample_key!r}"
         )
 
 
@@ -770,8 +767,12 @@ def test_arm_sweep_gives_every_trial_its_own_checkpoint(yaml_name):
             if seed is not None:
                 trial["optim.seed"] = seed
             cfg, _ = apply_sweep_config(
-                base.clone(), "robustness", trial, model_type="CombinedModel",
-                sweep_params=sweep_params, arms=arms,
+                base.clone(),
+                "robustness",
+                trial,
+                model_type="CombinedModel",
+                sweep_params=sweep_params,
+                arms=arms,
             )
             prefixes[(arm_name, seed)] = get_model_filename_prefix(cfg, True, True)
 

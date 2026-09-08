@@ -1,6 +1,7 @@
+from typing import Literal
+
 import numpy as np
 import squidpy as sq
-from typing import Literal
 
 
 def remove_zero_expression_cells(adata):
@@ -13,6 +14,7 @@ def remove_zero_expression_cells(adata):
 
 
 PIXEL_TO_UM = 0.138  # Resolve MC1 default; override via cfg if instrument differs
+
 
 def get_average_local_and_global_size(
     adata,
@@ -50,10 +52,10 @@ def get_average_local_and_global_size(
     groups = adata.obs.groupby(list(cfg.dataset.sample_key), observed=True)
     coords = adata.obsm["spatial"]
     global_cells = groups.size().mean()
-    global_dist_um = np.mean(
-        [np.linalg.norm(coords[idx].max(axis=0) - coords[idx].min(axis=0))
-         for idx in groups.indices.values()]
-    ) * scale
+    global_dist_um = (
+        np.mean([np.linalg.norm(coords[idx].max(axis=0) - coords[idx].min(axis=0)) for idx in groups.indices.values()])
+        * scale
+    )
 
     return {
         "local_cells": local_cells,
@@ -61,4 +63,3 @@ def get_average_local_and_global_size(
         "global_cells": global_cells,
         "global_dist_um": global_dist_um,
     }
-    
