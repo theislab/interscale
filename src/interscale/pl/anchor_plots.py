@@ -310,10 +310,10 @@ def zone_map(
 ):
     """``anchor core`` / ``near`` / ``far`` bands, one panel per sample.
 
-    Zones are drawn in :data:`interscale.tl.anchors.ZONE_ORDER`, so ``core`` ends up on top
+    Zones are drawn in ``interscale.tl.anchors.ZONE_ORDER``, so ``core`` ends up on top
     of ``far`` and the legend order is the distance order regardless of how many cells each
     band holds. Cells with an undefined zone -- a sample where the dimension found no focus --
-    are drawn in :data:`NA_COLOR`.
+    are drawn in ``NA_COLOR``.
 
     Returns
     -------

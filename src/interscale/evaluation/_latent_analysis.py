@@ -474,12 +474,12 @@ def calculate_dim_importance(
     ----------
     adata : AnnData
         Annotated data matrix.
-    which : {"global", "local"}, optional
-        Which component to score. Derives `s_key` and `z_key`, so it is normally the
-        only argument needed. Defaults to "global" when `s_key` is not given; when
-        `s_key` is given instead, the component is inferred from it. Passing a `which`
-        that contradicts `s_key` is an error.
-    prefix : str, default ""
+    which : str, optional
+        Which component to score, "global" or "local". Derives `s_key` and `z_key`, so it
+        is normally the only argument needed. Defaults to "global" when `s_key` is not
+        given; when `s_key` is given instead, the component is inferred from it. Passing a
+        `which` that contradicts `s_key` is an error.
+    prefix : str
         Prefix of the stored keys, following the f"{prefix}_{which}_..." convention used
         when the model output was saved. The default "" gives the plain "_global_emb" /
         "_local_emb" keys; pass e.g. prefix="seed0" to score a run whose embeddings were

@@ -235,7 +235,7 @@ def main_sweep(cfg_factory, model_type, sweep_goal, sweep_params=None, arms=None
     trial_error = None
     try:
         model.train(max_epochs=cfg.optim.n_epochs, datamodule=dm, early_stopping=cfg.optim.early_stopping)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a trial must not leak its GPU memory whatever it died of
         # format_exc() renders the stack to a STRING, so the full traceback survives in the log
         # while no frame (and so no tensor) stays referenced. Keeping only str(exc) made the
         # first CosMx OOM undiagnosable: the allocation turned out to be in the metric

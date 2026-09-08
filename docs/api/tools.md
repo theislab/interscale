@@ -46,6 +46,21 @@ Downstream InterScale's output can be used for gene, cell and tissue level analy
     calculate_gene_ranks
 ```
 
+## Latent dimensions
+
+Which dimensions of a component's embedding carry the signal, and so which are worth
+following up with the anchor tools below.
+
+```{eval-rst}
+.. currentmodule:: interscale.evaluation
+
+.. autosummary::
+    :nosignatures:
+    :toctree: generated
+
+    calculate_dim_importance
+```
+
 ## Anchors and distance zones
 
 Where a latent dimension anchors on a slide, and how expression behaves at range from there.
@@ -61,6 +76,7 @@ have come from it.
     :toctree: generated
 
     local_reach_um
+    get_average_local_and_global_size
     find_anchor_cells
     anchor_signed_distance
     anchor_zones
