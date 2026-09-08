@@ -67,10 +67,11 @@ class CombinedModule(BaseModule):
     def _common_step(self, batch, prediction_task, prediction_level: Literal["node", "graph"]):
         """Shared step between train, val and test.
 
-        The trailing `entry_mask` is `None` under cell masking and `[N_masked, F]` under gene
-        masking, where it marks the entries the loss must be restricted to.
+        y_pred/y_true cover every cell the transformer produced. The trailing `entry_mask`
+        `[N, F]` marks the entries the LOSS is restricted to -- the gene mask under gene masking,
+        the per-cell mask broadcast over all genes under cell masking.
         """
-        batch_masked, mask_idx, _ = self._common_step_masking(batch)
+        batch_masked, _, _ = self._common_step_masking(batch)
 
         local_embedding, global_embedding, src_padding_mask, pad_index_nodes, attention_mask, attn_matrix = (
             self.forward(batch_masked)
@@ -81,13 +82,12 @@ class CombinedModule(BaseModule):
             y_true = batch.y[batch.ptr[:-1]]
             entry_mask = None
         else:
-            y_true, adjusted_mask_idx, entry_mask = self.global_module._process_batch_for_metrics(
-                batch, prediction_task, prediction_level, pad_index_nodes, mask_idx
+            y_true, padded_node_idx, entry_mask = self.global_module._process_batch_for_metrics(
+                batch, prediction_task, prediction_level, pad_index_nodes
             )
-            y_pred = y_pred[adjusted_mask_idx]
-            y_true = y_true[adjusted_mask_idx]
-            if entry_mask is not None:
-                entry_mask = entry_mask[adjusted_mask_idx]
+            if entry_mask is None:  # node-level classification -- see GlobalModule._common_step
+                keep = batch.mask[padded_node_idx].bool()
+                y_pred, y_true = y_pred[keep], y_true[keep]
 
         assert len(y_pred) == len(y_true), "y_pred and y_true are not consistent"
         assert not torch.any(torch.isnan(y_pred)), "y_pred contains NaN values"

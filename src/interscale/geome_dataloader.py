@@ -149,10 +149,10 @@ class GraphAnnDataModule(pl.LightningDataModule):
         Under `mask_strategy="gene"` a second attribute `data.gene_mask` `[N, G]` is written,
         with each (cell, gene) entry drawn independently at `mask_percentage`. `data.mask` is then
         the row-wise OR of it -- i.e. "this cell is a supervision target" -- which is what the
-        rest of the pipeline (padding, `_process_batch_for_metrics`) keys on. 
+        rest of the pipeline (padding, `_process_batch_for_metrics`) keys on.
 
         `gene_mask` is a node-level attribute of shape `[num_nodes, ...]`, so PyG collates it by
-        concatenating along dim 0 exactly like `x` -- no custom `__cat_dim__` needed. 
+        concatenating along dim 0 exactly like `x` -- no custom `__cat_dim__` needed.
         """
         if self.mask_strategy == "gene":
             gene_mask = sample_gene_mask(data.num_nodes, data.x.shape[1], self.mask_percentage)

@@ -36,6 +36,11 @@ class _SAVE_KEYS_NT(NamedTuple):
 
 SAVE_KEYS = _SAVE_KEYS_NT()
 
+# State entries that may legitimately be absent from an older checkpoint. The PCA front-end's
+# buffers were added after some checkpoints were written; `BaseModel.load` warns and carries on
+# for these, and raises for anything else. See tests/test_global_pca_persistence.py.
+_OPTIONAL_STATE_PREFIXES = ("pca_",)
+
 
 # adjusted from scvi-tools
 # https://github.com/scverse/scvi-tools/blob/main/src/scvi/model/base/_base_model.py
@@ -606,6 +611,7 @@ class BaseModel(metaclass=BaseModelMeta):
         postfix: str | None = None,
         wandb_save: bool = False,
         enable_remapping: bool = True,
+        allow_partial_load: bool = False,
     ):
         """Load a saved model.
 
@@ -625,6 +631,10 @@ class BaseModel(metaclass=BaseModelMeta):
             Whether this is a global component model.
         wandb_save
             Whether this was saved via wandb.
+        allow_partial_load
+            If False (default), a checkpoint whose keys do not match the model this cfg builds
+            raises, instead of silently leaving the unmatched tensors randomly initialised. Set
+            True only when a partly initialised model is deliberate.
         enable_remapping
             Whether to enable automatic state dict key remapping.
 
@@ -703,10 +713,33 @@ class BaseModel(metaclass=BaseModelMeta):
         # Load the state dict
         missing_keys, unexpected_keys = model.module.load_state_dict(state_dict, strict=False)
 
-        if missing_keys:
-            print(f"Warning: Missing keys when loading state dict: {missing_keys}")
-        if unexpected_keys:
-            print(f"Warning: Unexpected keys when loading state dict: {unexpected_keys}")
+        # strict=False is load_state_dict's "fill in what you can and say nothing" mode. It is
+        # needed for the legacy carve-out below, but on its own it turns an architecture mismatch
+        # -- a config that does not describe the checkpoint -- into a model whose unmatched
+        # tensors keep their random initialisation. That model runs, produces plausible-looking
+        # embeddings and gene loadings, and is wrong. Printed warnings do not survive a notebook
+        # with hundreds of lines of output, so anything but the documented benign case raises.
+        benign_missing = [k for k in missing_keys if k.rsplit(".", 1)[-1].startswith(_OPTIONAL_STATE_PREFIXES)]
+        hard_missing = [k for k in missing_keys if k not in benign_missing]
+
+        if benign_missing:
+            print(
+                f"Warning: checkpoint predates these buffers, loading without them: {benign_missing}. "
+                f"A PCA front-end will refit on the first batch it sees rather than reusing the "
+                f"basis it was trained with (see tests/test_global_pca_persistence.py)."
+            )
+
+        if (hard_missing or unexpected_keys) and not allow_partial_load:
+            raise RuntimeError(
+                f"Checkpoint does not match the model this cfg builds, so the mismatched tensors "
+                f"would keep their random initialisation and the model would be silently wrong.\n"
+                f"  missing from the checkpoint (left random): {hard_missing}\n"
+                f"  present in the checkpoint but not in the model: {unexpected_keys}\n"
+                f"  checkpoint: {model_save_path}\n"
+                f"Check that dataset/task, n_embed, decoder type and dual_decoder in cfg match the "
+                f"run that wrote it. Pass allow_partial_load=True only if a partly initialised "
+                f"model is genuinely what you want."
+            )
 
         model.is_trained_ = True
 

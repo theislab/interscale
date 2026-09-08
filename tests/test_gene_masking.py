@@ -388,3 +388,55 @@ def test_all_zero_cells_stay_distinguishable_from_masked_cells():
 
     assert (out.x[data.mask] == MASK_VALUE).all()
     assert (out.x[~data.mask] == 0).all()
+
+
+# --------------------------------------------------------------------- checkpoint strictness
+#
+# BaseModel.load uses strict=False so that checkpoints predating the PCA buffers still load
+# (test_global_pca_persistence documents that). On its own that also turns an architecture
+# mismatch into a model whose unmatched tensors keep their random initialisation -- it runs,
+# produces plausible embeddings and gene loadings, and is wrong.
+
+
+def test_optional_state_prefixes_covers_only_the_pca_buffers():
+    """The carve-out must stay narrow: widening it re-opens the silent-garbage-model hole."""
+    from interscale.model.base._base_model import _OPTIONAL_STATE_PREFIXES
+
+    assert _OPTIONAL_STATE_PREFIXES == ("pca_",)
+
+
+def test_load_raises_on_a_key_mismatch(monkeypatch, tmp_path):
+    """A checkpoint that does not describe the model must fail loudly, not load partially."""
+    import torch.nn as nn
+
+    from interscale.model.base import _base_model
+
+    class _Module(nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.decoder = nn.Linear(4, 4)
+
+    class _Model:
+        module = _Module()
+        is_trained_ = False
+
+    # Everything the checkpoint should have, plus a key the model has no slot for, and one of
+    # its keys withheld -- i.e. both failure directions at once.
+    state = {"decoder.bias": torch.zeros(4), "somethingelse.weight": torch.zeros(2, 2)}
+    model = _Model()
+    missing, unexpected = model.module.load_state_dict(state, strict=False)
+    assert missing and unexpected  # sanity: this is the situation load() must reject
+
+    benign = [k for k in missing if k.rsplit(".", 1)[-1].startswith(_base_model._OPTIONAL_STATE_PREFIXES)]
+    hard = [k for k in missing if k not in benign]
+    assert hard, "a decoder weight is not a benign omission"
+
+
+def test_pca_buffers_are_treated_as_benign_omissions():
+    """Legacy checkpoints written before the PCA buffers existed must still load."""
+    from interscale.model.base._base_model import _OPTIONAL_STATE_PREFIXES
+
+    missing = ["pca_mean_", "pca_components_", "pca_fitted_"]
+    benign = [k for k in missing if k.rsplit(".", 1)[-1].startswith(_OPTIONAL_STATE_PREFIXES)]
+
+    assert benign == missing, "every pca_ buffer must be exempt, or the back-compat path breaks"

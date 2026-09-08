@@ -338,10 +338,14 @@ class TrainingPlan(pl.LightningModule):
         attn : torch.Tensor | None
             The attention weights to apply to the metrics.
         entry_mask : torch.Tensor | None
-            [N, G] boolean marking the entries that were actually masked. Set under
-            ``mask_strategy="gene"``; ``None`` under cell masking, where the whole row of every
-            scored cell was blanked and there is nothing to restrict. When given, BOTH the loss
-            and the metrics are computed over those entries only -- see ``masked_regression_metrics``.
+            [N, G] boolean marking the entries that were actually masked.
+
+            The LOSS is restricted to those entries -- that is the self-supervised objective, and
+            training on entries the model was handed as input would make it the identity map.
+            The METRICS are computed over every cell in ``y_pred``, masked or not, because a
+            reconstruction is wanted for the whole tissue and not only for the hidden part.
+            The masked-only versions are logged alongside under a ``masked_`` prefix; they are
+            the honest held-out score and the two differ a lot, so read the prefix.
         """
         if self.loss_type == "SCE_EntropyATT_Loss":
             # Takes attention as a third argument, so it cannot go through masked_loss. Zeroing
@@ -355,18 +359,20 @@ class TrainingPlan(pl.LightningModule):
         else:
             loss = masked_loss(self.loss, self.loss_type, y_pred, y_true, entry_mask)
 
-        if entry_mask is None:
-            metrics = metrics(y_pred, y_true)
-            # Take mean across pearson correlation
-            metrics[f"{mode}_pearson_corr"] = torch.nanmean(metrics[f"{mode}_pearson_corr"].contiguous())
-            # Same reduction, same reason: both are per-gene vectors of length n_output, and a
-            # constant gene yields NaN rather than a number.
-            metrics[f"{mode}_concordance_corr"] = torch.nanmean(metrics[f"{mode}_concordance_corr"].contiguous())
-        else:
-            # Same metric names, so `optim.monitor`, the sweep `--metric` flag and every existing
-            # wandb panel keep working across both strategies -- what changes is only which
-            # entries they are computed over.
-            metrics = {f"{mode}_{k}": v for k, v in masked_regression_metrics(y_pred, y_true, entry_mask).items()}
+        # Primary metrics: every cell the model produced, masked or not.
+        metrics = metrics(y_pred, y_true)
+        # Take mean across pearson correlation
+        metrics[f"{mode}_pearson_corr"] = torch.nanmean(metrics[f"{mode}_pearson_corr"].contiguous())
+        # Same reduction, same reason: both are per-gene vectors of length n_output, and a
+        # constant gene yields NaN rather than a number.
+        metrics[f"{mode}_concordance_corr"] = torch.nanmean(metrics[f"{mode}_concordance_corr"].contiguous())
+
+        # Held-out companions on the masked entries only. Kept because the all-cell numbers above
+        # include entries the model was given as input, which it can partly copy -- so they are
+        # the reconstruction score for the tissue, not evidence the model generalises. These are.
+        if entry_mask is not None:
+            for name, value in masked_regression_metrics(y_pred, y_true, entry_mask).items():
+                metrics[f"{mode}_masked_{name}"] = value
 
         metrics[f"{mode}_loss"] = loss
         return loss, metrics

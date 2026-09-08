@@ -204,6 +204,13 @@ def masked_row_std(y: torch.Tensor, entry_mask: torch.Tensor, eps: float = 1e-8)
     return var.sqrt().clamp(min=eps)
 
 
+def _plain_loss(loss_fn, loss_type: str, y_pred: torch.Tensor, y_true: torch.Tensor):
+    """``loss_fn`` over everything it is given, with GaussianNLL's third argument supplied."""
+    if loss_type == "GaussianNLL":
+        return loss_fn(y_pred, y_true, torch.std(y_true, dim=1, keepdim=True))
+    return loss_fn(y_pred, y_true)
+
+
 def masked_loss(loss_fn, loss_type: str, y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask=None):
     """Evaluate a reconstruction loss on the masked entries only.
 
@@ -222,7 +229,8 @@ def masked_loss(loss_fn, loss_type: str, y_pred: torch.Tensor, y_true: torch.Ten
     y_pred, y_true
         ``[N, G]`` predictions and targets for the scored rows.
     entry_mask
-        ``[N, G]`` boolean, or ``None``.
+        ``[N, G]`` boolean, or ``None``. Under cell masking this is the per-cell mask broadcast
+        over all genes, so it is all-True or all-False per row and the row branch below fires.
 
     Returns
     -------
@@ -230,9 +238,16 @@ def masked_loss(loss_fn, loss_type: str, y_pred: torch.Tensor, y_true: torch.Ten
         Scalar loss.
     """
     if entry_mask is None:
-        if loss_type == "GaussianNLL":
-            return loss_fn(y_pred, y_true, torch.std(y_true, dim=1, keepdim=True))
-        return loss_fn(y_pred, y_true)
+        return _plain_loss(loss_fn, loss_type, y_pred, y_true)
+
+    # Whole-row mask, i.e. cell masking expressed at entry level: every row is either entirely
+    # in or entirely out. Subset the ROWS rather than the entries, which keeps each row intact --
+    # a row-normalising criterion (SCE's cosine, Pearson) is only meaningful on a whole row, and
+    # zeroing the excluded rows instead would feed it rows of zeros that dilute the mean.
+    # This branch reproduces the pre-all-cells behaviour of cell masking exactly.
+    rows_in = entry_mask.all(dim=1)
+    if bool((rows_in | (~entry_mask).all(dim=1)).all()):
+        return _plain_loss(loss_fn, loss_type, y_pred[rows_in], y_true[rows_in])
 
     if loss_type in _ROW_STRUCTURED_LOSSES:
         m = entry_mask.to(y_pred.dtype)

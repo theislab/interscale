@@ -1,4 +1,13 @@
 from ._preprocessing import get_average_local_and_global_size, remove_zero_expression_cells
+from .anchors import (
+    ZONE_ORDER,
+    anchor_enrichment,
+    anchor_signed_distance,
+    anchor_zones,
+    find_anchor_cells,
+    local_reach_um,
+    profile_by_distance,
+)
 from .geome_utils import prepare_a2d_dataset, prepare_geome_dataset
 from .masking import (
     MASK_STRATEGIES,
@@ -31,4 +40,11 @@ __all__ = [
     "attn_mask_diagonal",
     "remove_zero_expression_cells",
     "get_average_local_and_global_size",
+    "find_anchor_cells",
+    "anchor_signed_distance",
+    "anchor_zones",
+    "profile_by_distance",
+    "anchor_enrichment",
+    "local_reach_um",
+    "ZONE_ORDER",
 ]
