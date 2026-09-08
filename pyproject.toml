@@ -30,7 +30,11 @@ dependencies = [
   "lightning>=2",
   "numpy>=1.19",
   "pandas",
-  "scanpy",
+  # Upper bound is squidpy's, not ours: squidpy/_compat.py imports the private
+  # scanpy.plotting._tools, which the 1.13 plotting rewrite removed, so `import squidpy`
+  # (and through it `import interscale`) fails on scanpy >= 1.13.0a2. Lift this once
+  # squidpy releases a version that no longer reaches into that module.
+  "scanpy<1.13",
   "scikit-learn",
   "scipy>=1.7",
   "scvi-tools>=0.19",
