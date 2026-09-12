@@ -248,3 +248,116 @@ def test_mask_off_leaves_everything_but_the_diagonal_open():
     _, _, _, attn_mask = module.common_step_local_to_global(batch, emb, eval_step=True)
 
     assert torch.equal(attn_mask[0, :n, :n], torch.eye(n, dtype=torch.bool))
+
+
+def random_geometric_graph(n, radius, seed=0):
+    """Irregular degrees, unlike the path graph: closer to a real spatial neighbour graph."""
+    rng = np.random.default_rng(seed)
+    pos = rng.uniform(0, 1, size=(n, 2))
+    src, dst = [], []
+    for i in range(n):
+        for j in range(n):
+            if i != j and np.linalg.norm(pos[i] - pos[j]) <= radius:
+                src.append(i)
+                dst.append(j)
+    return torch.tensor([src, dst], dtype=torch.long)
+
+
+@pytest.mark.parametrize("n_layers", [1, 2, 3])
+def test_mask_covers_exactly_the_gcn_receptive_field(n_layers):
+    """The mask must block every cell that actually reached the local embedding, and no more.
+
+    Rather than asserting the hop arithmetic a second time, this measures the GCN's real
+    receptive field by autograd: cell j influenced cell i's local embedding exactly when
+    d h_local[i] / d x[j] is non-zero. That catches anything the hop count would miss -- an
+    off-by-one in the layer stack, self-loops, the input_proj residual.
+
+    The probe is a random projection of h[i], not h[i].sum(): the GCN ends in a LayerNorm with
+    elementwise_affine=False, so every row sums to exactly zero and the gradient of the sum is
+    identically zero regardless of the graph.
+    """
+    from interscale.module.local_modules.GCN import GCN
+
+    n, n_features, n_embed = 12, 6, 4
+    edge_index = random_geometric_graph(n, radius=0.35)
+
+    torch.manual_seed(0)
+    gcn = GCN(
+        n_layers=n_layers,
+        hidden_dim=8,
+        dropout_local=0.0,
+        n_input=n_features,
+        n_output=n_features,
+        n_embed=n_embed,
+        decoder_type=None,
+        dropout_decoder=0.0,
+        mask_percentage=0.1,
+        mask_strategy="node",
+    ).eval()
+    probe = torch.randn(n_embed)
+
+    influenced = torch.zeros(n, n, dtype=torch.bool)
+    for i in range(n):
+        x = torch.randn(n, n_features, requires_grad=True)
+        (gcn(x, edge_index)[i] * probe).sum().backward()
+        influenced[i] = x.grad.abs().sum(1) > 1e-10
+
+    mask = create_transformer_attention_mask_from_edges(
+        edge_index, n, torch.zeros(n, dtype=torch.long), [list(range(n))], num_heads=1, n_hops=n_layers
+    )
+    blocked = mask[0, :n, :n]
+
+    leaked = influenced & ~blocked
+    assert not bool(leaked.any()), (
+        f"{int(leaked.sum())} pairs reached the local embedding but are left open to attention"
+    )
+    assert torch.equal(influenced, blocked), "mask and GCN receptive field disagree"
+
+
+def test_paths_through_dropped_nodes_are_still_blocked():
+    """Two kept cells that are only multi-hop neighbours *through* a cell pad_batch dropped were
+    still mixed by the GCN, which ran on the whole graph before any token was dropped. The reach
+    has to be closed on the full graph and only then restricted to the kept nodes."""
+    n = 5
+    kept = [0, 1, 3, 4]  # node 2 dropped; 1 and 3 are 2 hops apart only via node 2
+    mask = create_transformer_attention_mask_from_edges(
+        path_graph(n), n, torch.zeros(n, dtype=torch.long), [kept], num_heads=1, n_hops=2
+    )
+
+    pos_of = {node: t for t, node in enumerate(kept)}
+    assert bool(mask[0, pos_of[1], pos_of[3]]), "2-hop pair via a dropped node left open"
+    assert bool(mask[0, pos_of[3], pos_of[1]])
+    assert not bool(mask[0, pos_of[0], pos_of[4]]), "0 and 4 are 4 hops apart and must stay open"
+
+
+def test_default_hops_follow_the_local_component_depth():
+    """long_range_mask_hops = 0 means "ask the local component": the mask is only equivalent to
+    the GNN's field if it uses the same depth."""
+    from types import SimpleNamespace
+
+    from interscale.config import get_cfg_defaults
+    from interscale.config.global_component_config import get_global_component_cfg
+    from interscale.config.local_component_config import get_local_component_cfg
+    from interscale.model.base._base_model import BaseModel
+
+    cfg = get_cfg_defaults()
+    cfg.model.local_component.name = "GCN"
+    cfg.model.global_component.name = "self-attn-transformer"
+    cfg = get_local_component_cfg(cfg, "GCN")
+    cfg = get_global_component_cfg(cfg, "self-attn-transformer")
+
+    assert cfg.model.global_component.parameters.long_range_mask_hops == 0
+    resolved = BaseModel._resolve_local_mask_hops(SimpleNamespace(_cfg=cfg))
+    assert resolved == cfg.model.local_component.parameters.num_layers == 2
+
+    cfg.model.local_component.parameters.num_layers = 4
+    assert BaseModel._resolve_local_mask_hops(SimpleNamespace(_cfg=cfg)) == 4
+
+    cfg.model.global_component.parameters.long_range_mask_hops = 1
+    assert BaseModel._resolve_local_mask_hops(SimpleNamespace(_cfg=cfg)) == 1, "explicit setting must win"
+
+    # A transformer-only model has no local component to ask.
+    bare = get_cfg_defaults()
+    bare.model.global_component.name = "self-attn-transformer"
+    bare = get_global_component_cfg(bare, "self-attn-transformer")
+    assert BaseModel._resolve_local_mask_hops(SimpleNamespace(_cfg=bare)) == 1
