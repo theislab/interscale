@@ -302,6 +302,15 @@ def test_mask_covers_exactly_the_gcn_receptive_field(n_layers):
         (gcn(x, edge_index)[i] * probe).sum().backward()
         influenced[i] = x.grad.abs().sum(1) > 1e-10
 
+    # Check the instrument before trusting its reading. A cell always influences its own
+    # embedding -- through input_proj if through nothing else -- so an empty diagonal means the
+    # gradient is dead and every comparison below is vacuous rather than informative. This is
+    # exactly what a probe of h[i].sum() produces, and without this guard it surfaces as
+    # "mask and receptive field disagree", pointing at the mask instead of at the measurement.
+    assert bool(influenced.diagonal().all()), (
+        "probe registered no self-influence: the gradient is dead, so this test measures nothing"
+    )
+
     mask = create_transformer_attention_mask_from_edges(
         edge_index, n, torch.zeros(n, dtype=torch.long), [list(range(n))], num_heads=1, n_hops=n_layers
     )
