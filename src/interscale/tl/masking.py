@@ -263,82 +263,149 @@ def masked_loss(loss_fn, loss_type: str, y_pred: torch.Tensor, y_true: torch.Ten
     return loss_fn(y_pred[entry_mask], y_true[entry_mask])
 
 
+def _local_reach(edge_index: torch.Tensor, num_nodes: int, n_hops: int) -> torch.Tensor:
+    """Boolean ``[num_nodes, num_nodes]`` matrix: which nodes the GNN can already see from each node.
+
+    ``reach[i, j]`` is True when ``j`` lies within ``n_hops`` of ``i``, the diagonal included --
+    a cell is part of its own receptive field. ``n_hops`` should be the number of message-passing
+    layers of the local component, since that is exactly its receptive field.
+
+    The multi-hop closure is done with sparse matmuls, so the cost tracks the number of edges
+    rather than ``num_nodes ** 2``; only the final densification is quadratic, and that is
+    unavoidable because the attention mask itself is dense.
+    """
+    device = edge_index.device
+
+    if n_hops <= 1:
+        # No closure to compute, so skip the sparse round trip: scattering straight into the
+        # boolean matrix avoids materialising an n x n float one just to threshold it.
+        dense = torch.zeros((num_nodes, num_nodes), dtype=torch.bool, device=device)
+        dense[edge_index[0], edge_index[1]] = True
+    else:
+        values = torch.ones(edge_index.shape[1], device=device)
+        adj = torch.sparse_coo_tensor(edge_index, values, (num_nodes, num_nodes)).coalesce()
+
+        reach, frontier = adj, adj
+        for _ in range(n_hops - 1):
+            frontier = torch.sparse.mm(frontier, adj).coalesce()
+            reach = (reach + frontier).coalesce()
+        dense = reach.to_dense() > 0
+    # Spatial neighbour graphs are built symmetric, but a directed edge_index would otherwise
+    # leave the mask asymmetric and block only one direction of a pair the GNN mixed both ways.
+    # `dense |= dense.T` aliases its own memory, so this is an out-of-place or.
+    dense = dense | dense.transpose(0, 1)
+    dense.fill_diagonal_(True)
+    return dense
+
+
 def create_transformer_attention_mask_from_edges(
-    edge_index: torch.Tensor, num_nodes: int, batch: torch.Tensor, index_nodes: list, num_heads: int
+    edge_index: torch.Tensor,
+    num_nodes: int,
+    batch: torch.Tensor,
+    index_nodes: list,
+    num_heads: int,
+    *,
+    n_hops: int = 1,
+    device: torch.device | None = None,
 ) -> torch.Tensor:
-    """
-    Creates an attention mask that is inverse to the edge indices. Unmasked = 0 and masked = -inf
-    If two nodes are connected in the adjacency matrix (edge_index = 1) then we have no attention (0) and vice versa.
+    """Block the transformer from attending inside the local component's receptive field.
 
-    Args:
-        edge_index (torch.Tensor): Edge index tensor of shape [2, num_edges]
-        num_nodes (int): Number of nodes in the graph
-        batch (torch.Tensor): Batch tensor of shape [num_nodes]
-        index_nodes (list): List of indices of nodes to keep [B, S] (range: 0, num_nodes)
-        num_heads (int): Number of attention heads
-    Returns:
-        torch.Tensor: Attention mask of shape [num_batch*num_heads, max_seq_len, max_seq_len] with 1s for no attention (True -> mask attention) and 0s for attention (False -> no mask)
-    """
-    INVALID_MASK_VALUE = -float("inf")
+    This is the ``M = 1 - A`` mask of the paper, with ``A`` taken as the ``n_hops`` closure of the
+    spatial neighbour graph rather than just its direct edges: the point is to stop the two
+    components from re-deriving the same signal, and a 2-layer GCN has already mixed the 2-hop
+    neighbourhood. The diagonal is blocked with it -- a cell's own state is what the local
+    embedding is.
 
-    num_batch = int(batch[-1].item() + 1)
+    **Why this cannot produce NaN.** A softmax row that is entirely ``-inf`` is NaN, which is the
+    failure this mask invites: a cell in a dense region can easily have every other cell of its
+    window inside its own neighbourhood. Two properties rule it out here.
+
+    * The CLS token is never blocked, as a query or as a key. Every row therefore keeps at least
+      one attendable key, whatever the graph looks like. It is also never a padded key, so the
+      merge with ``src_key_padding_mask`` cannot take that guarantee away.
+    * The mask is boolean and is built by indexing, never by arithmetic. Forming it as
+      ``(1 - A) * -inf`` -- the obvious reading of "inverse adjacency" -- puts ``0 * -inf`` on
+      every connected pair, and that is NaN before the softmax ever runs.
+
+    Padding positions are left unblocked for the same reason: their rows are meaningless but must
+    still normalise, and ``src_key_padding_mask`` is what actually removes them as keys.
+
+    Parameters
+    ----------
+    edge_index
+        ``[2, num_edges]`` edge index of the whole batch, with PyG's per-graph node offsets.
+    num_nodes
+        Number of nodes in the batch; used to check ``batch`` and ``edge_index`` agree.
+    batch
+        ``[num_nodes]`` graph assignment per node.
+    index_nodes
+        Per graph, the indices of the nodes ``pad_batch`` kept, relative to that graph's own node
+        order. Its lengths define the sequence length.
+    num_heads
+        Number of attention heads; the mask is repeated for each.
+    n_hops
+        Radius of the blocked neighbourhood, in message-passing steps. Pass the local component's
+        ``num_layers``.
+    device
+        Device for the returned mask. Defaults to ``edge_index``'s.
+
+    Returns
+    -------
+    torch.Tensor
+        Boolean ``[num_batch * num_heads, S + 1, S + 1]`` mask, ``True`` where attention is
+        blocked, with the CLS token in the last position. Ordered graph-major, matching what
+        :class:`torch.nn.MultiheadAttention` expects of a 3-D ``attn_mask``.
+    """
+    device = edge_index.device if device is None else device
+    batch = batch.to(torch.long)
+    if batch.numel() != num_nodes:
+        raise ValueError(f"batch has {batch.numel()} entries but num_nodes is {num_nodes}")
+
+    num_batch = int(batch.max().item()) + 1
     max_seq_len = max(len(nodes) for nodes in index_nodes)
+    mask = torch.zeros((num_batch, max_seq_len + 1, max_seq_len + 1), dtype=torch.bool, device=device)
 
-    # Initialize with -inf (no attention allowed)
-    attention_mask = torch.full(
-        (num_batch * num_heads, max_seq_len + 1, max_seq_len + 1), INVALID_MASK_VALUE, device=edge_index.device
-    )
-    # Set the diagonal to -inf (no self-attention)
-    diag_idx = torch.arange(max_seq_len, device=edge_index.device)
-    attention_mask[:, diag_idx, diag_idx] = INVALID_MASK_VALUE
-
-    # Create full adjacency matrix + 1 for cls token (end of sequence)
-    adj_matrix = torch.zeros((num_nodes, num_nodes), device=edge_index.device)  # TODO: check if zero or ones
-    adj_matrix[edge_index[0], edge_index[1]] = INVALID_MASK_VALUE
-
-    # For each batch, extract the submatrix for kept nodes
     for b in range(num_batch):
-        nodes = index_nodes[b]
-        seq_len = len(nodes)
-        assert seq_len + 1 <= max_seq_len + 1, f"Mismatch: seq_len+1: {seq_len + 1}, max_seq_len+1: {max_seq_len + 1}"
-        # Extract submatrix for the kept nodes
-        batch_mask = adj_matrix[nodes][:, nodes]  # Get submatrix for kept nodes
-        # INSERT_YOUR_CODE
-        assert torch.any(batch_mask != 0), "batch_mask contains only zero entries"
-        # Add row and column of ones for CLS token - full attention
-        batch_mask = torch.cat(
-            [batch_mask, torch.zeros(batch_mask.size(0), 1, device=batch_mask.device)], dim=1
-        )  # Add column
-        batch_mask = torch.cat(
-            [batch_mask, torch.zeros(1, batch_mask.size(1), device=batch_mask.device)], dim=0
-        )  # Add row
-        assert batch_mask.shape == (seq_len + 1, seq_len + 1), (
-            f"Mismatch: batch_mask.shape: {batch_mask.shape}, (seq_len+1, seq_len+1): {(seq_len + 1, seq_len + 1)}"
-        )
-        assert attention_mask.shape[-2:] == (max_seq_len + 1, max_seq_len + 1), (
-            f"Mismatch: attention_mask.shape[-2:]: {attention_mask.shape[-2:]}, (seq_len+1, seq_len+1): {(seq_len + 1, seq_len + 1)}"
-        )
-        # append inverse adjacency matrix to the end of the attention mask
-        attention_mask[b * num_heads : b * num_heads + num_heads, -(seq_len + 1) :, -(seq_len + 1) :] = batch_mask
-        # add zeros for nodes that are not in the batch
-        attention_mask[b * num_heads : b * num_heads + num_heads, :seq_len, :seq_len] = float("0")
+        nodes_b = torch.nonzero(batch == b, as_tuple=False).flatten()
+        n_b = int(nodes_b.numel())
+        if n_b == 0:
+            continue
+        # PyG batches graphs by concatenation, so a graph's nodes are contiguous and its local
+        # indices are the global ones minus the offset of its first node.
+        offset = int(nodes_b[0].item())
+        in_graph = (batch[edge_index[0]] == b) & (batch[edge_index[1]] == b)
+        local_edges = edge_index[:, in_graph] - offset
 
-    assert not torch.any(torch.isnan(attention_mask)), "attention_mask contains NaN values"
-    print("attention_mask", attention_mask.shape, attention_mask)
-    return attention_mask
+        reach = _local_reach(local_edges, n_b, n_hops)
+
+        kept = torch.as_tensor(index_nodes[b], dtype=torch.long, device=reach.device)
+        block = reach[kept][:, kept].to(device)
+
+        # pad_batch left-pads, so the kept tokens sit in the LAST len(kept) positions before the
+        # CLS slot. Writing the block anywhere else silently masks the wrong pairs.
+        s = int(kept.numel())
+        lo = max_seq_len - s
+        mask[b, lo:max_seq_len, lo:max_seq_len] = block
+
+    if bool(mask.all(dim=-1).any()):
+        raise RuntimeError("a query row is fully blocked; softmax would be NaN")
+
+    # (N * num_heads, L, S) is indexed graph-major: repeat_interleave, not repeat.
+    return mask.repeat_interleave(num_heads, dim=0)
 
 
 def attn_mask_diagonal(batch: torch.Tensor, index_nodes: list, num_heads: int, device: torch.device) -> torch.Tensor:
-    """
-    Sets the diagonal of the attention mask to -inf.
+    """Block self-attention only: the weakest mask, and the default.
+
+    Returns the same boolean convention as
+    :func:`create_transformer_attention_mask_from_edges` (``True`` = blocked), so the two are
+    interchangeable at the call site. The CLS slot in the last position is left open.
     """
     max_seq_len = max(len(nodes) for nodes in index_nodes)
-    batch_size = int(batch[-1].item() + 1)
+    batch_size = int(batch.max().item()) + 1
     attention_mask = torch.zeros(
-        (num_heads * batch_size, max_seq_len + 1, max_seq_len + 1), device=device, dtype=torch.float32
+        (num_heads * batch_size, max_seq_len + 1, max_seq_len + 1), device=device, dtype=torch.bool
     )
-    # Set the diagonal to -inf (no self-attention)
     diag_idx = torch.arange(max_seq_len, device=device)
-    attention_mask[:, diag_idx, diag_idx] = float("-inf")
-    # Convert attention_mask to same dtype as src_padding_mask
+    attention_mask[:, diag_idx, diag_idx] = True
     return attention_mask

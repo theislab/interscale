@@ -17,8 +17,11 @@ def get_global_component_cfg(cfg, global_component_name):
             2000  # optionally adjust to maximum number of cells, ideally shouldnt be larger than 4000
         )
         cfg.model.global_component.parameters.long_range_attention = (
-            False  # if True, takes inverse of adjacency matrix as long-range attention mask
+            False  # if True, blocks attention inside the local component's receptive field
         )
+        # Radius of that blocked neighbourhood, in message-passing steps. 0 means "match the local
+        # component's num_layers", which is the setting that keeps the two components disjoint.
+        cfg.model.global_component.parameters.long_range_mask_hops = 0
         cfg.model.global_component.parameters.type_gex_embedding = None
         cfg.model.global_component.latent_obsm_key = None  # Use the obms key where precomputed embeddings are stored, only if type_gex_embedding is "Precomputed"
     return cfg

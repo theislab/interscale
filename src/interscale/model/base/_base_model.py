@@ -477,6 +477,7 @@ class BaseModel(metaclass=BaseModelMeta):
         Instance must be defined in InterScale.module.global_components.
         """
         if self._cfg.model.global_component.name == "self-attn-transformer":
+            local_mask_hops = self._resolve_local_mask_hops()
             self._model_summary_string = self._model_summary_string + (
                 f"Global component {self._cfg.model.global_component.name}: "
                 f"max_seq_len: {self._cfg.model.global_component.parameters.max_seq_len},"
@@ -485,7 +486,8 @@ class BaseModel(metaclass=BaseModelMeta):
                 f"act_func: {self._cfg.model.global_component.parameters.activation_func},"
                 f"num_layers: {self._cfg.model.global_component.parameters.num_layers},"
                 f"dim_feedforward: {self._cfg.model.global_component.parameters.dim_feedforward},"
-                f"enforce long-range attention: {self._cfg.model.global_component.parameters.long_range_attention}"
+                f"enforce long-range attention: {self._cfg.model.global_component.parameters.long_range_attention},"
+                f"local_mask_hops: {local_mask_hops}"
             )
             return TransformerNodeEncoderHook(
                 n_input=self.n_input,
@@ -502,9 +504,24 @@ class BaseModel(metaclass=BaseModelMeta):
                 num_layers=self._cfg.model.global_component.parameters.num_layers,
                 dim_feedforward=self._cfg.model.global_component.parameters.dim_feedforward,
                 long_range_attention=self._cfg.model.global_component.parameters.long_range_attention,
+                local_mask_hops=local_mask_hops,
             )
         else:
             raise ValueError(f"Global component {self._cfg.model.global_component.name} not found.")
+
+    def _resolve_local_mask_hops(self) -> int:
+        """How far the long-range mask reaches, in message-passing steps.
+
+        ``long_range_mask_hops = 0`` means "ask the local component", which is the setting that
+        actually keeps the two components disjoint: the mask has to cover the GNN's receptive
+        field, and that is its number of layers. A transformer-only model has no local component
+        to ask, so it falls back to a single hop.
+        """
+        configured = self._cfg.model.global_component.parameters.long_range_mask_hops
+        if configured:
+            return int(configured)
+        params = self._cfg.model.local_component.get("parameters", None)
+        return int(params.num_layers) if params is not None and "num_layers" in params else 1
 
     def predict_nodewise(
         self,

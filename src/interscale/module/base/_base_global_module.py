@@ -369,6 +369,7 @@ class GlobalModule(BaseModule):
                 num_layers=params["num_layers"],
                 dim_feedforward=params["dim_feedforward"],
                 long_range_attention=params["long_range_attention"],
+                local_mask_hops=params.get("local_mask_hops", 1),
                 **kwargs,
             )
         # Add more elifs for other modules
