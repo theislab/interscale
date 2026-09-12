@@ -131,7 +131,9 @@ def test_only_the_kept_nodes_are_used():
 
 def test_diagonal_mask_uses_the_same_boolean_convention():
     n = 4
-    diag = attn_mask_diagonal(torch.zeros(n, dtype=torch.long), [list(range(n))], num_heads=1, device=torch.device("cpu"))
+    diag = attn_mask_diagonal(
+        torch.zeros(n, dtype=torch.long), [list(range(n))], num_heads=1, device=torch.device("cpu")
+    )
 
     assert diag.dtype == torch.bool
     assert torch.equal(diag[0, :n, :n], torch.eye(n, dtype=torch.bool))
