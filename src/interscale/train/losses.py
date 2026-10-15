@@ -116,21 +116,57 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
         return loss
 
 
+def scaled_cosine_error(y_pred: torch.Tensor, y_true: torch.Tensor, gamma: float = 1.0) -> torch.Tensor:
+    """Per-row scaled cosine error ``(1 - cos(y_pred_i, y_true_i)) ** gamma``, shape ``[N]``.
+
+    GraphMAE's reconstruction criterion (Hou et al., KDD 2022, eq. 2) before its mean over the
+    masked nodes. Rows are L2-normalised first, so the error ignores each row's scale and only
+    compares directions. ``gamma = 1`` is the plain cosine error; ``gamma > 1`` shrinks the error
+    of rows that are already close faster than that of rows that are far, so a mean is dominated
+    by the hard rows (the paper's down-weighting of easy samples).
+
+    ``1 - cos`` is clamped at 0: rounding can put the cosine of two identical rows at 1 + 1e-7,
+    and a negative base to a non-integer power is NaN.
+
+    Parameters
+    ----------
+    y_pred, y_true
+        ``[N, F]`` predictions and targets.
+    gamma
+        The scaling exponent, ``>= 1``.
+    """
+    y_pred = F.normalize(y_pred, p=2, dim=-1)
+    y_true = F.normalize(y_true, p=2, dim=-1)
+    return (1 - (y_pred * y_true).sum(dim=-1)).clamp(min=0).pow(gamma)
+
+
+def _check_gamma(gamma: float) -> float:
+    if not gamma >= 1:
+        raise ValueError(f"the scaled cosine error needs gamma >= 1 (GraphMAE, eq. 2), got {gamma}.")
+    return float(gamma)
+
+
 class SCELoss(torch.nn.Module):
     # adjusted from GraphMAE
     # https://github.com/THUDM/GraphMAE/blob/b14f080c919257b495e3cb64742884d5252d6a635/graphmae/models/loss_func.py#L5
     # accessed on 10 September 2025
-    """SCE loss adjusted from GraphMAE"""
+    """Scaled cosine error (GraphMAE): the mean of :func:`scaled_cosine_error` over the rows given.
 
-    def __init__(self, alpha=3):
+    Which rows those are is the caller's choice: ``tl.masking.masked_loss`` hands it the masked
+    cells only under cell masking, and each cell's masked genes under gene masking, so the mean is
+    over the masked nodes as in the paper.
+    """
+
+    def __init__(self, gamma: float = 3.0):
         """
         Parameters
         ----------
-        alpha : float
-            Power of the loss.
+        gamma : float
+            The scaling exponent ``>= 1`` (``alpha`` in GraphMAE's code). Configured by
+            ``optim.sce_gamma``.
         """
         super().__init__()
-        self.alpha = alpha
+        self.gamma = _check_gamma(gamma)
 
     def forward(self, x, y):
         """
@@ -141,34 +177,25 @@ class SCELoss(torch.nn.Module):
         y : torch.Tensor [N, F]
             Ground truth values.
         """
-        x = F.normalize(x, p=2, dim=-1)
-        y = F.normalize(y, p=2, dim=-1)
-
-        # loss =  - (x * y).sum(dim=-1)
-        # loss = (x_h - y_h).norm(dim=1).pow(alpha)
-
-        loss = (1 - (x * y).sum(dim=-1)).pow_(self.alpha)
-
-        loss = loss.mean()
-        return loss
+        return scaled_cosine_error(x, y, self.gamma).mean()
 
 
 class SCE_EntropyATT_Loss(torch.nn.Module):
     """SCE loss with entropy of attention weights."""
 
-    def __init__(self, alpha=3, beta=1, use_last_layer_only=True):
+    def __init__(self, gamma: float = 3.0, beta=1, use_last_layer_only=True):
         """
         Parameters
         ----------
-        alpha : float
-            Power of the loss.
+        gamma : float
+            The scaling exponent of the scaled cosine error, ``>= 1``.
         beta : float
             Weight of the attention entropy loss.
         use_last_layer_only : bool
             Whether to use only the last layer of the attention weights.
         """
         super().__init__()
-        self.alpha = alpha
+        self.gamma = _check_gamma(gamma)
         self.beta = beta
         self.use_last_layer_only = use_last_layer_only
 
@@ -183,9 +210,7 @@ class SCE_EntropyATT_Loss(torch.nn.Module):
         attn : torch.Tensor [N, H, N, N]
             Attention weights.
         """
-        x = F.normalize(x, p=2, dim=-1)
-        y = F.normalize(y, p=2, dim=-1)
-        loss_recon = (1 - (x * y).sum(dim=-1)).pow_(self.alpha).mean()
+        loss_recon = scaled_cosine_error(x, y, self.gamma).mean()
 
         if self.use_last_layer_only and attn.dim() == 5:
             attn = attn[-1]  # [Batch, Heads, N, N]

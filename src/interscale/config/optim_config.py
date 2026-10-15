@@ -19,6 +19,11 @@ def get_optim_cfg(cfg):
     cfg.optim.lr_max_epochs = 100
     cfg.optim.wd = 1e-4
     cfg.optim.loss = "GaussianNLL"  # classification: [CrossEntropy, WeightedCE], regression: [MSELoss, GaussianNLL, SmoothL1, BalancedPearsonCorrelationLoss, SCELoss]
+    # The exponent gamma (>= 1) of GraphMAE's scaled cosine error, (1 - cos) ** gamma per cell. Used by
+    # SCELoss and SCE_EntropyATT_Loss, and by the `scaled_cosine_error` metrics logged for every
+    # regression run whatever its loss. 1 is the plain cosine error; above 1, cells that are already
+    # reconstructed well count for less (GraphMAE uses 1-3, per dataset). 3 was the fixed value before.
+    cfg.optim.sce_gamma = 3.0
     cfg.optim.seed = 40
     cfg.optim.cross_corr = "cell"  # Currently cell is the only one that really works
     cfg.optim.n_epochs = 100

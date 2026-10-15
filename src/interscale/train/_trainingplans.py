@@ -12,7 +12,7 @@ from interscale.module.base._base_module import BaseModule
 from interscale.nn import CosineWarmupScheduler
 from interscale.tl.masking import masked_loss
 
-from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss
+from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss, scaled_cosine_error
 
 
 class RunningCosineSimilarity(torchmetrics.Metric):
@@ -52,8 +52,37 @@ class RunningCosineSimilarity(torchmetrics.Metric):
         return self.total / self.count
 
 
+class RunningScaledCosineError(torchmetrics.Metric):
+    """Mean per-cell scaled cosine error ``(1 - cos) ** gamma`` (GraphMAE), from a running sum.
+
+    The metric twin of ``SCELoss``: with the same ``gamma`` and the same cells it is the same
+    number, so a run trained on another criterion can still be read on the SCE scale. Two scalars
+    of state, for the reason ``RunningCosineSimilarity`` gives.
+    """
+
+    is_differentiable = False
+    higher_is_better = False
+    full_state_update = False
+
+    def __init__(self, gamma: float = 3.0, **kwargs):
+        super().__init__(**kwargs)
+        self.gamma = float(gamma)
+        self.add_state("total", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("count", default=torch.tensor(0.0), dist_reduce_fx="sum")
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
+        """Accumulate the summed per-cell scaled cosine error and the number of cells."""
+        sce = scaled_cosine_error(preds, target, self.gamma)
+        self.total = self.total + sce.sum()
+        self.count = self.count + sce.numel()
+
+    def compute(self) -> torch.Tensor:
+        """Mean per-cell scaled cosine error over everything seen since the last reset."""
+        return self.total / self.count
+
+
 def masked_regression_metrics(
-    y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torch.Tensor, eps: float = 1e-8
+    y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torch.Tensor, eps: float = 1e-8, sce_gamma: float = 3.0
 ) -> dict[str, torch.Tensor]:
     """The regression metrics of ``_setup_regression_metrics``, restricted to the masked entries.
 
@@ -75,13 +104,16 @@ def masked_regression_metrics(
         ``[N, G]`` boolean marking the masked entries.
     eps
         Guard for degenerate (zero-variance) genes.
+    sce_gamma
+        The exponent of the scaled cosine error, as for ``SCELoss``.
 
     Returns
     -------
     dict
         Unprefixed metric names mapped to scalar tensors, matching the keys that
         ``_setup_regression_metrics`` produces: ``mse``, ``r2`` (per-gene, uniform average),
-        ``pearson_corr``, ``concordance_corr``, ``cosine_similarity`` (per cell).
+        ``pearson_corr``, ``concordance_corr``, and per cell ``cosine_similarity`` and
+        ``scaled_cosine_error``.
     """
     m = entry_mask.to(y_pred.dtype)
     p_ = y_pred * m
@@ -116,8 +148,13 @@ def masked_regression_metrics(
     r2 = torch.where(usable, 1 - ss_res / ss_tot.clamp(min=eps), nan)
 
     # Per-cell cosine over that cell's masked genes: the zeroed entries drop out of both the dot
-    # product and the two norms, so this is the cosine on the masked coordinates.
-    cosine = nn.functional.cosine_similarity(p_, t_, dim=1)
+    # product and the two norms, so this is the cosine on the masked coordinates. Averaged over
+    # the cells that HAVE a masked gene only. A cell with none has no masked coordinates, and its
+    # all-zero row would enter the mean as a cosine of 0 -- under cell masking that is every
+    # unmasked cell, which scaled the reported cosine by the fraction of cells masked.
+    scored = entry_mask.any(dim=1)
+    cosine = nn.functional.cosine_similarity(p_[scored], t_[scored], dim=1)
+    sce = scaled_cosine_error(p_[scored], t_[scored], sce_gamma)
 
     return {
         "mse": mse,
@@ -125,6 +162,7 @@ def masked_regression_metrics(
         "pearson_corr": torch.nanmean(pearson),
         "concordance_corr": torch.nanmean(concordance),
         "cosine_similarity": cosine.mean(),
+        "scaled_cosine_error": sce.mean(),
     }
 
 
@@ -184,6 +222,7 @@ class TrainingPlan(pl.LightningModule):
         lr_warmup: int = 0,
         lr_max_epochs: int = 100000,
         patience_in_steps: int = 100000,
+        sce_gamma: float = 3.0,
         **kwargs,
     ):
         super().__init__()
@@ -201,6 +240,9 @@ class TrainingPlan(pl.LightningModule):
         self.lr_warmup = lr_warmup
         self.lr_max_epochs = lr_max_epochs
         self.lr = lr
+        # The exponent of the scaled cosine error: used by SCELoss / SCE_EntropyATT_Loss when one
+        # is the criterion, and by the `scaled_cosine_error` metrics whatever the criterion is.
+        self.sce_gamma = float(sce_gamma)
         if self.prediction_task == "regression":
             if self.cross_corr == "gene":
                 print("cross-gene per cell correlation metrics")
@@ -217,7 +259,7 @@ class TrainingPlan(pl.LightningModule):
             # LR-scheduler monitor. "val_f1" never existed; only val_f1_micro/macro/<class> do.
             self.monitor_metric = "val_f1_macro"
         elif "regression" in self.prediction_task:
-            metrics = self._setup_regression_metrics(self.module.n_output)
+            metrics = self._setup_regression_metrics(self.module.n_output, self.sce_gamma)
             self.loss = self._setup_regression_loss(self.loss_type)
             self.monitor_metric = "val_r2"
         else:
@@ -255,9 +297,9 @@ class TrainingPlan(pl.LightningModule):
         elif loss == "BalancedPearsonCorrelationLoss":
             return BalancedPearsonCorrelationLoss(None)
         elif loss == "SCELoss":
-            return SCELoss()
+            return SCELoss(gamma=self.sce_gamma)
         elif loss == "SCE_EntropyATT_Loss":
-            return SCE_EntropyATT_Loss()
+            return SCE_EntropyATT_Loss(gamma=self.sce_gamma)
 
     @staticmethod
     def _setup_classification_metrics(num_outputs: int):
@@ -271,7 +313,7 @@ class TrainingPlan(pl.LightningModule):
         )
 
     @staticmethod
-    def _setup_regression_metrics(num_outputs: int):
+    def _setup_regression_metrics(num_outputs: int, sce_gamma: float = 3.0):
         return MetricCollection(
             {
                 "mse": torchmetrics.MeanSquaredError(),
@@ -288,6 +330,9 @@ class TrainingPlan(pl.LightningModule):
                 # Not torchmetrics.CosineSimilarity: see RunningCosineSimilarity for why its
                 # list state cannot be used on a dataset this size. Same value, O(1) memory.
                 "cosine_similarity": RunningCosineSimilarity(),
+                # GraphMAE's scaled cosine error with the configured gamma: the SCELoss value on
+                # the same cells, tracked whatever the criterion. gamma = 1 is 1 - cosine.
+                "scaled_cosine_error": RunningScaledCosineError(sce_gamma),
             }
         )
 
@@ -355,8 +400,11 @@ class TrainingPlan(pl.LightningModule):
             if entry_mask is None:
                 loss = self.loss(y_pred, y_true, attn)
             else:
-                m = entry_mask.to(y_pred.dtype)
-                loss = self.loss(y_pred * m, y_true * m, attn)
+                # Only the cells with a masked entry: a cell without one would enter the cosine
+                # as an all-zero row, i.e. as an error of 1 that no prediction can change.
+                rows = entry_mask.any(dim=1)
+                m = entry_mask[rows].to(y_pred.dtype)
+                loss = self.loss(y_pred[rows] * m, y_true[rows] * m, attn)
         else:
             loss = masked_loss(self.loss, self.loss_type, y_pred, y_true, entry_mask)
 
@@ -372,7 +420,7 @@ class TrainingPlan(pl.LightningModule):
         # include entries the model was given as input, which it can partly copy -- so they are
         # the reconstruction score for the tissue, not evidence the model generalises. These are.
         if entry_mask is not None:
-            for name, value in masked_regression_metrics(y_pred, y_true, entry_mask).items():
+            for name, value in masked_regression_metrics(y_pred, y_true, entry_mask, sce_gamma=self.sce_gamma).items():
                 metrics[f"{mode}_masked_{name}"] = value
 
         metrics[f"{mode}_loss"] = loss

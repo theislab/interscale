@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
+- The scaled cosine error of GraphMAE (Hou et al., KDD 2022, eq. 2), `(1 - cos(pred, true)) ** gamma`
+  per cell, is logged for every regression run whatever its loss, as `{train,val,test}_scaled_cosine_error`
+  over all cells and `..._masked_scaled_cosine_error` over the masked ones. With `SCELoss` as the
+  criterion the masked one is the training loss itself. The exponent is the new
+  `optim.sce_gamma` (default 3.0, the value `SCELoss` always used; `>= 1`, checked at config
+  load), which `SCELoss` and `SCE_EntropyATT_Loss` now read too. `gamma = 1` is the plain cosine
+  error, `1 - cosine_similarity`. The per-cell function is `train.losses.scaled_cosine_error`.
+
 - Anchor-point / distance-zone analysis of a latent dimension (`interscale.tl.anchors`,
   plotted by `interscale.pl.anchor_plots`): `find_anchor_cells` localises the foci a dimension
   is reading (per-sample tail quantile, then a spatial-coherence filter),
@@ -31,6 +39,9 @@ and this project adheres to [Semantic Versioning][].
 
 ### Changed
 
+- `SCELoss` and `SCE_EntropyATT_Loss` take `gamma` (the paper's name) instead of `alpha`, and
+  validate it is `>= 1`. `1 - cos` is clamped at 0 before the power, so a non-integer `gamma` no
+  longer turns two identical rows into NaN.
 - `tl.masking.MASK_VALUE` is now **-1**, was 0. Masked positions must be distinguishable from
   real measurements: ~62% of legnini23's `log1p_norm` entries are already exactly 0 and 648 of
   its cells are all-zero, so a zero fill made the corruption invisible under gene masking.
@@ -56,6 +67,24 @@ and this project adheres to [Semantic Versioning][].
   `DualDecoderCombinedModule.compute_separate_losses` takes it as an optional fifth argument.
 - `LocalModule._common_step` returned a 4-tuple where the training plan unpacked 5; it now
   matches the 6-tuple contract of the other modules.
+
+### Fixed
+
+- The masked per-cell cosine (`..._masked_cosine_similarity`) averaged over every cell, and a cell
+  without a masked entry entered as a cosine of 0. Under cell masking that is every unmasked cell,
+  so the logged value was scaled by the fraction of cells masked: a near-perfect reconstruction
+  read 0.35 at a 30% masking rate. It now averages over the cells with a masked entry. The other
+  masked metrics were not affected.
+- `SCE_EntropyATT_Loss` under cell masking averaged its cosine term over every cell, with the
+  unmasked ones zeroed into a constant error of 1: the loss was `f * SCE(masked) + (1 - f)` for a
+  masked fraction `f`, and its gradient `f` times too small. It now averages over the masked cells,
+  as `SCELoss` already did. **This changes training under that loss.**
+- Under gene masking, the row-normalising losses (`SCELoss`, `SCE_EntropyATT_Loss`,
+  `BalancedPearsonCorrelationLoss`) counted a cell with no masked gene as an all-zero row. Such
+  cells are now left out; at typical rates and panel sizes they almost never occur.
+- `optim.monitor` minimised only metrics ending in `loss`, so monitoring an error -- `val_mse`, or
+  the new scaled cosine error -- made early stopping and checkpointing keep the *worst* epoch. Names
+  ending in `error` or `mse` are now minimised too.
 
 ## [0.0.1]
 

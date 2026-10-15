@@ -250,8 +250,12 @@ def masked_loss(loss_fn, loss_type: str, y_pred: torch.Tensor, y_true: torch.Ten
         return _plain_loss(loss_fn, loss_type, y_pred[rows_in], y_true[rows_in])
 
     if loss_type in _ROW_STRUCTURED_LOSSES:
-        m = entry_mask.to(y_pred.dtype)
-        return loss_fn(y_pred * m, y_true * m)
+        # Only the rows with a masked entry. A row without one has no masked coordinates, and
+        # zeroed it would enter a cosine criterion as an all-zero row -- an error of exactly 1 that
+        # dilutes the mean and that no prediction can change.
+        rows = entry_mask.any(dim=1)
+        m = entry_mask[rows].to(y_pred.dtype)
+        return loss_fn(y_pred[rows] * m, y_true[rows] * m)
 
     if loss_type == "GaussianNLL":
         # std, matching the unmasked branch above -- see masked_row_std for why.

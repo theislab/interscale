@@ -38,7 +38,10 @@ class NodeMaskingTrainingPlan:
             # val_loss is a poor early-stopping criterion under class imbalance: a collapsed
             # constant predictor is a genuine minimum of the weighted loss.
             monitor = "val_f1_macro" if "classification" in self.prediction_task else "val_loss"
-        return monitor, ("min" if monitor.endswith("loss") else "max")
+        # Lower is better for a loss and for an error -- mse, and the scaled cosine error, which
+        # would otherwise be maximised when monitored. Everything else logged (r2, correlations,
+        # cosine similarity, f1, accuracy) is higher-is-better.
+        return monitor, ("min" if monitor.endswith(("loss", "error", "mse")) else "max")
 
     # @devices_dsp.dedent -TODO: Why is this here in scvi-tools?
     def train(
@@ -143,6 +146,7 @@ class NodeMaskingTrainingPlan:
             lr_warmup=self._cfg.optim.lr_warmup,
             lr_max_epochs=self._cfg.optim.n_epochs,
             patience_in_steps=steps_per_epoch,
+            sce_gamma=self._cfg.optim.sce_gamma,
         )
 
         monitor, mode = self._resolve_monitor()
