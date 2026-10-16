@@ -18,6 +18,7 @@ from interscale.geome_dataloader import GraphAnnDataModule
 from interscale.pp.segmentation_noise import apply_segmentation_noise
 from interscale.tl import prepare_geome_dataset, remove_zero_expression_cells
 from interscale.tl.utils import get_model_filename_prefix
+from interscale.train import metric_direction
 
 # geome calls the deprecated `sq.gr.spatial_neighbors` entrypoint; silence its
 # FutureWarnings so they don't flood the training logs.
