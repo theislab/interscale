@@ -35,9 +35,8 @@ class MetricsHistory(Callback):
         epoch_dict = {k: v.item() if hasattr(v, "item") else v for k, v in metrics.items()}
         epoch_dict["epoch"] = trainer.current_epoch
 
-        # Record metrics every 10 epochs or at the end of training
-        if trainer.current_epoch % 5 == 0 or trainer.current_epoch == trainer.max_epochs - 1:
-            self.history.append(epoch_dict)
+        # Always record the test scores (this runs once, after training)
+        self.history.append(epoch_dict)
 
     def plot_history(self, subset_term=None):
         history = pd.DataFrame(self.history)

@@ -110,6 +110,16 @@ class LocalModule(BaseModule):
                 dropout_local=params["dropout_local"],
                 **kwargs,
             )
+        elif module_name == "GAT":
+            from interscale.module.local_modules import GAT
+
+            return GAT(
+                n_layers=params["num_layers"],
+                hidden_dim=params["hidden_dim"],
+                heads=params["heads"],
+                dropout_local=params["dropout_local"],
+                **kwargs,
+            )
         elif module_name == "SCVI":
             print("Creating SCVI Local Module")
             from interscale.module.local_modules import SCVILocalModule

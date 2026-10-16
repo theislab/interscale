@@ -1,0 +1,23 @@
+# MERFISH, GCN, kNN graph: cell-type classification with InterScale's LocalModel
+model:
+  local_component:  {name: GAT}
+  global_component: {name: self-attn-transformer}   # not used by LocalModel, need to have to avoid errors
+  decoder: {type: linear}  # maps the GNN embedding back to gene spac
+  save: results/checkpoints/      # lets InterScale restore the best epoch. Keep the trailing /
+optim:
+  loss: CrossEntropy              # classification loss
+  accelerator: cpu                # I do not have NVIDIA GPU
+  # defaults: up to 100 epochs, at least 40, LR warm-up 20, early stopping on val_f1_macro
+dataset:
+  h5ad_data: data/merfish_prepared.h5ad
+  name: merfish_knn               # checkpoint files are named after this, so include the graph type
+  prediction_task: classification # here choosing classification instead of regression
+  prediction_obs: Cell_class
+  prediction_level: node          # per-cell prediction (cell = node), vs one label per sample
+  sample_key: ['slice']           # one graph per tissue slice (column made by prepare_merfish.py)
+  split_key: split
+  batch_size: 8                   # one slice per training step; the default is 32 but training locally
+  spatial_neigbors_kwargs: {radius: null, n_neighs: 15, library_key: slice}   # radius set to 50 by default
+wandb:
+  use: true
+  project_name: merfish-graphs

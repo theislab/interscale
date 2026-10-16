@@ -52,5 +52,6 @@ def get_dataset_cfg(cfg):
     cfg.dataset.spatial_neigbors_kwargs.coord_type = "generic"
     cfg.dataset.spatial_neigbors_kwargs.library_key = ""
     cfg.dataset.spatial_neigbors_kwargs.n_neighs = 6
+    cfg.dataset.spatial_neigbors_kwargs.delaunay = False
 
     return cfg
