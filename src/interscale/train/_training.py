@@ -5,13 +5,18 @@ import lightning as L
 import lightning.pytorch as pl
 import torch
 import wandb
-from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
+from lightning.pytorch.callbacks import LearningRateMonitor
 from lightning.pytorch.loggers import WandbLogger
 from lightning.pytorch.trainer import seed_everything
 
 from interscale.tl.utils import get_model_filename_prefix
 from interscale.train._trainingplans import TrainingPlan
-from interscale.train._utils import MetricsHistory, NodeMaskResampleCallback
+from interscale.train._utils import (
+    MetricsHistory,
+    NodeMaskResampleCallback,
+    PostWarmupEarlyStopping,
+    PostWarmupModelCheckpoint,
+)
 
 # from interscale.model.base._trainer import TrainRunner
 
@@ -147,6 +152,14 @@ class NodeMaskingTrainingPlan:
 
         monitor, mode = self._resolve_monitor()
 
+        # Neither the best checkpoint nor EarlyStopping's best score may come from the LR warm-up:
+        # epoch e trains at e / lr_warmup of optim.lr, so epoch `lr_warmup` is the first at full LR.
+        # Capped at the last epoch so a run shorter than the warm-up still selects something.
+        selection_start_epoch = 0
+        if self._cfg.optim.lr_scheduler == "CosineWarmupScheduler":
+            selection_start_epoch = max(0, min(int(self._cfg.optim.lr_warmup), int(max_epochs) - 1))
+        print(f"Best-epoch selection starts at epoch {selection_start_epoch} (after LR warm-up)")
+
         if early_stopping:
             # TODO: why does the self.history_ stop working when using loss_callback?
             # loss_callback = EarlyStopping(
@@ -158,7 +171,8 @@ class NodeMaskingTrainingPlan:
             #     )
             if not ("classification" in self.prediction_task or "regression" in self.prediction_task):
                 raise Exception("Training must be classification or regression based.")
-            performance_callback = EarlyStopping(
+            performance_callback = PostWarmupEarlyStopping(
+                start_epoch=selection_start_epoch,
                 monitor=monitor,
                 min_delta=float(self._cfg.optim.min_delta),
                 patience=int(patience if patience is not None else self._cfg.optim.patience),
@@ -169,13 +183,14 @@ class NodeMaskingTrainingPlan:
         if self._cfg.model.save is not None:
             run_name = get_model_filename_prefix(self._cfg, self.local_component, self.global_component)
             if "classification" in self._cfg.dataset.prediction_task:
-                checkpoint_callback = ModelCheckpoint(
+                checkpoint_callback = PostWarmupModelCheckpoint(
+                    start_epoch=selection_start_epoch,
                     dirpath=self._cfg.model.save,
                     filename=run_name,
                     monitor=monitor,
                     mode=mode,
                     save_top_k=1,
-                )  # save the best model according to `monitor`
+                )  # save the best post-warm-up model according to `monitor`
             elif "regression" in self._cfg.dataset.prediction_task:
                 # Every arm of the former if/elif chain built the same callback with a hardcoded
                 # monitor="val_loss", so `optim.monitor` was silently ignored for regression while
@@ -186,7 +201,8 @@ class NodeMaskingTrainingPlan:
                 #
                 # `auto` still resolves to val_loss/min for regression, so existing configs are
                 # unaffected; only a config that explicitly sets optim.monitor changes behaviour.
-                checkpoint_callback = ModelCheckpoint(
+                checkpoint_callback = PostWarmupModelCheckpoint(
+                    start_epoch=selection_start_epoch,
                     dirpath=self._cfg.model.save,
                     filename=run_name,
                     monitor=monitor,
