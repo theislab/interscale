@@ -52,6 +52,146 @@ class RunningCosineSimilarity(torchmetrics.Metric):
         return self.total / self.count
 
 
+class MeanPearsonCorrCoef(torchmetrics.PearsonCorrCoef):
+    """``PearsonCorrCoef`` over ``num_outputs`` genes, reduced to the NaN-skipping mean.
+
+    Lightning can only log a metric object whose ``compute`` returns a scalar. A constant gene
+    yields NaN rather than a number, hence ``nanmean``.
+    """
+
+    def compute(self) -> torch.Tensor:
+        """Mean over genes of the per-gene correlation, skipping undefined genes."""
+        return torch.nanmean(super().compute().contiguous())
+
+
+class MeanConcordanceCorrCoef(torchmetrics.ConcordanceCorrCoef):
+    """``ConcordanceCorrCoef`` reduced to the NaN-skipping mean over genes; see MeanPearsonCorrCoef."""
+
+    def compute(self) -> torch.Tensor:
+        """Mean over genes of the per-gene concordance, skipping undefined genes."""
+        return torch.nanmean(super().compute().contiguous())
+
+
+class SingleClassF1Score(torchmetrics.classification.MulticlassF1Score):
+    """F1 of one class, so that each class can be logged as its own scalar metric object."""
+
+    def __init__(self, num_classes: int, class_idx: int, **kwargs):
+        super().__init__(num_classes=num_classes, average=None, **kwargs)
+        self.class_idx = class_idx
+
+    def compute(self) -> torch.Tensor:
+        """F1 of ``class_idx`` over everything seen since the last reset."""
+        return super().compute()[self.class_idx]
+
+
+_MASKED_MOMENTS = ("n_gene", "sum_p", "sum_t", "sum_pp", "sum_tt", "sum_pt", "cos_total", "n_rows")
+
+
+def _masked_moments(y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torch.Tensor) -> dict[str, torch.Tensor]:
+    """Additive sufficient statistics for :func:`masked_regression_metrics`.
+
+    Every entry that is not masked is multiplied by zero before any sum is taken, and zeros
+    contribute nothing to a sum, so each moment is exactly the moment over the masked entries.
+    Every quantity is a plain sum, so moments of several batches add up to the moments of their
+    union -- which is what lets :class:`MaskedRegressionMetric` report an exact epoch-level value.
+    """
+    m = entry_mask.to(y_pred.dtype)
+    p_ = y_pred * m
+    t_ = y_true * m
+    # Per-cell cosine over that cell's masked genes: the zeroed entries drop out of both the dot
+    # product and the two norms, so this is the cosine on the masked coordinates.
+    cosine = nn.functional.cosine_similarity(p_, t_, dim=1)
+    moments = {
+        "n_gene": m.sum(dim=0),  # [G] masked cells per gene
+        "sum_p": p_.sum(dim=0),
+        "sum_t": t_.sum(dim=0),
+        "sum_pp": (p_**2).sum(dim=0),
+        "sum_tt": (t_**2).sum(dim=0),
+        "sum_pt": (p_ * t_).sum(dim=0),
+        "cos_total": cosine.sum(),
+        "n_rows": torch.tensor(float(cosine.numel()), device=y_pred.device),
+    }
+    # float64: the variances below are differences of sums, which loses precision in float32
+    # once the sums run over a whole epoch of cells.
+    return {k: v.double() for k, v in moments.items()}
+
+
+def _masked_metrics_from_moments(moments: dict[str, torch.Tensor], eps: float = 1e-8) -> dict[str, torch.Tensor]:
+    """The metrics of :func:`masked_regression_metrics`, from (possibly accumulated) moments."""
+    n_gene = moments["n_gene"]
+    ng = n_gene.clamp(min=1)
+
+    # Per-gene first and second moments over that gene's masked cells.
+    mean_p = moments["sum_p"] / ng
+    mean_t = moments["sum_t"] / ng
+    var_p = moments["sum_pp"] / ng - mean_p**2
+    var_t = moments["sum_tt"] / ng - mean_t**2
+    cov = moments["sum_pt"] / ng - mean_p * mean_t
+
+    # Squared error per gene, sum((p - t)^2) expanded into the accumulated sums.
+    ss_res = moments["sum_pp"] - 2 * moments["sum_pt"] + moments["sum_tt"]
+    mse = ss_res.sum() / n_gene.sum().clamp(min=1)
+
+    # A gene with fewer than two masked cells, or with no spread in either vector, has no
+    # correlation defined; NaN it out and let nanmean skip it, exactly as the unmasked path
+    # already does for constant genes.
+    nan = torch.tensor(float("nan"), device=n_gene.device, dtype=n_gene.dtype)
+    usable = (n_gene >= 2) & (var_t > eps)
+
+    pearson = torch.where(usable & (var_p > eps), cov / (var_p.clamp(min=eps) * var_t.clamp(min=eps)).sqrt(), nan)
+    concordance = torch.where(usable, 2 * cov / (var_p + var_t + (mean_p - mean_t) ** 2 + eps), nan)
+
+    # R2 per gene, then uniform average -- the same reduction torchmetrics'
+    # R2Score(multioutput="uniform_average") applies.
+    ss_tot = var_t * ng
+    r2 = torch.where(usable, 1 - ss_res / ss_tot.clamp(min=eps), nan)
+
+    return {
+        "mse": mse,
+        "r2": torch.nanmean(r2),
+        "pearson_corr": torch.nanmean(pearson),
+        "concordance_corr": torch.nanmean(concordance),
+        "cosine_similarity": moments["cos_total"] / moments["n_rows"].clamp(min=1),
+    }
+
+
+class MaskedRegressionMetric(torchmetrics.Metric):
+    """One of the :func:`masked_regression_metrics` values, accumulated exactly over an epoch.
+
+    Holds the per-gene moments of :func:`_masked_moments` as running sums (``O(n_genes)`` state),
+    so ``compute`` gives the value over every masked entry seen since the last reset -- not a
+    mean of per-batch values. One instance per metric name, because Lightning can only log a
+    metric object that computes a scalar.
+
+    Parameters
+    ----------
+    name
+        One of ``mse``, ``r2``, ``pearson_corr``, ``concordance_corr``, ``cosine_similarity``.
+    num_outputs
+        Number of genes ``G``.
+    """
+
+    is_differentiable = False
+    full_state_update = False
+
+    def __init__(self, name: str, num_outputs: int, **kwargs):
+        super().__init__(**kwargs)
+        self.name = name
+        for key in _MASKED_MOMENTS:
+            shape = (num_outputs,) if key.startswith(("n_gene", "sum_")) else ()
+            self.add_state(key, default=torch.zeros(shape, dtype=torch.float64), dist_reduce_fx="sum")
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor, entry_mask: torch.Tensor) -> None:
+        """Add this batch's masked-entry moments to the running sums."""
+        for key, value in _masked_moments(preds, target, entry_mask).items():
+            setattr(self, key, getattr(self, key) + value)
+
+    def compute(self) -> torch.Tensor:
+        """The metric over every masked entry seen since the last reset."""
+        moments = {key: getattr(self, key) for key in _MASKED_MOMENTS}
+        return _masked_metrics_from_moments(moments)[self.name].float()
+
+
 def masked_regression_metrics(
     y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torch.Tensor, eps: float = 1e-8
 ) -> dict[str, torch.Tensor]:
@@ -64,8 +204,9 @@ def masked_regression_metrics(
     entries are ragged across genes), so the same quantities are computed here from masked sums.
 
     Every entry that is not masked is multiplied by zero before any sum is taken, and zeros
-    contribute nothing to a sum, so each moment below is exactly the moment over the masked
-    entries -- no approximation.
+    contribute nothing to a sum, so each moment is exactly the moment over the masked entries --
+    no approximation. This is the single-batch form; training logs the epoch-level equivalent,
+    :class:`MaskedRegressionMetric`, built on the same two helpers.
 
     Parameters
     ----------
@@ -83,49 +224,8 @@ def masked_regression_metrics(
         ``_setup_regression_metrics`` produces: ``mse``, ``r2`` (per-gene, uniform average),
         ``pearson_corr``, ``concordance_corr``, ``cosine_similarity`` (per cell).
     """
-    m = entry_mask.to(y_pred.dtype)
-    p_ = y_pred * m
-    t_ = y_true * m
-
-    n_gene = m.sum(dim=0)  # [G] masked cells per gene
-    n_total = m.sum()
-
-    mse = ((p_ - t_) ** 2).sum() / n_total.clamp(min=1)
-
-    # Per-gene first and second moments over that gene's masked cells.
-    ng = n_gene.clamp(min=1)
-    mean_p = p_.sum(dim=0) / ng
-    mean_t = t_.sum(dim=0) / ng
-    var_p = (p_**2).sum(dim=0) / ng - mean_p**2
-    var_t = (t_**2).sum(dim=0) / ng - mean_t**2
-    cov = (p_ * t_).sum(dim=0) / ng - mean_p * mean_t
-
-    # A gene with fewer than two masked cells, or with no spread in either vector, has no
-    # correlation defined; NaN it out and let nanmean skip it, exactly as the unmasked path
-    # already does for constant genes.
-    nan = torch.tensor(float("nan"), device=y_pred.device, dtype=y_pred.dtype)
-    usable = (n_gene >= 2) & (var_t > eps)
-
-    pearson = torch.where(usable & (var_p > eps), cov / (var_p.clamp(min=eps) * var_t.clamp(min=eps)).sqrt(), nan)
-    concordance = torch.where(usable, 2 * cov / (var_p + var_t + (mean_p - mean_t) ** 2 + eps), nan)
-
-    # R2 per gene, then uniform average -- the same reduction torchmetrics'
-    # R2Score(multioutput="uniform_average") applies.
-    ss_res = ((p_ - t_) ** 2).sum(dim=0)
-    ss_tot = var_t * ng
-    r2 = torch.where(usable, 1 - ss_res / ss_tot.clamp(min=eps), nan)
-
-    # Per-cell cosine over that cell's masked genes: the zeroed entries drop out of both the dot
-    # product and the two norms, so this is the cosine on the masked coordinates.
-    cosine = nn.functional.cosine_similarity(p_, t_, dim=1)
-
-    return {
-        "mse": mse,
-        "r2": torch.nanmean(r2),
-        "pearson_corr": torch.nanmean(pearson),
-        "concordance_corr": torch.nanmean(concordance),
-        "cosine_similarity": cosine.mean(),
-    }
+    metrics = _masked_metrics_from_moments(_masked_moments(y_pred, y_true, entry_mask), eps=eps)
+    return {k: v.to(y_pred.dtype) for k, v in metrics.items()}
 
 
 CLASSIFICATION_LOSSES = ["CrossEntropy", "WeightedCE"]
@@ -210,14 +310,23 @@ class TrainingPlan(pl.LightningModule):
                 self.AXIS = 0  # selecting columns / genes
 
         # setup metrics and loss
+        #
+        # Metrics are torchmetrics objects that are only UPDATED per batch and logged as objects,
+        # so Lightning computes each one once over the whole epoch and resets it. Logging the
+        # per-batch values instead (what this did before) made Lightning average them: for a
+        # non-decomposable metric such as macro-F1, R2 or a correlation that is a different number
+        # from the epoch value, and it depended on batch size and on how the (unshuffled) val
+        # graphs fell into batches -- a batch holding one class turns macro-F1 into accuracy.
+        masked_metrics = None
         if "classification" in self.prediction_task:
-            metrics = self._setup_classification_metrics(self.module.n_output)
+            metrics = self._setup_classification_metrics(self.module.n_output, self.class_labels)
             self.loss = self._setup_classification_loss(self.loss_type, self.class_weights)
             # Must name a metric that is actually logged -- this is handed to Lightning as the
             # LR-scheduler monitor. "val_f1" never existed; only val_f1_micro/macro/<class> do.
             self.monitor_metric = "val_f1_macro"
         elif "regression" in self.prediction_task:
             metrics = self._setup_regression_metrics(self.module.n_output)
+            masked_metrics = self._setup_masked_regression_metrics(self.module.n_output)
             self.loss = self._setup_regression_loss(self.loss_type)
             self.monitor_metric = "val_r2"
         else:
@@ -226,6 +335,15 @@ class TrainingPlan(pl.LightningModule):
         self.train_metrics = metrics.clone(prefix="train_")
         self.valid_metrics = metrics.clone(prefix="val_")
         self.test_metrics = metrics.clone(prefix="test_")
+        # Only updated (and therefore only logged) on batches that carry an entry_mask. Keyed
+        # "<mode>_masked", not "<mode>": a ModuleDict key "train" collides with nn.Module.train().
+        self.masked_metrics = (
+            None
+            if masked_metrics is None
+            else nn.ModuleDict(
+                {f"{mode}_masked": masked_metrics.clone(prefix=f"{mode}_masked_") for mode in ("train", "val", "test")}
+            )
+        )
 
     @staticmethod
     def _setup_classification_loss(
@@ -260,15 +378,18 @@ class TrainingPlan(pl.LightningModule):
             return SCE_EntropyATT_Loss()
 
     @staticmethod
-    def _setup_classification_metrics(num_outputs: int):
-        return MetricCollection(
-            {
-                "accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=num_outputs),
-                "f1_micro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="micro"),
-                "f1_macro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="macro"),
-                "f1_per_class": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average=None),
-            }
-        )
+    def _setup_classification_metrics(num_outputs: int, class_labels: list[str] | None = None):
+        metrics = {
+            "accuracy": torchmetrics.Accuracy(task="multiclass", num_classes=num_outputs),
+            "f1_micro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="micro"),
+            "f1_macro": torchmetrics.F1Score(task="multiclass", num_classes=num_outputs, average="macro"),
+        }
+        # One scalar metric per class (logged as <mode>_f1_<label>, the names used so far). A
+        # ModuleDict key may not contain ".", so that one character is replaced.
+        labels = class_labels if class_labels is not None else [str(i) for i in range(num_outputs)]
+        for idx, label in enumerate(labels):
+            metrics[f"f1_{str(label).replace('.', '_')}"] = SingleClassF1Score(num_classes=num_outputs, class_idx=idx)
+        return MetricCollection(metrics)
 
     @staticmethod
     def _setup_regression_metrics(num_outputs: int):
@@ -276,7 +397,7 @@ class TrainingPlan(pl.LightningModule):
             {
                 "mse": torchmetrics.MeanSquaredError(),
                 "r2": torchmetrics.R2Score(multioutput="uniform_average"),
-                "pearson_corr": torchmetrics.PearsonCorrCoef(num_outputs=num_outputs),
+                "pearson_corr": MeanPearsonCorrCoef(num_outputs=num_outputs),
                 # Pearson is invariant to any per-gene affine rescaling of the predictions, so a
                 # model whose outputs are (say) 11x too spread out still scores a high r while
                 # its R2 goes to -113. Writing predictions as k times the true sd with offset d,
@@ -284,11 +405,23 @@ class TrainingPlan(pl.LightningModule):
                 # between them is purely calibration. Concordance correlation folds that penalty
                 # back in, which makes it the metric to select on when both the co-variation
                 # structure AND the expression scale have to be usable.
-                "concordance_corr": torchmetrics.ConcordanceCorrCoef(num_outputs=num_outputs),
+                "concordance_corr": MeanConcordanceCorrCoef(num_outputs=num_outputs),
                 # Not torchmetrics.CosineSimilarity: see RunningCosineSimilarity for why its
                 # list state cannot be used on a dataset this size. Same value, O(1) memory.
                 "cosine_similarity": RunningCosineSimilarity(),
             }
+        )
+
+    @staticmethod
+    def _setup_masked_regression_metrics(num_outputs: int):
+        # compute_groups=False: the five share identical state, but letting MetricCollection merge
+        # them would be an optimisation whose correctness depends on its state-equality check.
+        return MetricCollection(
+            {
+                name: MaskedRegressionMetric(name, num_outputs)
+                for name in ("mse", "r2", "pearson_corr", "concordance_corr", "cosine_similarity")
+            },
+            compute_groups=False,
         )
 
     def _classification_metrics(
@@ -298,18 +431,16 @@ class TrainingPlan(pl.LightningModule):
         mode: str,
         metrics: MetricCollection,
         mask_idx: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Calculate classification metrics."""
+    ) -> torch.Tensor:
+        """Return the classification loss and add this batch to ``metrics`` (no per-batch compute)."""
         ## TODO: Currently mask_idx is applied in module._common_step. Maybe move to here?
         # if mask_idx is not None:
         #     y_pred = y_pred[mask_idx]
         #     y_true = y_true[mask_idx]
 
         loss = self.loss(y_pred, y_true)
-        metrics = metrics(y_pred.argmax(dim=1), y_true.argmax(dim=1))
-        metrics[f"{mode}_loss"] = loss
-
-        return loss, metrics
+        metrics.update(y_pred.argmax(dim=1), y_true.argmax(dim=1))
+        return loss
 
     def _regression_metrics(
         self,
@@ -320,8 +451,8 @@ class TrainingPlan(pl.LightningModule):
         mask_idx: torch.Tensor | None = None,
         attn: torch.Tensor | None = None,
         entry_mask: torch.Tensor | None = None,
-    ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        """Calculate regression metrics.
+    ) -> torch.Tensor:
+        """Return the regression loss and add this batch to the metrics (no per-batch compute).
 
         Parameters
         ----------
@@ -360,23 +491,17 @@ class TrainingPlan(pl.LightningModule):
         else:
             loss = masked_loss(self.loss, self.loss_type, y_pred, y_true, entry_mask)
 
-        # Primary metrics: every cell the model produced, masked or not.
-        metrics = metrics(y_pred, y_true)
-        # Take mean across pearson correlation
-        metrics[f"{mode}_pearson_corr"] = torch.nanmean(metrics[f"{mode}_pearson_corr"].contiguous())
-        # Same reduction, same reason: both are per-gene vectors of length n_output, and a
-        # constant gene yields NaN rather than a number.
-        metrics[f"{mode}_concordance_corr"] = torch.nanmean(metrics[f"{mode}_concordance_corr"].contiguous())
+        # Primary metrics: every cell the model produced, masked or not. The per-gene correlations
+        # are reduced with nanmean inside MeanPearsonCorrCoef / MeanConcordanceCorrCoef.
+        metrics.update(y_pred, y_true)
 
         # Held-out companions on the masked entries only. Kept because the all-cell numbers above
         # include entries the model was given as input, which it can partly copy -- so they are
         # the reconstruction score for the tissue, not evidence the model generalises. These are.
         if entry_mask is not None:
-            for name, value in masked_regression_metrics(y_pred, y_true, entry_mask).items():
-                metrics[f"{mode}_masked_{name}"] = value
+            self.masked_metrics[f"{mode}_masked"].update(y_pred, y_true, entry_mask)
 
-        metrics[f"{mode}_loss"] = loss
-        return loss, metrics
+        return loss
 
     def forward(self, *args, **kwargs):
         """Passthrough to the module's forward method."""
@@ -407,20 +532,25 @@ class TrainingPlan(pl.LightningModule):
             Metrics to log
         """
         assert y_true.shape == y_pred.shape, "y_true and y_pred must have the same shape"
-        # TODO: where is the batch size?
 
         if "classification" in self.prediction_task:
-            loss, metrics = self._classification_metrics(y_pred, y_true, mode, metrics)
-            for class_idx, class_score in enumerate(metrics[f"{mode}_f1_per_class"]):
-                metrics[f"{mode}_f1_{self.class_labels[class_idx]}"] = class_score
-            metrics.pop(f"{mode}_f1_per_class")
-
+            loss = self._classification_metrics(y_pred, y_true, mode, metrics)
         elif "regression" in self.prediction_task:
-            loss, metrics = self._regression_metrics(y_pred, y_true, mode, metrics, attn=attn, entry_mask=entry_mask)
+            loss = self._regression_metrics(y_pred, y_true, mode, metrics, attn=attn, entry_mask=entry_mask)
+            if entry_mask is not None:
+                self.log_dict(self.masked_metrics[f"{mode}_masked"], on_step=False, on_epoch=True)
 
-        # Set sync_dist=True only for test mode
+        # Metric OBJECTS: Lightning calls compute() once at epoch end over every batch, then
+        # reset(). Distributed sync is handled by torchmetrics itself.
+        self.log_dict(metrics, on_step=False, on_epoch=True)
+
+        # The loss is a per-batch mean, so its epoch value IS a weighted mean of batches -- weighted
+        # by the batch's real size (graphs, or cells for node-level tasks), not the configured
+        # batch_size, which over-weighted a short last batch.
         sync_dist = mode == "test"
-        self.log_dict(metrics, batch_size=int(self.batch_size), on_step=False, on_epoch=True, sync_dist=sync_dist)
+        self.log(
+            f"{mode}_loss", loss, batch_size=int(y_true.shape[0]), on_step=False, on_epoch=True, sync_dist=sync_dist
+        )
 
         return loss
 
