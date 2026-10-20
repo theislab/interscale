@@ -16,7 +16,7 @@ from interscale.config.cli import add_config_args, print_registry, resolve_cfg_f
 from interscale.config.sweep import ARM_PARAM, apply_sweep_config, build_sweep_config, load_arms
 from interscale.geome_dataloader import GraphAnnDataModule
 from interscale.pp.segmentation_noise import apply_segmentation_noise
-from interscale.tl import prepare_geome_dataset, remove_zero_expression_cells
+from interscale.tl import prepare_geome_dataset, remove_zero_expression_cells, set_full_reproducibility
 from interscale.tl.utils import get_model_filename_prefix
 
 # geome calls the deprecated `sq.gr.spatial_neighbors` entrypoint; silence its
@@ -147,6 +147,13 @@ def main_sweep(cfg_factory, model_type, sweep_goal, sweep_params=None, arms=None
         if global_component:
             sweep_run.summary["resolved_max_seq_len"] = cfg.model.global_component.parameters.max_seq_len
         sweep_run.summary["resolved_model_save"] = cfg.model.save
+
+    # Seed BEFORE the model is built, with the trial's own seed (i.e. after apply_sweep_config).
+    # train() calls seed_everything too, but only after __init__ has already drawn the initial
+    # weights, so without this the init was unseeded: two runs of an identical config started
+    # from different weights (chen22: best val_f1_macro 0.89 vs 0.30), and optim.seed did not
+    # reproduce a trial. main.py has always seeded here; with it, repeated runs are bit-identical.
+    set_full_reproducibility(cfg.optim.seed)
 
     ####### PREPROCESSING #######
     # Load adata
