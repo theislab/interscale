@@ -1,0 +1,25 @@
+# Legnini, GCN, radius graph: predict the hidden cells' expression (regression) with InterScale's LocalModel.
+model:
+  local_component:  {name: GAT}
+  global_component: {name: self-attn-transformer}   # not used by LocalModel, need to have to avoid errors
+  decoder: {type: linear}
+  save: results/checkpoints/      # lets InterScale restore the best epoch
+optim:
+  loss: GaussianNLL               # regression loss
+  accelerator: cpu
+  n_epochs: 500
+  min_epochs: 100
+  patience: 50                    # early stopping on val_loss (regression)
+dataset:
+  h5ad_data: data/legnini_prepared.h5ad
+  name: legnini_radius            # checkpoint files are named after this, so include the graph type
+  prediction_task: regression
+  prediction_level: node
+  layer_key: log1p_norm           # normalised layer
+  sample_key: ['sample']          # one graph per organoid section
+  split_key: split
+  batch_size: 1
+  spatial_neigbors_kwargs: {radius: 200, library_key: sample}
+wandb:
+  use: true
+  project_name: legnini-graphs

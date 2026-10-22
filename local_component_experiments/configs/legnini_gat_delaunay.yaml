@@ -1,0 +1,25 @@
+# Legnini, GCN, Delaunay graph: predict the hidden cells' expression (regression) with InterScale's LocalModel.
+model:
+  local_component:  {name: GAT}
+  global_component: {name: self-attn-transformer}   # not used by LocalModel, need to have to avoid errors
+  decoder: {type: linear}
+  save: results/checkpoints/
+optim:
+  loss: GaussianNLL               # regression loss
+  accelerator: cpu
+  n_epochs: 500
+  min_epochs: 100
+  patience: 50                    # early stopping on val_loss (regression)
+dataset:
+  h5ad_data: data/legnini_prepared.h5ad
+  name: legnini_delaunay          # checkpoint files are named after this
+  prediction_task: regression
+  prediction_level: node
+  layer_key: log1p_norm           # normalised layer
+  sample_key: ['sample']
+  split_key: split
+  batch_size: 1
+  spatial_neigbors_kwargs: {delaunay: True, radius: null, library_key: sample}
+wandb:
+  use: true
+  project_name: legnini-graphs
