@@ -14,10 +14,12 @@ authors = [
   { name = "Francesca Drummer" },
   { name = "Sara Jimenez" },
 ]
-requires-python = ">=3.11"
+# The scverse stack InterScale sits on -- anndata, scanpy, squidpy, scvi-tools -- all
+# require >= 3.12. Claiming 3.11 only made the resolver back-solve to years-old releases
+# of them on that interpreter (#59).
+requires-python = ">=3.12"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
@@ -29,15 +31,13 @@ dependencies = [
   "fast-array-utils[accel]",
   "geome",
   "lightning>=2",
-  "numpy>=1.19",
+  # No floor on numpy/scipy: requires-python >= 3.12 already rules out everything older than
+  # their first cp312 wheels, and the remaining floors below are API gates, not install gates.
+  "numpy",
   "pandas",
-  # Upper bound is squidpy's, not ours: squidpy/_compat.py imports the private
-  # scanpy.plotting._tools, which the 1.13 plotting rewrite removed, so `import squidpy`
-  # (and through it `import interscale`) fails on scanpy >= 1.13.0a2. Lift this once
-  # squidpy releases a version that no longer reaches into that module.
-  "scanpy<1.13",
+  "scanpy",
   "scikit-learn",
-  "scipy>=1.7",
+  "scipy",
   "scvi-tools>=0.19",
   # for debug logging (referenced from the issue template)
   "session-info2",
@@ -91,7 +91,7 @@ envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.dependency-groups = [ "doc" ]
 envs.hatch-test.matrix = [
   # Test the lowest and highest supported Python versions with normal deps
-  { deps = [ "stable" ], python = [ "3.11", "3.14" ] },
+  { deps = [ "stable" ], python = [ "3.12", "3.14" ] },
   # Test the newest supported Python version also with pre-release deps
   { deps = [ "pre" ], python = [ "3.14" ] },
 ]
@@ -100,13 +100,41 @@ envs.hatch-test.matrix = [
 envs.hatch-test.overrides.matrix.deps.env-vars = [
   { key = "UV_PRERELEASE", value = "allow", if = [ "pre" ] },
 ]
+# hatch installs with `uv pip`, which does not read [tool.uv] sources, so the pre-release
+# matrix -- the only one that can resolve scanpy 1.13 -- needs squidpy's git main spelled out
+# again here. Drop it together with sources.squidpy below once squidpy > 1.8.3 ships.
+envs.hatch-test.overrides.matrix.deps.extra-dependencies = [
+  { value = "squidpy @ git+https://github.com/scverse/squidpy@main", if = [ "pre" ] },
+]
 envs.hatch-test.dependency-groups = [ "dev", "test" ]
 
 [tool.uv]
-# fix build deps when building from source
-extra-build-dependencies.torch-cluster = [ "torch" ]
-extra-build-dependencies.torch-scatter = [ "torch" ]
-extra-build-dependencies.torch-sparse = [ "torch" ]
+# squidpy <= 1.8.3 reaches into the private scanpy.plotting._tools, which the scanpy 1.13
+# plotting rewrite moved under scanpy.plotting.legacy, so `import squidpy` -- and through it
+# `import interscale` -- fails on scanpy >= 1.13.0a2. squidpy's main branch already imports
+# from either location, so take it from git and keep scanpy uncapped here. uv.lock pins the
+# exact commit. Drop this once squidpy > 1.8.3 is on PyPI and bump the floor instead.
+sources.squidpy = { git = "https://github.com/scverse/squidpy", branch = "main" }
+
+# geome declares torch-cluster/torch-scatter/torch-sparse, but neither geome nor InterScale
+# imports them, and torch-geometric >= 2.3 covers everything they provide. PyPI carries only
+# their 2023 source distributions, which have to be compiled against the installed torch --
+# the "old and broken versions" of #59, and the reason CI had to pin a torch-specific PyG
+# wheel index. Drop them from the resolution by restating geome's metadata without them.
+# Revisit when geome changes its dependencies (https://github.com/theislab/geome).
+[[tool.uv.dependency-metadata]]
+name = "geome"
+requires-dist = [
+  "anndata",
+  "numpy",
+  "pandas",
+  "pytorch-lightning",
+  "scipy",
+  "session-info",
+  "squidpy",
+  "torch",
+  "torch-geometric",
+]
 
 [tool.ruff]
 line-length = 120

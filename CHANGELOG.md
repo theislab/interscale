@@ -56,6 +56,27 @@ and this project adheres to [Semantic Versioning][].
   `DualDecoderCombinedModule.compute_separate_losses` takes it as an optional fifth argument.
 - `LocalModule._common_step` returned a 4-tuple where the training plan unpacked 5; it now
   matches the 6-tuple contract of the other modules.
+- **`requires-python` is now `>=3.12`**, was `>=3.11`, and the test matrix's lower rung moves
+  with it. anndata, scanpy, squidpy and scvi-tools all require 3.12 already, so the 3.11 claim
+  only told the resolver to back-solve to years-old releases of them on that interpreter — the
+  "old and broken versions" of #59.
+- Dependency bounds were loosened (#59). `scanpy` no longer carries a `<1.13` upper bound: the
+  break was squidpy's, not scanpy's — squidpy <= 1.8.3 imports the private
+  `scanpy.plotting._tools`, which the scanpy 1.13 plotting rewrite moved under
+  `scanpy.plotting.legacy`, so `import squidpy` (and through it `import interscale`) raised
+  `ModuleNotFoundError` on scanpy 1.13.0a2. squidpy's main branch already imports from either
+  location, so `[tool.uv.sources]` takes squidpy from git until that fix is released, with the
+  commit pinned in `uv.lock`. `numpy` stays uncapped and resolves to 2.x; its `>=1.19` floor
+  and scipy's `>=1.7` are gone, since `requires-python` already excludes everything below
+  their first cp312 wheels.
+- `torch-cluster`, `torch-scatter` and `torch-sparse` are no longer part of the resolution.
+  They come from `geome`, which never imports them, and torch-geometric >= 2.3 covers what
+  they provide; PyPI only carries their 2023 source distributions, which must be compiled
+  against the installed torch. `[[tool.uv.dependency-metadata]]` restates geome's requirements
+  without them, so the `[tool.uv] extra-build-dependencies` block and CI's torch-version-pinned
+  `UV_FIND_LINKS` PyG wheel index are both gone. `pip install interscale` still pulls them in
+  through geome — `docs/installation.md` now derives the PyG wheel index from the installed
+  torch instead of naming a version.
 
 ## [0.0.1]
 
