@@ -346,6 +346,16 @@ def apply_sweep_config(cfg, sweep_goal, sweep_config, model_type=None, sweep_par
     if was_frozen:
         cfg.freeze()
 
+    # load_config's _validate_masking ran BEFORE these values were applied, so a sweep could turn
+    # graph-level masking back on behind it. Checked here instead. None is skipped: main_sweep.py's
+    # registration-time check applies every declared parameter with a placeholder value of None.
+    rate = cfg.dataset.mask_percentage
+    if cfg.dataset.prediction_level == "graph" and rate is not None and rate != 0:
+        raise ValueError(
+            f"trial sets dataset.mask_percentage={rate} on a graph-level task; graph labels are trained "
+            "unmasked (config_files/tasks/graph_clas.yaml). Remove the parameter from the sweep."
+        )
+
     if skipped:
         print(f"skipped sweep parameters for components {model_type} does not have: {sorted(skipped)}")
 
