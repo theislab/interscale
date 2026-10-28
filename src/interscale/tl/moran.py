@@ -19,13 +19,12 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from typing import Literal
 
+import anndata as ad
 import numpy as np
 import pandas as pd
+import squidpy as sq
 from scipy.sparse import issparse
 from sklearn.neighbors import NearestNeighbors
-
-import anndata as ad
-import squidpy as sq
 
 __all__ = ["DEFAULT_KS", "moran_scale", "moran_profile", "auc_from_profile", "delta_from_profile", "radii_from_knn"]
 
@@ -282,9 +281,7 @@ def delta_from_profile(profile: pd.DataFrame, split: float) -> pd.DataFrame:
         raise ValueError(f"`split` must lie strictly between {s_min} and {s_max}.")
 
     I = profile.pivot_table(index=groups, columns=scale_col, values="I", dropna=False)
-    out = pd.DataFrame(
-        {"I_min": I[s_min], "I_split": I[split], "I_max": I[s_max]}, index=I.index
-    )
+    out = pd.DataFrame({"I_min": I[s_min], "I_split": I[split], "I_max": I[s_max]}, index=I.index)
     out["delta_local"] = out["I_min"] - out["I_split"]
     out["delta_global"] = out["I_split"] - out["I_max"]
     out["delta_total"] = out["I_min"] - out["I_max"]

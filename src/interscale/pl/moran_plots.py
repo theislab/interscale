@@ -15,13 +15,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Literal
 
+import anndata as ad
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 from matplotlib.axes import Axes
 from matplotlib.patches import Patch
-
-import anndata as ad
 
 __all__ = ["COLOR_LOCAL", "COLOR_GLOBAL", "COLOR_OTHER", "top_local_global", "moran_auc", "moran_curves"]
 
@@ -66,7 +64,11 @@ def top_local_global(
 
 
 def _class_colors(
-    names: Sequence[str], top_local: Sequence[str], top_global: Sequence[str], color_local: str, color_global: str,
+    names: Sequence[str],
+    top_local: Sequence[str],
+    top_global: Sequence[str],
+    color_local: str,
+    color_global: str,
     color_other: str,
 ) -> list[str]:
     return [color_local if g in top_local else color_global if g in top_global else color_other for g in names]
@@ -156,7 +158,9 @@ def moran_auc(
         ticks = [i for i, g in enumerate(names) if g in top_local or g in top_global]
         labels = [names[i] for i in ticks]
     many = n > 20
-    ax.set_xticks(ticks, labels, rotation=90 if many else 45, ha="center" if many else "right", fontsize=6 if many else 9)
+    ax.set_xticks(
+        ticks, labels, rotation=90 if many else 45, ha="center" if many else "right", fontsize=6 if many else 9
+    )
     for tick, g in zip(ax.get_xticklabels(), labels):
         if g in top_local or g in top_global:
             tick.set_color(color_local if g in top_local else color_global)
@@ -187,8 +191,9 @@ def _label_line_ends(ax: Axes, x: float, ys: Sequence[float], labels: Sequence[s
     for i in range(1, len(pos)):
         pos[i] = max(pos[i], pos[i - 1] + gap)
     for p, i in zip(pos, order):
-        ax.annotate(labels[i], (x, ys[i]), xytext=(x + 0.02 * (x_hi - x_lo), p), fontsize=8, color=colors[i],
-                    va="center")
+        ax.annotate(
+            labels[i], (x, ys[i]), xytext=(x + 0.02 * (x_hi - x_lo), p), fontsize=8, color=colors[i], va="center"
+        )
     ax.set_ylim(lo, max(hi, pos.max() + gap))
 
 
@@ -297,6 +302,7 @@ def moran_curves(
         # class-colored curves share a color, so they are labelled directly
         ax.set_xlim(right=scales[-1] + 0.18 * (scales[-1] - scales[0]))
         idx = [i for i, keep in enumerate(in_palette) if not keep]
-        _label_line_ends(ax, scales[-1], [I.loc[genes[i]].iloc[-1] for i in idx], [genes[i] for i in idx],
-                         [colors[i] for i in idx])
+        _label_line_ends(
+            ax, scales[-1], [I.loc[genes[i]].iloc[-1] for i in idx], [genes[i] for i in idx], [colors[i] for i in idx]
+        )
     return _finish(fig, ax, save, show, own_fig)
