@@ -89,6 +89,38 @@ def _task_entry(registry, dataset, task):
     return tasks[task]
 
 
+def results_dir(registry, dataset, task, kind="models"):
+    """Directory that results of ``kind`` for one ``(dataset, task)`` pair are written to.
+
+    The layout is ``<results_root>/<kind>/<dataset>/<task_dir>/``, so a path is *derived*
+    from what the user asked for rather than written out per pair. ``task_dir`` comes from
+    the registry's ``task_dirs:`` map, falling back to the task key itself.
+
+    Parameters
+    ----------
+    registry : dict
+        A registry as returned by :func:`load_registry`.
+    dataset, task : str
+        The pair, validated against the registry.
+    kind : str
+        Top-level tree: ``models``, ``figures`` or ``_scratch``.
+
+    Returns
+    -------
+    str or None
+        The directory, with a trailing slash — ``train/_training.py`` builds checkpoint
+        paths by string concatenation, so the slash is required, not cosmetic. ``None`` when
+        the registry declares no ``results_root:``, which leaves ``model.save`` to the
+        config files as before.
+    """
+    root = registry.get("results_root")
+    if not root:
+        return None
+    _task_entry(registry, dataset, task)  # reject an unknown pair before building a path
+    task_dir = (registry.get("task_dirs") or {}).get(task, task)
+    return f"{str(root).rstrip('/')}/{kind}/{dataset}/{task_dir}/"
+
+
 def resolve_config_paths(dataset, task, registry_path=None, registry=None):
     """Resolve a ``(dataset, task)`` pair into config file paths plus flat overrides.
 
@@ -117,6 +149,14 @@ def resolve_config_paths(dataset, task, registry_path=None, registry=None):
     overrides = {}
     overrides.update(dataset_entry.get("overrides") or {})
     overrides.update(task_entry.get("overrides") or {})
+
+    # Where a run saves is a property of the layout, not of the pair, so it is derived from
+    # (dataset, task) rather than repeated in every overrides block. An explicit model.save
+    # still wins -- that is how a sweep redirects its trials into _scratch/.
+    if "model.save" not in overrides:
+        derived = results_dir(registry, dataset, task, kind="models")
+        if derived is not None:
+            overrides["model.save"] = derived
 
     flat_overrides = []
     for key, value in overrides.items():

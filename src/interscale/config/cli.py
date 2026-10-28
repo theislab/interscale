@@ -7,8 +7,40 @@ per-dataset shell scripts did.
 
 import sys
 
+import yaml
+
 from . import load_config
-from .registry import iter_pairs, list_datasets, list_tasks, load_registry, resolve_config
+from .registry import iter_pairs, list_datasets, list_tasks, load_registry, resolve_config_paths
+
+
+def parse_overrides(pairs, fail=None):
+    """Turn ``["a.b=1", "c=x"]`` into the flat ``["a.b", 1, "c", "x"]`` merge_from_list wants.
+
+    Values go through ``yaml.safe_load`` so ``0.003`` arrives as a float and ``false`` as a
+    bool; yacs type-checks against the existing value and would reject the strings.
+
+    Parameters
+    ----------
+    pairs : list[str] or None
+    fail : callable, optional
+        Called with a message before raising, so the CLI can report a clean error instead of a
+        traceback. ``parser.error`` exits, so the raise is not reached there; a hook that
+        returns still gets the exception, so a malformed pair is never silently dropped.
+
+    Returns
+    -------
+    list
+    """
+    flat = []
+    for pair in pairs or []:
+        if "=" not in pair:
+            message = f"--set expects KEY=VALUE, got '{pair}'"
+            if fail is not None:
+                fail(message)
+            raise ValueError(message)
+        key, _, raw = pair.partition("=")
+        flat.extend([key.strip(), yaml.safe_load(raw)])
+    return flat
 
 
 def add_config_args(parser):
@@ -40,6 +72,18 @@ def add_config_args(parser):
         type=str,
         default=None,
         help="A single config file, bypassing the registry. Mutually exclusive with --dataset/--task.",
+    )
+    parser.add_argument(
+        "--set",
+        dest="overrides",
+        action="append",
+        default=None,
+        metavar="KEY=VALUE",
+        help="Override one resolved config value, e.g. --set optim.lr=0.003. Repeatable. Applied "
+        "after every config file and after the registry's per-pair overrides, so it wins over all "
+        "of them. Use it for a value that belongs to one INVOCATION rather than to the pair -- "
+        "`--model_type GlobalModel --set model.global_component.parameters.type_gex_embedding=PCA` "
+        "lets three model arms share one sweep yaml instead of needing one file each.",
     )
     parser.add_argument(
         "--list",
@@ -82,8 +126,10 @@ def resolve_cfg_from_args(args, parser=None):
     if args.cfg is not None and using_registry:
         fail("--cfg cannot be combined with --dataset/--task; the layered registry config would be ignored.")
 
+    extra = parse_overrides(getattr(args, "overrides", None), fail=fail)
+
     if args.cfg is not None:
-        return load_config(args.cfg)
+        return load_config(args.cfg, overrides=extra or None)
 
     if not using_registry:
         fail("give either --dataset and --task, or --cfg. Use --list to see the registered pairs.")
@@ -94,6 +140,8 @@ def resolve_cfg_from_args(args, parser=None):
     # KeyError from the registry carries the list of valid keys; surface it as a clean CLI
     # error rather than a traceback several minutes into a queued job.
     try:
-        return resolve_config(args.dataset, args.task, registry_path=args.registry)
+        paths, overrides = resolve_config_paths(args.dataset, args.task, registry_path=args.registry)
     except KeyError as exc:
         fail(str(exc).strip("\"'"))
+    # --set last, so an invocation-level value wins over the pair's own overrides.
+    return load_config(paths, overrides=overrides + extra)
