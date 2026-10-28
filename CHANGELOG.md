@@ -19,7 +19,7 @@ and this project adheres to [Semantic Versioning][].
   `anchor_zones` cuts that into `anchor core` / `near` / `far` at the local component's reach
   (`local_reach_um` = `num_layers` x `radius`), and `profile_by_distance` /
   `anchor_enrichment` profile expression and composition against it. This is the evidence a
-  *global* dimension carries a long-range interaction rather than a neighbourhood effect:
+  _global_ dimension carries a long-range interaction rather than a neighbourhood effect:
   every distance plot marks the local reach, past which no cell's neighbourhood extends.
 
 - Gene-wise (per-entry) masking for the node-level reconstruction task, alongside the existing

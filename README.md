@@ -13,6 +13,7 @@
 InterScale is a package for cell interaction analysis in spatial transcriptomics data. It is build on top of PyG (via geome), AnnData, scanpy squidpy and scvi-tools.
 
 ## Resources
+
 - An installation guide, tutorials and API documentation is available in the [documentation](https://interscale.readthedocs.io/).
 - Check out our seperate [reproduciblity repository](https://github.com/theislab/InterScale_reproducibility/) to reproduce the figures for the manuscript
 - Please use [issues](https://github.com/theislab/interscale/issues) to submit bug reports.
