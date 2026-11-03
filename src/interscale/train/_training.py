@@ -11,11 +11,13 @@ from lightning.pytorch.trainer import seed_everything
 
 from interscale.tl.utils import get_model_filename_prefix
 from interscale.train._trainingplans import TrainingPlan
-from interscale.train._utils import (
+from interscale.train._utils import (  # noqa: F401 -- metric_direction re-exported from here
+    MINIMIZED_SUFFIXES,
     MetricsHistory,
     NodeMaskResampleCallback,
     PostWarmupEarlyStopping,
     PostWarmupModelCheckpoint,
+    metric_direction,
 )
 
 # from interscale.model.base._trainer import TrainRunner
@@ -31,7 +33,7 @@ class NodeMaskingTrainingPlan:
     _training_plan_cls = TrainingPlan
 
     def _resolve_monitor(self) -> tuple[str, str]:
-        """Metric driving EarlyStopping / ModelCheckpoint, and the direction to optimise it.
+        """Metric driving EarlyStopping / ModelCheckpoint / ReduceLROnPlateau, and its direction.
 
         Returns
         -------
@@ -43,7 +45,7 @@ class NodeMaskingTrainingPlan:
             # val_loss is a poor early-stopping criterion under class imbalance: a collapsed
             # constant predictor is a genuine minimum of the weighted loss.
             monitor = "val_f1_macro" if "classification" in self.prediction_task else "val_loss"
-        return monitor, ("min" if monitor.endswith("loss") else "max")
+        return monitor, metric_direction(monitor)
 
     # @devices_dsp.dedent -TODO: Why is this here in scvi-tools?
     def train(
@@ -131,6 +133,10 @@ class NodeMaskingTrainingPlan:
         loss_callback = None
         performance_callback = None
 
+        # Resolved before the plan is built: the plan's ReduceLROnPlateau monitors the same metric,
+        # in the same direction, as the EarlyStopping / ModelCheckpoint callbacks below.
+        monitor, mode = self._resolve_monitor()
+
         # defines optimizers, training step, val step, logged metrics
         training_plan = self._training_plan_cls(
             self.module,
@@ -148,9 +154,10 @@ class NodeMaskingTrainingPlan:
             lr_warmup=self._cfg.optim.lr_warmup,
             lr_max_epochs=self._cfg.optim.n_epochs,
             patience_in_steps=steps_per_epoch,
+            sce_gamma=self._cfg.optim.sce_gamma,
+            monitor=monitor,
+            monitor_mode=mode,
         )
-
-        monitor, mode = self._resolve_monitor()
 
         # Neither the best checkpoint nor EarlyStopping's best score may come from the LR warm-up:
         # epoch e trains at e / lr_warmup of optim.lr, so epoch `lr_warmup` is the first at full LR.
