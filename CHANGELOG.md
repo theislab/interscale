@@ -85,6 +85,10 @@ and this project adheres to [Semantic Versioning][].
 - `optim.monitor` minimised only metrics ending in `loss`, so monitoring an error -- `val_mse`, or
   the new scaled cosine error -- made early stopping and checkpointing keep the *worst* epoch. Names
   ending in `error` or `mse` are now minimised too.
+- `main_sweep --metric_goal` defaulted to `maximize`, so a sweep ranked by an error
+  (`--metric val_scaled_cosine_error`, `val_mse`) kept its worst trial unless the goal was passed.
+  The default is now inferred from the metric name by `train.metric_direction`, the same rule
+  `optim.monitor` uses; an explicit `--metric_goal` still wins, with a warning if it disagrees.
 
 ## [0.0.1]
 
