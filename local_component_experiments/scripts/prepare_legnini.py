@@ -10,16 +10,17 @@ Writes data/legnini_prepared.h5ad
 
 import warnings
 from pathlib import Path
-import squidpy as sq
 
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import squidpy as sq
 
 warnings.filterwarnings("ignore")
 
 from interscale import datasets as ds
 from interscale.pp import compute_neighborhood_stats
+
 
 def add_graphs(adata, library_key, radius, n_neighs):
     """Build the radius, kNN and Delaunay graphs once, per library_key group, and keep them in adata.obsp."""
@@ -32,6 +33,7 @@ def add_graphs(adata, library_key, radius, n_neighs):
     for name in ["radius", "knn", "delaunay"]:
         degree = adata.obsp[f"{name}_connectivities"].getnnz(axis=1)
         print(f"{name}: {degree.mean():.1f} neighbours per cell on average")
+
 
 # hardcoding the path for now
 DATA = "legnini"
