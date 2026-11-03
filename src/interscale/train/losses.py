@@ -181,6 +181,10 @@ class SCELoss(torch.nn.Module):
 
 
 class SCE_EntropyATT_Loss(torch.nn.Module):
+    # Added by Allen13x on the legacy branch, "Added Attention entropy penalty loss" (2025-12-10):
+    # https://github.com/theislab/interscale/commit/f37acb61575f417b290b86b63b969f390ea4936e
+    # The reconstruction term is GraphMAE's scaled cosine error (see SCELoss). No source is cited
+    # for the entropy penalty.
     """SCE loss with entropy of attention weights."""
 
     def __init__(self, gamma: float = 3.0, beta=1, use_last_layer_only=True):
