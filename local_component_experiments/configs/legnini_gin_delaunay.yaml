@@ -19,7 +19,7 @@ dataset:
   sample_key: ['sample']
   split_key: split
   batch_size: 1
-  spatial_neigbors_kwargs: {delaunay: True, radius: null, library_key: sample}
+  connectivity_key: delaunay_connectivities
 wandb:
   use: true
   project_name: legnini-graphs

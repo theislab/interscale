@@ -67,6 +67,10 @@ def local_reach_um(cfg) -> float:
     realised edge lengths). The bound is the useful number here: anything past it is out of
     the local component's reach for every cell, not just the average one.
     """
+    if getattr(cfg.dataset, "connectivity_key", None) is not None:
+        raise ValueError(
+            "dataset.connectivity_key is set, so the graph was built outside InterScale."
+        )
     radius = cfg.dataset.spatial_neigbors_kwargs.radius
     if radius is None:
         raise ValueError(

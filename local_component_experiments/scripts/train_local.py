@@ -12,7 +12,7 @@ from interscale.geome_dataloader import GraphAnnDataModule
 from interscale.model import LocalModel
 from interscale.tl import prepare_geome_dataset, set_full_reproducibility
 
-# Usage, from the repo root:  python scripts/train_local.py configs/merfish_gcn_radius.yaml
+# Usage, from local_component_experiments:  python scripts/train_local.py configs/legnini_gat_delaunay.yaml
 if len(sys.argv) < 2:
     raise SystemExit("usage: python scripts/train_local.py <config.yaml>")
 
@@ -39,7 +39,6 @@ model = LocalModel(adata, cfg=cfg)
 print(model._model_summary_string)
 
 # 4. Graphs and data loaders (tutorial: prepare_geome_dataset + GraphAnnDataModule)
-# takes that slice’s cells, connects every pair of cells closer than 30 um, packs the result into a graph
 datas, _ = prepare_geome_dataset(adata, cfg)
 dm = GraphAnnDataModule(
     datas=datas,
@@ -55,6 +54,7 @@ dm = GraphAnnDataModule(
 model.train(
     max_epochs=cfg.optim.n_epochs, datamodule=dm, early_stopping=cfg.optim.early_stopping, wandb_use=cfg.wandb.use
 )
+model.save(cfg.model.save, overwrite=True)
 
 # 6. Save the metrics of every epoch (tutorial plots them instead). The filename has dataset name, GNN and seed,
 #    so runs never overwrite each other.

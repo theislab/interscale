@@ -191,6 +191,10 @@ def main():
     OUT.parent.mkdir(parents=True, exist_ok=True)
     adata.write_h5ad(OUT)
     print(f"\nSaved {adata.n_obs} cells x {adata.n_vars} genes to {OUT}")
+    print("Number of classes:", adata.obs["Cell_class"].nunique())
+    print(adata.obs["Cell_class"].value_counts())
+    print("\nClass counts by split:")
+    print(pd.crosstab(adata.obs["Cell_class"], adata.obs["split"]))
 
 
 if __name__ == "__main__":

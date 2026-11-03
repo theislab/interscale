@@ -10,6 +10,7 @@ Writes data/legnini_prepared.h5ad
 
 import warnings
 from pathlib import Path
+import squidpy as sq
 
 import numpy as np
 import pandas as pd
@@ -19,6 +20,18 @@ warnings.filterwarnings("ignore")
 
 from interscale import datasets as ds
 from interscale.pp import compute_neighborhood_stats
+
+def add_graphs(adata, library_key, radius, n_neighs):
+    """Build the radius, kNN and Delaunay graphs once, per library_key group, and keep them in adata.obsp."""
+    adata.obs[library_key] = adata.obs[library_key].astype("category")
+    common = dict(coord_type="generic", library_key=library_key)
+    sq.gr.spatial_neighbors(adata, radius=radius, key_added="radius", **common)
+    sq.gr.spatial_neighbors(adata, n_neighs=n_neighs, key_added="knn", **common)
+    sq.gr.spatial_neighbors(adata, delaunay=True, key_added="delaunay", **common)
+
+    for name in ["radius", "knn", "delaunay"]:
+        degree = adata.obsp[f"{name}_connectivities"].getnnz(axis=1)
+        print(f"{name}: {degree.mean():.1f} neighbours per cell on average")
 
 # hardcoding the path for now
 DATA = "legnini"
@@ -69,6 +82,9 @@ adata.obs.loc[adata.obs["sample"].isin(test_samples), "split"] = "test"
 df = adata.obs[["split", "sample", "condition"]]
 value_counts = pd.DataFrame(df.values, columns=df.columns).value_counts()
 print(value_counts)
+
+# 5. adding graphs
+add_graphs(adata.copy(), library_key="sample", radius=200, n_neighs=10)
 
 # saving prepped data
 OUT.parent.mkdir(parents=True, exist_ok=True)

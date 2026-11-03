@@ -19,7 +19,7 @@ dataset:
   sample_key: ['sample']          # one graph per organoid section
   split_key: split
   batch_size: 1
-  spatial_neigbors_kwargs: {radius: 200, library_key: sample}
+  connectivity_key: radius_connectivities
 wandb:
   use: true
   project_name: legnini-graphs

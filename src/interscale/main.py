@@ -42,11 +42,17 @@ def main(cfg, model_type):
     if cfg.dataset.segmentation_robustness is not None:
         node_fraction = cfg.dataset.segmentation_robustness[0]
         overflow_fraction = cfg.dataset.segmentation_robustness[1]
-        print("\nApplying segmentation noise:")
-        print(f"- Node fraction: {node_fraction}")
-        print(f"- Overflow fraction: {overflow_fraction}")
-        sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
-        adata = apply_segmentation_noise(adata, node_fraction, overflow_fraction)
+        print("Applying segmentation noise:")
+        print(f" Node fraction: {node_fraction}")
+        print(f" Overflow fraction: {overflow_fraction}")
+        if cfg.dataset.connectivity_key is None:
+            # No stored graph
+            sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
+            adjacency_key = "spatial_connectivities"
+        else:
+            # Stored graph
+            adjacency_key = cfg.dataset.connectivity_key
+        adata = apply_segmentation_noise(adata, node_fraction, overflow_fraction, adjacency_key=adjacency_key)
 
     if model_type == "LocalModel":
         interscale.model.LocalModel._setup_anndata(
