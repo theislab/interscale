@@ -11,7 +11,7 @@ the [scientific Python tutorials][], or the [scanpy developer guide][].
 [scientific Python tutorials]: https://learn.scientific-python.org/development/tutorials/
 [scanpy developer guide]: https://scanpy.readthedocs.io/en/latest/dev/index.html
 
-:::{tip} The *hatch* project manager
+:::{tip} The _hatch_ project manager
 
 We highly recommend to familiarize yourself with [`hatch`][hatch].
 Hatch is a Python project manager that
@@ -63,7 +63,7 @@ This will list “Standalone” environments and a table of “Matrix” environ
 +------------+---------+--------------------------+----------+---------------------------------+-------------+
 | Name       | Type    | Envs                     | Features | Dependencies                    | Scripts     |
 +------------+---------+--------------------------+----------+---------------------------------+-------------+
-| hatch-test | virtual | hatch-test.py3.11-stable | dev      | coverage-enable-subprocess==1.0 | cov-combine |
+| hatch-test | virtual | hatch-test.py3.12-stable | dev      | coverage-enable-subprocess==1.0 | cov-combine |
 |            |         | hatch-test.py3.14-stable | test     | coverage[toml]~=7.4             | cov-report  |
 |            |         | hatch-test.py3.14-pre    |          | pytest-mock~=3.12               | run         |
 |            |         |                          |          | pytest-randomly~=3.15           | run-cov     |

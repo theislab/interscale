@@ -1,13 +1,13 @@
 # Scientific background
 
 This document summarizes the biological motivation, model design, and terminology from the
-InterScale preprint so that the *purpose* behind the code — not just its structure — is clear.
+InterScale preprint so that the _purpose_ behind the code — not just its structure — is clear.
 Read this when working on anything touching model architecture, loss functions, the
 interpretability/evaluation pipeline, or when the code's intent isn't obvious from names alone.
 
 > Drummer, F., Jiménez, S., Di Marco, F., Schaar, A.C., Pentimalli, T.M., Beckman, J.L., Rajewsky, N.,
-> Theis, F.J. *InterScale reveals multi-scale cellular interaction programs in spatial
-> transcriptomics.* bioRxiv (2026). https://doi.org/10.64898/2026.05.07.723456
+> Theis, F.J. _InterScale reveals multi-scale cellular interaction programs in spatial
+> transcriptomics._ bioRxiv (2026). https://doi.org/10.64898/2026.05.07.723456
 > (see also `docs/references.bib`, key `DrummerJimenez_2026`)
 
 ## Motivation
@@ -15,7 +15,7 @@ interpretability/evaluation pipeline, or when the code's intent isn't obvious fr
 Cell–cell communication happens at multiple spatial scales simultaneously: autocrine/juxtacrine
 signaling within a few micrometers, paracrine gradients across a local neighborhood, and
 tissue-wide (or morphogen-gradient) coordination. Existing computational methods for inferring
-cell-cell communication from spatial transcriptomics typically model *one* scale — either
+cell-cell communication from spatial transcriptomics typically model _one_ scale — either
 adjacency-based local neighborhoods (GNN/niche methods like NCEM, NicheCompass) or generic
 long-range dependencies — but not both jointly, and many rely on ligand-receptor priors that are
 incomplete or infeasible for gene-panel-limited imaging-based platforms.
@@ -23,7 +23,7 @@ incomplete or infeasible for gene-panel-limited imaging-based platforms.
 InterScale's core idea: combine a graph neural network (local, short-range, adjacency-constrained)
 with a transformer (global, long-range, effectively fully-connected) in one architecture, so a
 cell's transcriptional state is decomposed into local-neighborhood and tissue-wide contributions
-that can be interpreted *separately*. This is why the codebase is organized around parallel
+that can be interpreted _separately_. This is why the codebase is organized around parallel
 "local component" / "global component" module hierarchies rather than a single monolithic model.
 
 ## Architecture, mapped to code
@@ -37,17 +37,17 @@ building blocks:
   - `GCN` — aggregates neighbor expression via the (self-loop-augmented, row-normalized) adjacency
     matrix; fixed at 2 layers to avoid oversmoothing/oversquashing.
   - `GIN` — Graph Isomorphism Network update rule with a learnable epsilon and an MLP.
-  - `SCVI` — wraps `scvi.nn.Encoder`; captures gene-expression structure, *not* spatial
+  - `SCVI` — wraps `scvi.nn.Encoder`; captures gene-expression structure, _not_ spatial
     neighborhood information (despite living in the "local" module tree).
   - `Precomputed` — loads embeddings computed outside InterScale (e.g. CellCharter, BANKSY) from
     `adata.obsm`; not trainable, so a dual-decoder setup isn't possible with this option.
 - **From local to global**: `H_local` is LayerNorm'd, then padded/truncated to a fixed sequence
   length `S` per sliding window (`pad_batch`), and a CLS token is prepended. No positional
   encoding is added — the GNN already encoded spatial structure, and the transformer is meant to
-  find interactions *without* distance restriction.
+  find interactions _without_ distance restriction.
 - **Global component** (`interscale.module.global_modules`,
   `TransformerNodeEncoderHook`) — a BERT-style multi-head self-attention transformer producing
-  `H_global`, i.e. tissue/window-wide context. Notably, the attention mask is the *inverse*
+  `H_global`, i.e. tissue/window-wide context. Notably, the attention mask is the _inverse_
   adjacency matrix (`M = 1 - A`): the transformer is explicitly steered toward attending to cells
   that are **not** already connected in the local graph, so local and global signal don't
   duplicate each other.
@@ -67,7 +67,7 @@ building blocks:
 
 ## Downstream interpretability — the actual point of the model
 
-Prediction accuracy is a *proxy* used to confirm that local/global information is real signal, not
+Prediction accuracy is a _proxy_ used to confirm that local/global information is real signal, not
 the end goal. The paper's real contribution is post-hoc, scale-resolved interpretation, at three
 levels (`interscale.evaluation`):
 
@@ -96,19 +96,19 @@ levels (`interscale.evaluation`):
 
 ## Key terminology / notation (paper → code)
 
-| Paper notation | Meaning | Code |
-|---|---|---|
-| `X ∈ R^{N,F}` | gene expression matrix (cells × genes) | expression layer registered via `AnnDataManager` |
-| `A` | adjacency / spatial connectivity matrix | built via `squidpy.gr.spatial_neighbors`, converted to edge index by `geome.transforms.AddEdgeIndex` |
-| `H_local` / `E_local` | local (neighborhood) embedding | local module output |
-| `H_global` / `E_global` | global (tissue-wide) embedding | global module (transformer) output |
-| `CLS` | classification/tissue-summary token, attends to all cells | prepended before transformer; extracted in `CombinedModel.get_model_output` |
-| `M = 1 - A` | transformer attention mask (blocks locally-connected pairs) | global module attention mask |
-| `k` / `L_GCN` | number of GCN/GIN layers = local receptive field radius | `cfg.model.local_component.parameters.*` |
-| `S` | max transformer sequence length per sliding window | `pad_batch` / dataloader |
-| `p_m` / `pct_mask_nodes` | fraction of nodes masked per graph | `cfg.dataset` / `GraphAnnDataModule` |
-| `M_net` | net attention flow matrix (directional sender→receiver) | attention relevance / net-flow analysis in `interscale.evaluation` |
-| sliding window `w`, overlap `o`, step `T = w - o` | tissue partitioning for scalability | `prepare_geome_dataset` / squidpy sliding-window util |
+| Paper notation                                    | Meaning                                                     | Code                                                                                                 |
+| ------------------------------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `X ∈ R^{N,F}`                                     | gene expression matrix (cells × genes)                      | expression layer registered via `AnnDataManager`                                                     |
+| `A`                                               | adjacency / spatial connectivity matrix                     | built via `squidpy.gr.spatial_neighbors`, converted to edge index by `geome.transforms.AddEdgeIndex` |
+| `H_local` / `E_local`                             | local (neighborhood) embedding                              | local module output                                                                                  |
+| `H_global` / `E_global`                           | global (tissue-wide) embedding                              | global module (transformer) output                                                                   |
+| `CLS`                                             | classification/tissue-summary token, attends to all cells   | prepended before transformer; extracted in `CombinedModel.get_model_output`                          |
+| `M = 1 - A`                                       | transformer attention mask (blocks locally-connected pairs) | global module attention mask                                                                         |
+| `k` / `L_GCN`                                     | number of GCN/GIN layers = local receptive field radius     | `cfg.model.local_component.parameters.*`                                                             |
+| `S`                                               | max transformer sequence length per sliding window          | `pad_batch` / dataloader                                                                             |
+| `p_m` / `pct_mask_nodes`                          | fraction of nodes masked per graph                          | `cfg.dataset` / `GraphAnnDataModule`                                                                 |
+| `M_net`                                           | net attention flow matrix (directional sender→receiver)     | attention relevance / net-flow analysis in `interscale.evaluation`                                   |
+| sliding window `w`, overlap `o`, step `T = w - o` | tissue partitioning for scalability                         | `prepare_geome_dataset` / squidpy sliding-window util                                                |
 
 ## Datasets used in the paper (for context, not bundled with the repo)
 
@@ -116,7 +116,7 @@ levels (`interscale.evaluation`):
   Hedgehog signaling in neural tube organoids; this is the dataset behind `datasets._legnini` and
   `config_files/legnini_example.yaml`. Used to show InterScale recovers spatially-local neuronal
   differentiation programs (`GLI1`, `ISL1`, `TUBB3`) vs. broader progenitor/morphogen-regulation
-  programs (`PROM1`, `NEUROG2`, `HHIP`) from the *same* tissue, without cell-type labels.
+  programs (`PROM1`, `NEUROG2`, `HHIP`) from the _same_ tissue, without cell-type labels.
 - **CosMx human pancreas (ND vs. T1D)** (Melton, Jiménez et al.) — used for node classification and
   the sender-receiver attention analysis; shows disease-associated reorganization (mast cell
   infiltration into islets in T1D) and separates local cell-state programs (endocrine/metabolic,
@@ -137,6 +137,6 @@ levels (`interscale.evaluation`):
 - No ground-truth for cell-cell communication exists, so validation is via proxy classification
   tasks and consistency with known biology (e.g. Moran's I, known marker genes), not direct
   benchmarking of inferred interactions.
-- Raw attention weights are intentionally *not* used for interpretation (attention-sink effects,
+- Raw attention weights are intentionally _not_ used for interpretation (attention-sink effects,
   window-dependent softmax normalization) — always go through the relevance/net-flow pipeline in
   `interscale.evaluation`, not raw `attn_output_weights`.

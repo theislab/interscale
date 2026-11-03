@@ -26,3 +26,6 @@ InterScale_hyperparameter_sweep/
 src/interscale/tmp/
 src/interscale/logs/
 CLAUDE.local.md
+
+# Revision run records: kept in the working tree so they open easily, never pushed.
+records/

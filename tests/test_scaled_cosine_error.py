@@ -161,8 +161,8 @@ def test_the_cosine_losses_skip_cells_whose_masked_targets_are_all_zero(loss_typ
         plan = _plan("SCE_EntropyATT_Loss", gamma=3.0)
         plan.loss.beta = 0.0  # the reconstruction term alone
         attn = torch.full((1, 1, 40, 40), 1 / 40)
-        got = plan._regression_metrics(y_pred, y_true, "val", plan.valid_metrics, attn=attn, entry_mask=entry_mask)[0]
-        again = plan._regression_metrics(corrupted, y_true, "val", plan.valid_metrics, attn=attn, entry_mask=entry_mask)[0]
+        got = plan._regression_metrics(y_pred, y_true, "val", plan.valid_metrics, attn=attn, entry_mask=entry_mask)
+        again = plan._regression_metrics(corrupted, y_true, "val", plan.valid_metrics, attn=attn, entry_mask=entry_mask)
 
     assert got.item() == pytest.approx(expected.item(), abs=1e-6)
     assert again.item() == pytest.approx(got.item(), abs=1e-6)
@@ -237,18 +237,50 @@ def test_the_plan_logs_sce_for_all_and_for_masked_cells_and_the_masked_one_is_th
     y_pred, y_true = _pair()
     cells, entry_mask = _cell_mask(*y_pred.shape)
 
-    loss, metrics = plan._regression_metrics(y_pred, y_true, "val", plan.valid_metrics, entry_mask=entry_mask)
+    loss = plan._regression_metrics(y_pred, y_true, "val", plan.valid_metrics, entry_mask=entry_mask)
 
-    assert metrics["val_masked_scaled_cosine_error"].item() == pytest.approx(loss.item(), abs=1e-6)
+    # The metrics are objects updated per batch and computed once per epoch (here: one batch).
+    masked = plan.masked_metrics["val_masked"].compute()
+    assert masked["val_masked_scaled_cosine_error"].item() == pytest.approx(loss.item(), abs=1e-5)
     every_cell = scaled_cosine_error(y_pred, y_true, 2.0).mean()
-    assert metrics["val_scaled_cosine_error"].item() == pytest.approx(every_cell.item(), abs=1e-6)
+    assert plan.valid_metrics.compute()["val_scaled_cosine_error"].item() == pytest.approx(every_cell.item(), abs=1e-6)
+
+
+def test_the_epoch_sce_over_several_batches_is_the_value_over_all_their_cells():
+    """The logged number is an epoch metric, not a mean of per-batch values: batches of different
+    sizes and different numbers of scorable cells must not change it."""
+    plan = _plan("SCELoss", gamma=2.0)
+    y_pred, y_true, entry_mask = _zero_masked_targets(n=40, n_zero=7)
+    for lo, hi in ((0, 5), (5, 22), (22, 40)):  # uneven batches, the zero-target cells in the first two
+        plan._regression_metrics(
+            y_pred[lo:hi], y_true[lo:hi], "val", plan.valid_metrics, entry_mask=entry_mask[lo:hi]
+        )
+
+    pooled = masked_regression_metrics(y_pred, y_true, entry_mask, sce_gamma=2.0)
+    got = plan.masked_metrics["val_masked"].compute()
+
+    assert pooled["scaled_cosine_error"].item() == pytest.approx(
+        scaled_cosine_error(
+            (y_pred * entry_mask)[cosine_scorable_rows(y_true, entry_mask)],
+            (y_true * entry_mask)[cosine_scorable_rows(y_true, entry_mask)],
+            2.0,
+        )
+        .mean()
+        .item(),
+        abs=1e-5,
+    )
+    assert got["val_masked_scaled_cosine_error"].item() == pytest.approx(
+        pooled["scaled_cosine_error"].item(), abs=1e-5
+    )
+    assert got["val_masked_cosine_similarity"].item() == pytest.approx(pooled["cosine_similarity"].item(), abs=1e-5)
 
 
 def test_sce_is_tracked_whatever_the_loss():
     plan = _plan("MSELoss", gamma=1.0)
     y_pred, y_true = _pair()
 
-    _, metrics = plan._regression_metrics(y_pred, y_true, "val", plan.valid_metrics)
+    plan._regression_metrics(y_pred, y_true, "val", plan.valid_metrics)
+    metrics = plan.valid_metrics.compute()
 
     cos = nn.functional.cosine_similarity(y_pred, y_true, dim=1).mean()
     assert metrics["val_scaled_cosine_error"].item() == pytest.approx(1 - cos.item(), abs=1e-6)

@@ -117,16 +117,26 @@ def _validate_masking(cfg):
     A reconstruction task with ``mask_percentage`` at 0 has the identity map as its solution, and
     every metric looks excellent, so it fails loudly instead.
 
+    A graph-level task is the opposite case: the label is per graph, so masking is not needed and
+    is switched off (tasks/graph_clas.yaml); a rate > 0 there is rejected rather than silently
+    turning augmentation back on.
+
     Raises
     ------
     ValueError
-        If ``mask_strategy`` is unknown, or ``mask_percentage`` is not a rate in (0, 1] for a
-        regression task.
+        If ``mask_strategy`` is unknown, ``mask_percentage`` is not a rate in (0, 1] for a
+        regression task, or is not 0 for a graph-level task.
     """
     from interscale.tl.masking import MASK_STRATEGIES
 
     if cfg.dataset.mask_strategy not in MASK_STRATEGIES:
         raise ValueError(f"dataset.mask_strategy must be one of {MASK_STRATEGIES}, got {cfg.dataset.mask_strategy!r}.")
+
+    if cfg.dataset.prediction_level == "graph" and cfg.dataset.mask_percentage != 0:
+        raise ValueError(
+            f"dataset.mask_percentage must be 0 for a graph-level task, got {cfg.dataset.mask_percentage}. "
+            "Graph labels do not need input masking; see config_files/tasks/graph_clas.yaml."
+        )
 
     if "regression" not in cfg.dataset.prediction_task:
         return
