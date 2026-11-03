@@ -185,6 +185,31 @@ def apply_mask(batched_data: Batch, mask_strategy: str = "node"):
 # is, so those get the masked entries zeroed in both tensors instead -- which restricts every sum,
 # dot product and norm involved to the masked coordinates, leaving the row structure intact.
 _ROW_STRUCTURED_LOSSES = ("SCELoss", "SCE_EntropyATT_Loss", "BalancedPearsonCorrelationLoss")
+# The ones among them that score each row by its cosine, so need cosine_scorable_rows.
+_COSINE_LOSSES = ("SCELoss", "SCE_EntropyATT_Loss")
+
+
+def cosine_scorable_rows(y_true: torch.Tensor, entry_mask: torch.Tensor) -> torch.Tensor:
+    """Rows a cosine over the masked coordinates is defined for, ``[N]`` boolean.
+
+    That takes at least one masked entry whose target is non-zero. The cosine losses and metrics
+    zero the unmasked entries of both tensors, so a row failing this reaches them with an
+    all-zero target. ``F.normalize`` leaves a zero vector at zero, the cosine is then 0 whatever
+    the prediction, and the row enters the scaled cosine error as a constant ``1 ** gamma = 1``
+    with zero gradient: it dilutes the mean, and the gradient of every other cell with it.
+
+    Two ways to get there:
+
+    - no masked entry -- every unmasked cell under cell masking, where ``entry_mask`` is the cell
+      mask broadcast over all genes (and, under gene masking, a row ``sample_gene_mask`` would
+      fill, were it not filled);
+    - masked entries whose targets are all zero -- under gene masking, a cell whose masked genes
+      happen to be unexpressed. A cell expressing ``k`` genes keeps all of them unmasked with
+      probability about ``(1 - pct) ** k``, so this grows with sparsity: larger panels and
+      low-count cells. Under cell masking the masked target is the whole row, and all-zero cells
+      are dropped by ``tl.remove_zero_expression_cells`` before training.
+    """
+    return (entry_mask & (y_true != 0)).any(dim=1)
 
 
 def masked_row_std(y: torch.Tensor, entry_mask: torch.Tensor, eps: float = 1e-8) -> torch.Tensor:
@@ -252,8 +277,15 @@ def masked_loss(loss_fn, loss_type: str, y_pred: torch.Tensor, y_true: torch.Ten
     if loss_type in _ROW_STRUCTURED_LOSSES:
         # Only the rows with a masked entry. A row without one has no masked coordinates, and
         # zeroed it would enter a cosine criterion as an all-zero row -- an error of exactly 1 that
-        # dilutes the mean and that no prediction can change.
-        rows = entry_mask.any(dim=1)
+        # dilutes the mean and that no prediction can change. For the cosine losses the same goes
+        # for a row whose masked targets are all zero; see cosine_scorable_rows.
+        if loss_type in _COSINE_LOSSES:
+            rows = cosine_scorable_rows(y_true, entry_mask)
+            if not rows.any():
+                # Nothing to score in this batch: a zero that keeps the graph, not a NaN mean.
+                return (y_pred * 0).sum()
+        else:
+            rows = entry_mask.any(dim=1)
         m = entry_mask[rows].to(y_pred.dtype)
         return loss_fn(y_pred[rows] * m, y_true[rows] * m)
 

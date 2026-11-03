@@ -10,7 +10,7 @@ from torchmetrics import MetricCollection
 
 from interscale.module.base._base_module import BaseModule
 from interscale.nn import CosineWarmupScheduler
-from interscale.tl.masking import masked_loss
+from interscale.tl.masking import cosine_scorable_rows, masked_loss
 
 from ._utils import metric_direction
 from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss, scaled_cosine_error
@@ -152,8 +152,10 @@ def masked_regression_metrics(
     # product and the two norms, so this is the cosine on the masked coordinates. Averaged over
     # the cells that HAVE a masked gene only. A cell with none has no masked coordinates, and its
     # all-zero row would enter the mean as a cosine of 0 -- under cell masking that is every
-    # unmasked cell, which scaled the reported cosine by the fraction of cells masked.
-    scored = entry_mask.any(dim=1)
+    # unmasked cell, which scaled the reported cosine by the fraction of cells masked. A cell whose
+    # masked genes are all zero in the target is left out too: its cosine is 0 for any prediction
+    # (see tl.masking.cosine_scorable_rows).
+    scored = cosine_scorable_rows(y_true, entry_mask)
     cosine = nn.functional.cosine_similarity(p_[scored], t_[scored], dim=1)
     sce = scaled_cosine_error(p_[scored], t_[scored], sce_gamma)
 
@@ -414,9 +416,10 @@ class TrainingPlan(pl.LightningModule):
             if entry_mask is None:
                 loss = self.loss(y_pred, y_true, attn)
             else:
-                # Only the cells with a masked entry: a cell without one would enter the cosine
-                # as an all-zero row, i.e. as an error of 1 that no prediction can change.
-                rows = entry_mask.any(dim=1)
+                # Only the cells with a masked, non-zero target: any other cell would enter the
+                # cosine with an all-zero target, i.e. as an error of 1 that no prediction can
+                # change (see cosine_scorable_rows). The attention term is kept either way.
+                rows = cosine_scorable_rows(y_true, entry_mask)
                 m = entry_mask[rows].to(y_pred.dtype)
                 loss = self.loss(y_pred[rows] * m, y_true[rows] * m, attn)
         else:

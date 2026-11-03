@@ -14,7 +14,7 @@ torch = pytest.importorskip("torch")
 from torch import nn
 
 from interscale.config import load_config
-from interscale.tl.masking import masked_loss, sample_gene_mask
+from interscale.tl.masking import cosine_scorable_rows, masked_loss, sample_gene_mask
 from interscale.train._trainingplans import RunningScaledCosineError, TrainingPlan, masked_regression_metrics
 from interscale.train.losses import SCELoss, scaled_cosine_error
 
@@ -120,6 +120,83 @@ def test_under_gene_masking_the_loss_uses_each_cells_masked_genes_and_skips_cell
         [scaled_cosine_error(y_pred[i, entry_mask[i]][None], y_true[i, entry_mask[i]][None], 3.0)[0] for i in rows]
     ).mean()
     assert got.item() == pytest.approx(expected.item(), abs=1e-6)
+
+
+def _zero_masked_targets(n=40, g=20, n_zero=5, seed=0):
+    """Gene masking where the first ``n_zero`` cells have all-zero targets on their masked genes."""
+    y_pred, y_true = _pair(n=n, g=g, seed=seed)
+    y_true = y_true.abs() + 0.1  # no accidental zeros elsewhere
+    entry_mask = sample_gene_mask(n, g, pct=0.3, generator=torch.Generator().manual_seed(seed))
+    entry_mask[:, 0] = True  # every cell also has an unmasked gene left
+    entry_mask[:, -1] = False
+    y_true[:n_zero][entry_mask[:n_zero]] = 0.0
+    return y_pred, y_true, entry_mask
+
+
+def test_a_cell_whose_masked_targets_are_all_zero_is_not_cosine_scorable():
+    y_pred, y_true, entry_mask = _zero_masked_targets()
+    rows = cosine_scorable_rows(y_true, entry_mask)
+    assert not rows[:5].any() and rows[5:].all()
+    # It would otherwise score a constant error of 1 whatever the prediction.
+    m = entry_mask[:5].to(y_pred.dtype)
+    assert torch.allclose(scaled_cosine_error(y_pred[:5] * m, y_true[:5] * m, 3.0), torch.ones(5))
+
+
+@pytest.mark.parametrize("loss_type", ["SCELoss", "SCE_EntropyATT_Loss"])
+def test_the_cosine_losses_skip_cells_whose_masked_targets_are_all_zero(loss_type):
+    y_pred, y_true, entry_mask = _zero_masked_targets()
+    expected = torch.stack(
+        [
+            scaled_cosine_error(y_pred[i, entry_mask[i]][None], y_true[i, entry_mask[i]][None], 3.0)[0]
+            for i in range(5, 40)
+        ]
+    ).mean()
+    corrupted = y_pred.clone()
+    corrupted[:5] = -5.0
+
+    if loss_type == "SCELoss":
+        got = masked_loss(SCELoss(gamma=3.0), "SCELoss", y_pred, y_true, entry_mask)
+        again = masked_loss(SCELoss(gamma=3.0), "SCELoss", corrupted, y_true, entry_mask)
+    else:
+        plan = _plan("SCE_EntropyATT_Loss", gamma=3.0)
+        plan.loss.beta = 0.0  # the reconstruction term alone
+        attn = torch.full((1, 1, 40, 40), 1 / 40)
+        got = plan._regression_metrics(y_pred, y_true, "val", plan.valid_metrics, attn=attn, entry_mask=entry_mask)[0]
+        again = plan._regression_metrics(corrupted, y_true, "val", plan.valid_metrics, attn=attn, entry_mask=entry_mask)[0]
+
+    assert got.item() == pytest.approx(expected.item(), abs=1e-6)
+    assert again.item() == pytest.approx(got.item(), abs=1e-6)
+
+
+def test_a_batch_with_no_scorable_cell_gives_a_zero_loss_not_nan():
+    y_pred, y_true, entry_mask = _zero_masked_targets(n=8, n_zero=8)
+    y_pred.requires_grad_(True)
+    got = masked_loss(SCELoss(gamma=3.0), "SCELoss", y_pred, y_true, entry_mask)
+    assert got.item() == 0.0
+    got.backward()
+    assert y_pred.grad is not None
+
+
+def test_pearson_keeps_cells_whose_masked_targets_are_all_zero():
+    """Its per-gene term reads a zero as an observation; only the cosine losses drop such cells."""
+    from interscale.train.losses import BalancedPearsonCorrelationLoss
+
+    y_pred, y_true, entry_mask = _zero_masked_targets()
+    loss_fn = BalancedPearsonCorrelationLoss()
+    m = entry_mask.to(y_pred.dtype)
+    expected = loss_fn(y_pred * m, y_true * m)
+    got = masked_loss(loss_fn, "BalancedPearsonCorrelationLoss", y_pred, y_true, entry_mask)
+    assert got.item() == pytest.approx(expected.item(), abs=1e-6)
+
+
+def test_the_masked_cosine_metrics_skip_cells_whose_masked_targets_are_all_zero():
+    y_pred, y_true, entry_mask = _zero_masked_targets()
+    got = masked_regression_metrics(y_pred, y_true, entry_mask, sce_gamma=2.0)
+    m = entry_mask[5:].to(y_pred.dtype)
+    cos = nn.functional.cosine_similarity(y_pred[5:] * m, y_true[5:] * m, dim=1).mean()
+    assert got["cosine_similarity"].item() == pytest.approx(cos.item(), abs=1e-6)
+    sce = scaled_cosine_error(y_pred[5:] * m, y_true[5:] * m, 2.0).mean()
+    assert got["scaled_cosine_error"].item() == pytest.approx(sce.item(), abs=1e-6)
 
 
 def test_the_masked_cosine_metrics_average_over_masked_cells_only():

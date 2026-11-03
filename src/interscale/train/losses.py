@@ -210,7 +210,9 @@ class SCE_EntropyATT_Loss(torch.nn.Module):
         attn : torch.Tensor [N, H, N, N]
             Attention weights.
         """
-        loss_recon = scaled_cosine_error(x, y, self.gamma).mean()
+        # No rows (no cell in the batch with a masked, non-zero target): a zero that keeps the
+        # graph, rather than the NaN mean of an empty tensor, so the attention term still trains.
+        loss_recon = scaled_cosine_error(x, y, self.gamma).mean() if len(x) else (x * 0).sum()
 
         if self.use_last_layer_only and attn.dim() == 5:
             attn = attn[-1]  # [Batch, Heads, N, N]

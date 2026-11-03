@@ -82,6 +82,13 @@ and this project adheres to [Semantic Versioning][].
 - Under gene masking, the row-normalising losses (`SCELoss`, `SCE_EntropyATT_Loss`,
   `BalancedPearsonCorrelationLoss`) counted a cell with no masked gene as an all-zero row. Such
   cells are now left out; at typical rates and panel sizes they almost never occur.
+- Under gene masking, the cosine losses (`SCELoss`, `SCE_EntropyATT_Loss`) and the masked
+  cosine metrics also counted a cell whose masked genes are all zero in the target: its cosine
+  is 0 for any prediction, so it entered as a constant error of 1 with no gradient. Such cells
+  are now left out too (`tl.masking.cosine_scorable_rows`). A cell expressing `k` genes keeps
+  them all unmasked with probability about `(1 - pct) ** k`, so this grows with sparsity --
+  larger panels, low-count cells. Cell masking is unaffected: all-zero cells are removed before
+  training. A batch with no scorable cell now gives a loss of 0 rather than NaN.
 - `optim.monitor` minimised only metrics ending in `loss`, so monitoring an error -- `val_mse`, or
   the new scaled cosine error -- made early stopping and checkpointing keep the *worst* epoch. Names
   ending in `error` or `mse` are now minimised too.
