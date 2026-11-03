@@ -15,16 +15,17 @@ def _edge_index_transform(cfg: CN, library_key: str):
     cfg.dataset.spatial_neigbors_kwargs.merge_from_list(["library_key", library_key])
     spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
     logg.warning(
-           "dataset.connectivity_key is not set, so the spatial graph is built per sample with "
-           f"squidpy.gr.spatial_neighbors({dict(spatial_neigbors_kwargs)}), library_key='{library_key}'. "
-           "To use a graph built beforehand, store it in adata.obsp and set dataset.connectivity_key."
-       )
+        "dataset.connectivity_key is not set, so the spatial graph is built per sample with "
+        f"squidpy.gr.spatial_neighbors({dict(spatial_neigbors_kwargs)}), library_key='{library_key}'. "
+        "To use a graph built beforehand, store it in adata.obsp and set dataset.connectivity_key."
+    )
     return transforms.AddEdgeIndex(
         spatial_key="spatial",
         key_added="adj_matrix",
         func_args=spatial_neigbors_kwargs,
         edge_index_key="edge_index",
     )
+
 
 def _check_connectivity_key(adata, cfg: CN):
     """In case if precomputed graph is missing, fails early"""
@@ -34,6 +35,7 @@ def _check_connectivity_key(adata, cfg: CN):
             f"'{connectivity_key}' not found in adata.obsp (available: {list(adata.obsp.keys())}). "
             f"Build the graph beforehand."
         )
+
 
 def prepare_a2d_dataset(cfg: CN):
     """ """
