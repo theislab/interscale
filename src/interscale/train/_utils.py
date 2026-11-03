@@ -2,6 +2,35 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from lightning.pytorch.callbacks import Callback
 
+# Lower is better for a loss and for an error -- mse, and the scaled cosine error, which would
+# otherwise be maximised when monitored. Everything else logged (r2, correlations, cosine
+# similarity, f1, accuracy) is higher-is-better.
+MINIMIZED_SUFFIXES = ("loss", "error", "mse")
+
+
+def metric_direction(metric: str) -> str:
+    """Direction a logged metric should be optimised in, inferred from its name.
+
+    Shared by the layers that each pick a direction independently: the in-trial callbacks and
+    the ReduceLROnPlateau scheduler via :meth:`NodeMaskingTrainingPlan._resolve_monitor`, and the
+    wandb sweep's own ``metric.goal`` in ``main_sweep``. The sweep's goal is registered
+    server-side before any trial exists, so it cannot call ``_resolve_monitor`` (a bound method
+    needing a model) -- it calls this on the bare metric name instead, which keeps them from
+    disagreeing. It lives here rather than in ``_training`` so ``_trainingplans`` can import it
+    without a cycle.
+
+    Parameters
+    ----------
+    metric : str
+        Name of a metric the training plan logs, e.g. ``"val_scaled_cosine_error"``.
+
+    Returns
+    -------
+    str
+        ``"min"`` if lower is better, ``"max"`` otherwise.
+    """
+    return "min" if metric.endswith(MINIMIZED_SUFFIXES) else "max"
+
 
 class NodeMaskResampleCallback(Callback):
     """Redraws the training node mask at the start of every epoch.

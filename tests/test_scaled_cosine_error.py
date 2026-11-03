@@ -204,3 +204,29 @@ def test_early_stopping_minimises_errors(monitor, mode):
     owner = SimpleNamespace(_cfg=SimpleNamespace(optim=SimpleNamespace(monitor=monitor)), prediction_task="regression")
 
     assert NodeMaskingTrainingPlan._resolve_monitor(owner) == (monitor, mode)
+
+
+@pytest.mark.parametrize(
+    ("task", "monitor", "mode", "expected_metric"),
+    [
+        ("regression", None, None, "val_r2"),
+        ("regression", "val_loss", None, "val_loss"),
+        ("regression", "val_masked_scaled_cosine_error", None, "val_masked_scaled_cosine_error"),
+        ("regression", "val_pearson_corr", "max", "val_pearson_corr"),
+        ("classification", None, None, "val_f1_macro"),
+    ],
+)
+def test_reduce_lr_on_plateau_follows_the_monitor_and_its_direction(task, monitor, mode, expected_metric):
+    """It was hardcoded to mode="min" on val_r2 / val_f1_macro, cutting the LR on improvement."""
+    from interscale.train import metric_direction
+
+    plan = TrainingPlan(
+        _Stub(), task, "node", "SCELoss" if task == "regression" else "CrossEntropy", "gene", batch_size=2,
+        lr_scheduler="ReduceLROnPlateau", monitor=monitor, monitor_mode=mode,
+    )  # fmt: skip
+    plan.module = nn.Linear(2, 2)  # configure_optimizers needs parameters; the stub has none
+
+    _, [scheduler] = plan.configure_optimizers()
+
+    assert scheduler["monitor"] == expected_metric
+    assert scheduler["scheduler"].mode == (mode or metric_direction(expected_metric))

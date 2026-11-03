@@ -12,6 +12,7 @@ from interscale.module.base._base_module import BaseModule
 from interscale.nn import CosineWarmupScheduler
 from interscale.tl.masking import masked_loss
 
+from ._utils import metric_direction
 from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss, scaled_cosine_error
 
 
@@ -203,6 +204,12 @@ class TrainingPlan(pl.LightningModule):
 
     lr_scheduler: None | Literal["ReduceLROnPlateau", "CosineWarmupScheduler"] = None
         Learning rate scheduler to use. Default is None. CosineWarmupScheduler reduces LR at each step, ReduceLROnPlateau reduces LR with a patience if no improvement is seen.
+    monitor: str | None = None
+        Metric ReduceLROnPlateau watches. ``NodeMaskingTrainingPlan.train`` passes the one
+        ``_resolve_monitor`` gives the EarlyStopping / ModelCheckpoint callbacks
+        (``optim.monitor``). Default: ``val_f1_macro`` for classification, ``val_r2`` for regression.
+    monitor_mode: Literal["min", "max"] | None = None
+        Direction of ``monitor``. Default: inferred from its name by ``metric_direction``.
     """
 
     def __init__(
@@ -223,6 +230,8 @@ class TrainingPlan(pl.LightningModule):
         lr_max_epochs: int = 100000,
         patience_in_steps: int = 100000,
         sce_gamma: float = 3.0,
+        monitor: str | None = None,
+        monitor_mode: Literal["min", "max"] | None = None,
         **kwargs,
     ):
         super().__init__()
@@ -264,6 +273,11 @@ class TrainingPlan(pl.LightningModule):
             self.monitor_metric = "val_r2"
         else:
             raise ValueError("Prediction task must define 'classification' or 'regression'.")
+        if monitor is not None:
+            self.monitor_metric = monitor
+        # ReduceLROnPlateau was hardcoded to mode="min" while monitoring val_r2 / val_f1_macro, both
+        # higher-is-better: it cut the LR whenever the score stopped *falling*, i.e. on improvement.
+        self.monitor_mode = monitor_mode or metric_direction(self.monitor_metric)
 
         self.train_metrics = metrics.clone(prefix="train_")
         self.valid_metrics = metrics.clone(prefix="val_")
@@ -694,8 +708,10 @@ class TrainingPlan(pl.LightningModule):
         #     params.extend(filter(lambda p: p.requires_grad, self.model.global_component.parameters()))
         optimizer = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
         if self.lr_scheduler == "ReduceLROnPlateau":
+            # No `verbose`: deprecated since torch 2.2 and since removed, where it raises a
+            # TypeError. LearningRateMonitor logs the LR anyway.
             lr_scheduler = ReduceLROnPlateau(
-                optimizer, mode="min", factor=0.1, patience=self.patience_in_steps, verbose=True
+                optimizer, mode=self.monitor_mode, factor=0.1, patience=self.patience_in_steps
             )
         elif self.lr_scheduler == "CosineWarmupScheduler":
             lr_scheduler = CosineWarmupScheduler(optimizer, warmup=self.lr_warmup, max_epochs=self.lr_max_epochs)

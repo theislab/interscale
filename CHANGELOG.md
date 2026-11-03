@@ -89,6 +89,15 @@ and this project adheres to [Semantic Versioning][].
   (`--metric val_scaled_cosine_error`, `val_mse`) kept its worst trial unless the goal was passed.
   The default is now inferred from the metric name by `train.metric_direction`, the same rule
   `optim.monitor` uses; an explicit `--metric_goal` still wins, with a warning if it disagrees.
+- `lr_scheduler: ReduceLROnPlateau` ran in `mode="min"` on `val_r2` (regression) or
+  `val_f1_macro` (classification), both higher-is-better, so it cut the LR when the score
+  *improved*; it also ignored `optim.monitor`, which the config says drives it. It now monitors
+  the metric `_resolve_monitor` gives the early-stopping and checkpoint callbacks, in that
+  metric's direction (`val_loss`, minimised, for regression under `monitor: auto`). Its
+  `verbose=True` is dropped: recent torch removed the argument, so the scheduler raised a
+  `TypeError` at `configure_optimizers`. `metric_direction` moved to `train._utils` (still
+  importable from `interscale.train` and `train._training`). **This changes training under
+  `ReduceLROnPlateau`; the default `CosineWarmupScheduler` is unaffected.**
 
 ## [0.0.1]
 

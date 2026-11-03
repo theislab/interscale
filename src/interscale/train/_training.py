@@ -11,36 +11,14 @@ from lightning.pytorch.trainer import seed_everything
 
 from interscale.tl.utils import get_model_filename_prefix
 from interscale.train._trainingplans import TrainingPlan
-from interscale.train._utils import MetricsHistory, NodeMaskResampleCallback
+from interscale.train._utils import (  # noqa: F401 -- metric_direction re-exported from here
+    MINIMIZED_SUFFIXES,
+    MetricsHistory,
+    NodeMaskResampleCallback,
+    metric_direction,
+)
 
 # from interscale.model.base._trainer import TrainRunner
-
-# Lower is better for a loss and for an error -- mse, and the scaled cosine error, which would
-# otherwise be maximised when monitored. Everything else logged (r2, correlations, cosine
-# similarity, f1, accuracy) is higher-is-better.
-MINIMIZED_SUFFIXES = ("loss", "error", "mse")
-
-
-def metric_direction(metric: str) -> str:
-    """Direction a logged metric should be optimised in, inferred from its name.
-
-    Shared by the two layers that each pick a direction independently: the in-trial callbacks
-    via :meth:`NodeMaskingTrainingPlan._resolve_monitor`, and the wandb sweep's own
-    ``metric.goal`` in ``main_sweep``. The sweep's goal is registered server-side before any
-    trial exists, so it cannot call ``_resolve_monitor`` (a bound method needing a model) -- it
-    calls this on the bare metric name instead, which keeps the two from disagreeing.
-
-    Parameters
-    ----------
-    metric : str
-        Name of a metric the training plan logs, e.g. ``"val_scaled_cosine_error"``.
-
-    Returns
-    -------
-    str
-        ``"min"`` if lower is better, ``"max"`` otherwise.
-    """
-    return "min" if metric.endswith(MINIMIZED_SUFFIXES) else "max"
 
 
 # adjusted from scvi-tools
@@ -53,7 +31,7 @@ class NodeMaskingTrainingPlan:
     _training_plan_cls = TrainingPlan
 
     def _resolve_monitor(self) -> tuple[str, str]:
-        """Metric driving EarlyStopping / ModelCheckpoint, and the direction to optimise it.
+        """Metric driving EarlyStopping / ModelCheckpoint / ReduceLROnPlateau, and its direction.
 
         Returns
         -------
@@ -153,6 +131,10 @@ class NodeMaskingTrainingPlan:
         loss_callback = None
         performance_callback = None
 
+        # Resolved before the plan is built: the plan's ReduceLROnPlateau monitors the same metric,
+        # in the same direction, as the EarlyStopping / ModelCheckpoint callbacks below.
+        monitor, mode = self._resolve_monitor()
+
         # defines optimizers, training step, val step, logged metrics
         training_plan = self._training_plan_cls(
             self.module,
@@ -171,9 +153,9 @@ class NodeMaskingTrainingPlan:
             lr_max_epochs=self._cfg.optim.n_epochs,
             patience_in_steps=steps_per_epoch,
             sce_gamma=self._cfg.optim.sce_gamma,
+            monitor=monitor,
+            monitor_mode=mode,
         )
-
-        monitor, mode = self._resolve_monitor()
 
         if early_stopping:
             # TODO: why does the self.history_ stop working when using loss_callback?
