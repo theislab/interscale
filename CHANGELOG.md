@@ -111,7 +111,7 @@ and this project adheres to [Semantic Versioning][].
   larger panels, low-count cells. Cell masking is unaffected: all-zero cells are removed before
   training. A batch with no scorable cell now gives a loss of 0 rather than NaN.
 - `optim.monitor` minimised only metrics ending in `loss`, so monitoring an error -- `val_mse`, or
-  the new scaled cosine error -- made early stopping and checkpointing keep the *worst* epoch. Names
+  the new scaled cosine error -- made early stopping and checkpointing keep the _worst_ epoch. Names
   ending in `error` or `mse` are now minimised too.
 - `main_sweep --metric_goal` defaulted to `maximize`, so a sweep ranked by an error
   (`--metric val_scaled_cosine_error`, `val_mse`) kept its worst trial unless the goal was passed.
@@ -119,7 +119,7 @@ and this project adheres to [Semantic Versioning][].
   `optim.monitor` uses; an explicit `--metric_goal` still wins, with a warning if it disagrees.
 - `lr_scheduler: ReduceLROnPlateau` ran in `mode="min"` on `val_r2` (regression) or
   `val_f1_macro` (classification), both higher-is-better, so it cut the LR when the score
-  *improved*; it also ignored `optim.monitor`, which the config says drives it. It now monitors
+  _improved_; it also ignored `optim.monitor`, which the config says drives it. It now monitors
   the metric `_resolve_monitor` gives the early-stopping and checkpoint callbacks, in that
   metric's direction (`val_loss`, minimised, for regression under `monitor: auto`). Its
   `verbose=True` is dropped: recent torch removed the argument, so the scheduler raised a

@@ -252,9 +252,7 @@ def test_the_epoch_sce_over_several_batches_is_the_value_over_all_their_cells():
     plan = _plan("SCELoss", gamma=2.0)
     y_pred, y_true, entry_mask = _zero_masked_targets(n=40, n_zero=7)
     for lo, hi in ((0, 5), (5, 22), (22, 40)):  # uneven batches, the zero-target cells in the first two
-        plan._regression_metrics(
-            y_pred[lo:hi], y_true[lo:hi], "val", plan.valid_metrics, entry_mask=entry_mask[lo:hi]
-        )
+        plan._regression_metrics(y_pred[lo:hi], y_true[lo:hi], "val", plan.valid_metrics, entry_mask=entry_mask[lo:hi])
 
     pooled = masked_regression_metrics(y_pred, y_true, entry_mask, sce_gamma=2.0)
     got = plan.masked_metrics["val_masked"].compute()
@@ -269,9 +267,7 @@ def test_the_epoch_sce_over_several_batches_is_the_value_over_all_their_cells():
         .item(),
         abs=1e-5,
     )
-    assert got["val_masked_scaled_cosine_error"].item() == pytest.approx(
-        pooled["scaled_cosine_error"].item(), abs=1e-5
-    )
+    assert got["val_masked_scaled_cosine_error"].item() == pytest.approx(pooled["scaled_cosine_error"].item(), abs=1e-5)
     assert got["val_masked_cosine_similarity"].item() == pytest.approx(pooled["cosine_similarity"].item(), abs=1e-5)
 
 
