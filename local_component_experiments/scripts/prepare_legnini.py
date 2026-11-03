@@ -86,7 +86,7 @@ value_counts = pd.DataFrame(df.values, columns=df.columns).value_counts()
 print(value_counts)
 
 # 5. adding graphs
-add_graphs(adata.copy(), library_key="sample", radius=200, n_neighs=10)
+add_graphs(adata, library_key="sample", radius=200, n_neighs=10)
 
 # saving prepped data
 OUT.parent.mkdir(parents=True, exist_ok=True)
