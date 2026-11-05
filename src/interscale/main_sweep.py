@@ -162,9 +162,15 @@ def main_sweep(cfg_factory, model_type, sweep_goal, sweep_params=None, arms=None
     adata = remove_zero_expression_cells(adata)
     print(adata)
     if cfg.dataset.segmentation_robustness is not None:
-        print("Applying segmentation noise...")
-        sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
-        adata = apply_segmentation_noise(adata, cfg.dataset.segmentation_robustness)
+        node_fraction, overflow_fraction = cfg.dataset.segmentation_robustness
+        if cfg.dataset.connectivity_key is None:
+            # No stored graph
+            sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
+            adjacency_key = "spatial_connectivities"
+        else:
+            # stored graph
+            adjacency_key = cfg.dataset.connectivity_key
+        adata = apply_segmentation_noise(adata, node_fraction, overflow_fraction, adjacency_key=adjacency_key)
 
     if model_type == "LocalModel":
         print_memory_usage("Before LocalModel setup")
