@@ -10,7 +10,7 @@ import pandas as pd
 from interscale.config import load_config
 from interscale.geome_dataloader import GraphAnnDataModule
 from interscale.model import LocalModel
-from interscale.tl import prepare_geome_dataset, set_full_reproducibility
+from interscale.tl import prepare_geome_dataset, set_full_reproducibility, remove_zero_expression_cells
 
 # Usage, from local_component_experiments:  python scripts/train_local.py configs/legnini_gat_delaunay.yaml
 if len(sys.argv) < 2:
@@ -23,6 +23,8 @@ set_full_reproducibility(cfg.optim.seed)
 
 # 2. Data (tutorial: sc.read_h5ad of the prepared file)
 adata = ad.read_h5ad(cfg.dataset.h5ad_data)
+adata = remove_zero_expression_cells(adata)
+
 
 # 3. Register the data and build the model (tutorial: CombinedModel; here only the local GNN)
 LocalModel._setup_anndata(
