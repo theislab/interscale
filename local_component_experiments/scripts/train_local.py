@@ -10,7 +10,7 @@ import pandas as pd
 from interscale.config import load_config
 from interscale.geome_dataloader import GraphAnnDataModule
 from interscale.model import LocalModel
-from interscale.tl import prepare_geome_dataset, set_full_reproducibility, remove_zero_expression_cells
+from interscale.tl import prepare_geome_dataset, remove_zero_expression_cells, set_full_reproducibility
 
 # Usage, from local_component_experiments:  python scripts/train_local.py configs/legnini_gat_delaunay.yaml
 if len(sys.argv) < 2:
