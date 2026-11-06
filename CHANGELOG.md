@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning][].
 
 ### Added
 
+- Tutorial notebook `net_flow_permutation_cosmx`: attention net flow between cell types under
+  expression permutation on the CosMx human pancreas data.
+
 - Anchor-point / distance-zone analysis of a latent dimension (`interscale.tl.anchors`,
   plotted by `interscale.pl.anchor_plots`): `find_anchor_cells` localises the foci a dimension
   is reading (per-sample tail quantile, then a spatial-coherence filter),
