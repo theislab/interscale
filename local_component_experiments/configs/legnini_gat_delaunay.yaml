@@ -18,7 +18,7 @@ dataset:
   layer_key: log1p_norm # normalised layer
   sample_key: ["sample"]
   split_key: split
-  batch_size: 1
+  batch_size: 2
   connectivity_key: delaunay_connectivities
 wandb:
   use: true

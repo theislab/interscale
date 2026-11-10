@@ -18,7 +18,7 @@ dataset:
   layer_key: log1p_norm # normalised layer
   sample_key: ["sample"] # one graph per organoid section
   split_key: split
-  batch_size: 1
+  batch_size: 2
   connectivity_key: radius_connectivities
 wandb:
   use: true

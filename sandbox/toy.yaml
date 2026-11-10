@@ -1,0 +1,18 @@
+model:
+  local_component:  {name: GCN} # using the GCN local module. 
+  global_component: {name: self-attn-transformer} # local component never uses it
+  decoder: {type: linear} # maps the GNN embedding back to gene space
+  save: null # do not write checkpoints to the disk
+optim:   {loss: MSELoss, # regression loss (we reconstruct expression)
+          n_epochs: 3, # tiny = this is just a test to see if it works
+          min_epochs: 2, # validator requires min_epochs > lr_warmup
+          lr_warmup: 1, # lr_warmup epochs; stopping inside the ramp = half-trained)
+          accelerator: cpu} # I do not have NVIDIA GPU
+dataset:
+  h5ad_data: toy.h5ad #  placeholder — this script builds adata in memory and passes
+  name: toy # name for logging/filenames
+  prediction_task: regression # predict continuous values (expression), not classes
+  prediction_level: node # per-cell prediction (cell = node), vs one label per sample
+  sample_key: ['sample'] # which obs column splits cells into separate graphs
+  mask_percentage: 0.3 # hide 30% of cells; model predicts them from neighbours
+  spatial_neigbors_kwargs: {radius: 0.029, library_key: sample} # radius 30, per sample. This is the step that will vary
