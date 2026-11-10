@@ -44,8 +44,18 @@ OUT = Path(f"data/{DATA}_prepared.h5ad")
 
 # splitting data into training, testing, and validation
 # hard coding for now, just to keep everything consistent
-train_samples = ["slide1_D2-2", "slide1_D2-3", "slide1_C2-2", "slide4_B2-1", "slide1_A2-1",
-                 "slide1_C2-1", "slide4_A2-1", "slide4_A2-2", "slide1_C2-5", "slide1_B2-2"]
+train_samples = [
+    "slide1_D2-2",
+    "slide1_D2-3",
+    "slide1_C2-2",
+    "slide4_B2-1",
+    "slide1_A2-1",
+    "slide1_C2-1",
+    "slide4_A2-1",
+    "slide4_A2-2",
+    "slide1_C2-5",
+    "slide1_B2-2",
+]
 test_samples = ["slide4_A2-3", "slide4_B2-2"]
 validation_samples = ["slide1_B2-1", "slide1_B2-3", "slide1_A2-2", "slide1_C2-3", "slide4_B2-3"]
 
@@ -85,7 +95,7 @@ adata.obs["obs_names"] = adata.obs_names
 # 3. Sliding window (for global only (double check)) = skipped
 
 # 4. Split data into train and val and test
-adata.obs["split"] = "unassigned" # starting every cell with unassigned
+adata.obs["split"] = "unassigned"  # starting every cell with unassigned
 adata.obs.loc[adata.obs["sample"].isin(train_samples), "split"] = "train"
 adata.obs.loc[adata.obs["sample"].isin(validation_samples), "split"] = "val"
 adata.obs.loc[adata.obs["sample"].isin(test_samples), "split"] = "test"
