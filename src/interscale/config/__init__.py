@@ -137,6 +137,13 @@ def _validate_masking(cfg):
             f"{cfg.dataset.mask_percentage}. With no masking a reconstruction target is its own input."
         )
 
+    # masked_loss zero-fills the unmasked entries under gene masking
+    if cfg.dataset.mask_strategy == "gene" and cfg.optim.loss == "BalancedPearsonCorrelationLoss":
+        raise ValueError(
+            "BalancedPearsonCorrelationLoss is only correct with dataset.mask_strategy 'node': under 'gene' "
+            "the zero-filled unmasked entries bias the correlation."
+        )
+
 
 def _validate_optim(cfg):
     """Reject configs whose training-length settings stop a run inside the LR warm-up.
