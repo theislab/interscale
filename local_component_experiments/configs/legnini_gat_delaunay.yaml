@@ -12,7 +12,7 @@ optim:
   patience: 50 # early stopping on val_loss (regression)
 dataset:
   h5ad_data: data/legnini_prepared.h5ad
-  name: legnini_delaunay # checkpoint files are named after this
+  name: legnini_delaunay_gnll_batch_2 # checkpoint files are named after this
   prediction_task: regression
   prediction_level: node
   layer_key: log1p_norm # normalised layer
