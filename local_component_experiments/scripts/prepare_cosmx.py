@@ -44,17 +44,49 @@ OUT = Path(f"data/{DATA}_prepared.h5ad")
 
 # splitting data into training, testing, and validation, by FOV
 # hard coding for now, just to keep everything consistent
-# CosMx: one sample = one FOV, named slide + FOV, e.g. "S1_fov12" (the first run prints all of them)
-train_samples = []
-test_samples = []
-validation_samples = []
+# CosMx: one sample = one FOV, named slide + FOV, e.g. "Run5211_S1_fov12". There are 71 FOVs from 6 donors:
+# each slide holds one T1D and one ND donor
+# proportions as Legnini (10 / 5 / 2 of 17 samples = 59 / 29 / 12 %), so every donor and both conditions
+# are in train, val and test: 42 / 21 / 8 FOVs (4 T1D and 4 ND FOVs in test)
+train_samples = [
+    "Run5211_S1_fov1", "Run5211_S1_fov2", "Run5211_S1_fov4", "Run5211_S1_fov6", "Run5211_S1_fov9",
+    "Run5211_S1_fov10", "Run5211_S1_fov11",
+    "Run5211_S1_fov12", "Run5211_S1_fov13", "Run5211_S1_fov17", "Run5211_S1_fov19", "Run5211_S1_fov20",
+    "Run5211_S1_fov21", "Run5211_S1_fov22",
+    "Run5211_S2_fov1", "Run5211_S2_fov2", "Run5211_S2_fov5", "Run5211_S2_fov6", "Run5211_S2_fov8",
+    "Run5211_S2_fov9", "Run5211_S2_fov10", "Run5211_S2_fov11",
+    "Run5211_S2_fov12", "Run5211_S2_fov13", "Run5211_S2_fov14", "Run5211_S2_fov15", "Run5211_S2_fov17",
+    "Run5211_S3_fov1", "Run5211_S3_fov2", "Run5211_S3_fov4", "Run5211_S3_fov6", "Run5211_S3_fov7",
+    "Run5211_S3_fov10", "Run5211_S3_fov11", "Run5211_S3_fov12", "Run5211_S3_fov13",
+    "Run5211_S3_fov16", "Run5211_S3_fov17", "Run5211_S3_fov18", "Run5211_S3_fov19", "Run5211_S3_fov20",
+    "Run5211_S3_fov22",
+]
+test_samples = [
+    "Run5211_S1_fov5",
+    "Run5211_S1_fov16", "Run5211_S1_fov18",
+    "Run5211_S2_fov3",
+    "Run5211_S2_fov19",
+    "Run5211_S3_fov5", "Run5211_S3_fov14",
+    "Run5211_S3_fov21",
+]
+validation_samples = [
+    "Run5211_S1_fov3", "Run5211_S1_fov7", "Run5211_S1_fov8",
+    "Run5211_S1_fov14", "Run5211_S1_fov15", "Run5211_S1_fov23", "Run5211_S1_fov24",
+    "Run5211_S2_fov4", "Run5211_S2_fov7", "Run5211_S2_fov21", "Run5211_S2_fov22",
+    "Run5211_S2_fov16", "Run5211_S2_fov18", "Run5211_S2_fov20",
+    "Run5211_S3_fov3", "Run5211_S3_fov8", "Run5211_S3_fov9", "Run5211_S3_fov25",
+    "Run5211_S3_fov15", "Run5211_S3_fov23", "Run5211_S3_fov24",
+]
+
 
 # load the data
 adata = sc.read_h5ad(RAW)
-print(".X whole numbers:", (adata.X != adata.X.astype(int)).sum() == 0)
-print("counts whole numbers:", (adata.layers["counts"] != adata.layers["counts"].astype(int)).sum() == 0)
+# the values are already normalized
+# print(".X whole numbers:", (adata.X != adata.X.astype(int)).sum() == 0)
+# print("counts whole numbers:", (adata.layers["counts"] != adata.layers["counts"].astype(int)).sum() == 0)
 # CosMx: keep the raw counts in layers["raw"], as the Legnini loader does
-adata.layers["raw"] = adata.X.copy()
+adata.X = adata.layers["counts"].copy()
+adata.layers["raw"] = adata.layers["counts"].copy()
 # check if everything is okay
 print(adata)
 print("Zero count cells: ", (adata.X.sum(1) == 0).sum())
@@ -90,7 +122,7 @@ print("Log1pNorm - Min: ", {adata.layers["log1p_norm"].min()}, ", Max: ", {adata
 
 # 2. Calculate spatial connectivity matrix (check)
 # CosMx: the coordinates are not in the same units as Legnini's, so check which radius gives about 10
-# neighbours per cell (in Legnini, radius 200 gave 10.1) and use that radius in step 5
+# neighbours per cell (in Legnini, radius 200 gave 10.1) and use that radius later in step 5
 compute_neighborhood_stats(adata, radii=[100, 200, 300], library_key="sample")
 # Make sure that obs_names are unique and convertable to string.
 adata.obs_names_make_unique()
@@ -112,7 +144,7 @@ if (adata.obs["split"] == "unassigned").any():
 
 # 5. adding graphs
 # CosMx: radius = the one from the check in step 2 that gives about 10 neighbours
-add_graphs(adata, library_key="sample", radius=200, n_neighs=10)
+add_graphs(adata, library_key="sample", radius=100, n_neighs=10)
 
 # saving prepped data
 OUT.parent.mkdir(parents=True, exist_ok=True)
