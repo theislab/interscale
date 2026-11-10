@@ -19,7 +19,7 @@ import squidpy as sq
 warnings.filterwarnings("ignore")
 
 from interscale import datasets as ds
-from interscale.pp import compute_neighborhood_stats
+from interscale.pp import compute_neighborhood_stats, remove_zero_expression_cells
 
 
 def add_graphs(adata, library_key, radius, n_neighs):
@@ -31,7 +31,9 @@ def add_graphs(adata, library_key, radius, n_neighs):
     sq.gr.spatial_neighbors(adata, delaunay=True, key_added="delaunay", **common)
 
     for name in ["radius", "knn", "delaunay"]:
+        # counting how many neighbors each cell has
         degree = adata.obsp[f"{name}_connectivities"].getnnz(axis=1)
+        # prings the average number of neighbors for that map
         print(f"{name}: {degree.mean():.1f} neighbours per cell on average")
 
 
@@ -42,6 +44,8 @@ OUT = Path(f"data/{DATA}_prepared.h5ad")
 
 # splitting data into training, testing, and validation
 # hard coding for now, just to keep everything consistent
+train_samples = ["slide1_D2-2", "slide1_D2-3", "slide1_C2-2", "slide4_B2-1", "slide1_A2-1",
+                 "slide1_C2-1", "slide4_A2-1", "slide4_A2-2", "slide1_C2-5", "slide1_B2-2"]
 test_samples = ["slide4_A2-3", "slide4_B2-2"]
 validation_samples = ["slide1_B2-1", "slide1_B2-3", "slide1_A2-2", "slide1_C2-3", "slide4_B2-3"]
 
@@ -57,6 +61,9 @@ valid_coords = ~np.isnan(adata.obsm["spatial"]).any(axis=1)
 adata = adata[valid_coords].copy()
 # Verify the removal of NaN values
 print(f"NaN values remaining: {np.isnan(adata.obsm['spatial']).sum()}")
+
+# removing all cells with zero count
+adata = remove_zero_expression_cells(adata)
 
 # 1. Normalization = data needs to be normalized for Interscale
 # Ideally, counts should be normalized between 0 and 3
@@ -78,9 +85,12 @@ adata.obs["obs_names"] = adata.obs_names
 # 3. Sliding window (for global only (double check)) = skipped
 
 # 4. Split data into train and val and test
-adata.obs["split"] = "train"
+adata.obs["split"] = "unassigned" # starting every cell with unassigned
+adata.obs.loc[adata.obs["sample"].isin(train_samples), "split"] = "train"
 adata.obs.loc[adata.obs["sample"].isin(validation_samples), "split"] = "val"
 adata.obs.loc[adata.obs["sample"].isin(test_samples), "split"] = "test"
+if (adata.obs["split"] == "unassigned").any():
+    raise ValueError("Some cells were not assigned to train, val or test.")
 df = adata.obs[["split", "sample", "condition"]]
 value_counts = pd.DataFrame(df.values, columns=df.columns).value_counts()
 print(value_counts)
