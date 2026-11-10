@@ -19,7 +19,8 @@ import squidpy as sq
 warnings.filterwarnings("ignore")
 
 from interscale import datasets as ds
-from interscale.pp import compute_neighborhood_stats, remove_zero_expression_cells
+from interscale.pp import compute_neighborhood_stats
+from interscale.tl import remove_zero_expression_cells
 
 
 def add_graphs(adata, library_key, radius, n_neighs):
@@ -39,7 +40,7 @@ def add_graphs(adata, library_key, radius, n_neighs):
 
 # hardcoding the path for now
 DATA = "legnini"
-RAW = Path(f"data/raw/{DATA}.h5ad")
+RAW = Path("/lustre/groups/ml01/projects/2024_spatial_long_range_GT_francesca.drummer/data/legnini23.h5ad")
 OUT = Path(f"data/{DATA}_prepared.h5ad")
 
 # splitting data into training, testing, and validation

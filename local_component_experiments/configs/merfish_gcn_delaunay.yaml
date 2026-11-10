@@ -19,7 +19,7 @@ dataset:
   prediction_level: node # per-cell prediction (cell = node), vs one label per sample
   sample_key: ["slice"] # one graph per tissue slice (column made by prepare_merfish.py)
   split_key: split
-  batch_size: 1 # one slice per training step; the default is 32 but training locally
+  batch_size: 2 # one slice per training step; the default is 32 but training locally
   spatial_neigbors_kwargs: { delaunay: True, radius: null, library_key: slice } # radius set to 50 by default
 wandb:
   use: true

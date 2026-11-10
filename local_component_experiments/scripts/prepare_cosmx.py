@@ -39,8 +39,7 @@ def add_graphs(adata, library_key, radius, n_neighs):
 
 # hardcoding the path for now
 DATA = "cosmx"
-# CosMx: the original, unfiltered data in Francesca's project folder -- change the file name to the one in there
-RAW = Path("/lustre/groups/ml01/projects/2024_spatial_long_range_GT_francesca.drummer/data/melton2025.h5ad")
+RAW = Path("/lustre/groups/ml01/projects/2024_spatial_long_range_GT_francesca.drummer/data/melton25.h5ad")
 OUT = Path(f"data/{DATA}_prepared.h5ad")
 
 # splitting data into training, testing, and validation, by FOV
