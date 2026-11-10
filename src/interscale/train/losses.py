@@ -88,12 +88,8 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
             preds_avg_cell = nonzero_median(preds, 1, keepdim=True)
             targets_avg_cell = nonzero_median(targets, 1, keepdim=True)
 
-        r_tss = F.cosine_similarity(preds - preds_avg_gene,
-                                             targets - targets_avg_gene,
-                                             dim=0, eps=self.eps)
-        r_celltype = F.cosine_similarity(preds - preds_avg_cell,
-                                         targets - targets_avg_cell,
-                                         dim=1, eps=self.eps)
+        r_tss = F.cosine_similarity(preds - preds_avg_gene, targets - targets_avg_gene, dim=0, eps=self.eps)
+        r_celltype = F.cosine_similarity(preds - preds_avg_cell, targets - targets_avg_cell, dim=1, eps=self.eps)
 
         loss = self.rel_weight_gene * (1 - r_tss.mean()) + self.rel_weight_cell * (1 - r_celltype.mean())
 
