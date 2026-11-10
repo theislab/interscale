@@ -51,6 +51,8 @@ validation_samples = []
 
 # load the data
 adata = sc.read_h5ad(RAW)
+print(".X whole numbers:", (adata.X != adata.X.astype(int)).sum() == 0)
+print("counts whole numbers:", (adata.layers["counts"] != adata.layers["counts"].astype(int)).sum() == 0)
 # CosMx: keep the raw counts in layers["raw"], as the Legnini loader does
 adata.layers["raw"] = adata.X.copy()
 # check if everything is okay
