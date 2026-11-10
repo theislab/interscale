@@ -25,12 +25,23 @@ adata.obsm["spatial"] = np.vstack(coords)
 adata.obs_names = [str(i) for i in range(adata.n_obs)]
 
 cfg = load_config("toy.yaml")
-LocalModel._setup_anndata(adata, prediction_task="regression", layer_key=None,
-                          sample_key_list=["sample"], split_key="split", view_registry=False)
+LocalModel._setup_anndata(
+    adata,
+    prediction_task="regression",
+    layer_key=None,
+    sample_key_list=["sample"],
+    split_key="split",
+    view_registry=False,
+)
 model = LocalModel(adata, cfg=cfg)
 datas, _ = prepare_geome_dataset(adata, cfg)
-dm = GraphAnnDataModule(datas=datas, num_workers=0, batch_size=2,
-                        mask_percentage=cfg.dataset.mask_percentage,
-                        mask_strategy=cfg.dataset.mask_strategy, learning_type="node")
+dm = GraphAnnDataModule(
+    datas=datas,
+    num_workers=0,
+    batch_size=2,
+    mask_percentage=cfg.dataset.mask_percentage,
+    mask_strategy=cfg.dataset.mask_strategy,
+    learning_type="node",
+)
 model.train(max_epochs=3, datamodule=dm, early_stopping=False)
 print("\n>>> local component ran OK")

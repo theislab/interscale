@@ -5,7 +5,7 @@ model:
   decoder: { type: linear }
   save: results/checkpoints/ # lets InterScale restore the best epoch
 optim:
-  loss: GaussianNLL               # regression loss = MSELoss 
+  loss: GaussianNLL # regression loss = MSELoss
   accelerator: cpu
   n_epochs: 500
   min_epochs: 100

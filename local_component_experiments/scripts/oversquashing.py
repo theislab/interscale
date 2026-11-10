@@ -5,7 +5,7 @@ Curvature of the edge between cells i and j (Topping et al. 2022, Definition 1):
 
 Parts with oytputs in results/oversquashing/
 
-1. Balanced Forman curvature for every edge of every graph 1. Balanced Forman curvature of every edge of every graph: 
+1. Balanced Forman curvature for every edge of every graph 1. Balanced Forman curvature of every edge of every graph:
     edges_<graph>.csv, cells_curvature.csv
 2. Distribution per graph, and curvature vs edge length:
     curvature_distribution.png, curvature_summary.csv
@@ -23,7 +23,6 @@ warnings.filterwarnings("ignore")
 from pathlib import Path
 
 import anndata as ad
-import matplotlib
 import matplotlib.pyplot as plt
 import networkx as nx
 import numba
@@ -45,38 +44,48 @@ from interscale.tl.utils import get_model_filename_prefix
 DATA = Path("data/legnini_prepared.h5ad")
 GRAPHS = ["radius", "knn", "delaunay"]
 GNNS = ["GCN", "GIN", "GAT"]
-CONFIG = "configs/legnini_{gnn}_{graph}.yaml" 
-MAP_SAMPLE = "slide4_A2-3" # part of the test sample
+CONFIG = "configs/legnini_{gnn}_{graph}.yaml"
+MAP_SAMPLE = "slide4_A2-3"  # part of the test sample
 # this is for the part 3 to draw the curvature map for one tissue section
 EVAL_SPLITS = ["val", "test"]
-N_ROUNDS = 3 # one round is shuffle the cells and cutting them into 5 groups of 20% each, hides one group at a time
+N_ROUNDS = 3  # one round is shuffle the cells and cutting them into 5 groups of 20% each, hides one group at a time
 # by shuffle = which cells get hidden in which step
 SEED = 0
 OUT = Path("results/oversquashing")
 
 
-GRAPH_COLOUR = {"radius": "#2a78d6", "knn": "#eb6834", "delaunay":"#1baf7a"}
+GRAPH_COLOUR = {"radius": "#2a78d6", "knn": "#eb6834", "delaunay": "#1baf7a"}
 MODEL_STYLE = {  # colour, marker, line style
     "GCN": ("#6250d6", "o", "-"),
     "GIN": ("#e87ba4", "s", "-"),
     "GAT": ("#008300", "^", "-"),
-    "neighbour mean": ("#52514e", "D", "--"), # baseline to predict a hidden cell (regression task = gene )
+    "neighbour mean": ("#52514e", "D", "--"),  # baseline to predict a hidden cell (regression task = gene )
 }
 
 CURVATURE_CMAP = LinearSegmentedColormap.from_list(
     "curvature",
-    [(0.0, "#0d366b"), (0.25, "#2a78d6"), (0.4, "#86b6ef"), (0.5, "#d4d3cf"), (0.6, "#f2a49e"), (0.75, "#e34948"),
-     (1.0, "#8f1f1f")],)
+    [
+        (0.0, "#0d366b"),
+        (0.25, "#2a78d6"),
+        (0.4, "#86b6ef"),
+        (0.5, "#d4d3cf"),
+        (0.6, "#f2a49e"),
+        (0.75, "#e34948"),
+        (1.0, "#8f1f1f"),
+    ],
+)
 
 # coming from the paper
 # Definition 1, equation 3
-CURVATURE_NORM = Normalize(-2, 2) # not sure about it = slide 
+CURVATURE_NORM = Normalize(-2, 2)  # not sure about it = slide
 # every edge gets a curvature value = some number between roughlyt -2 and +1.5
 # The paper states the floor explicitly. Right after Definition 1 it says that Ric(i,j) > −2
+
 
 def fmt(v):
     """Numbers for the printed tables: counts with thousands separators, the rest with 3 significant digits."""
     return f"{v:,.0f}" if abs(v) >= 100 else f"{v:.3g}"
+
 
 plt.rcParams.update(
     {
@@ -131,7 +140,8 @@ def undirected(adj):
     a.sort_indices()
     return a
 
-@numba.njit(cache=True) # parallelizing
+
+@numba.njit(cache=True)  # parallelizing
 def _curvature(indptr, indices):
     """Ric and gamma_max of every stored entry (i, j) of a symmetric CSR matrix, in storage order.
     Computes the curvature of every edge with the formula from Definition 1 2022 paper.
@@ -194,9 +204,10 @@ def _curvature(indptr, indices):
             gamma_max[p] = gamma
     return ric, gamma_max
 
+
 def edge_curvature(adj):
     """Curvature of every edge, once per pair of cells (i < j), and whether it meets Theorem 4.
-    This turns the output of curvature into a table with one row per edge, and it marks the edges that meet the bottleneck 
+    This turns the output of curvature into a table with one row per edge, and it marks the edges that meet the bottleneck
     condition (Theorem 4).
     """
     a = undirected(adj)
@@ -212,6 +223,7 @@ def edge_curvature(adj):
     edges = pd.DataFrame({"i": i, "j": j, "curvature": ric, "gamma_max": gamma, "d_i": degree[i], "d_j": degree[j]})
     edges["bottleneck"] = ric + 2 < limit
     return edges, degree
+
 
 def check_against_paper():
     """Reproduce the curvature of simple graphs (Topping et al. 2022, Table 1), so a wrong formula cannot slip by.
@@ -246,6 +258,7 @@ def check_against_paper():
         assert len(edges) > 0 and np.allclose(edges.curvature, expected), f"curvature is wrong on the {name}"
     print("curvature check: matches Topping et al. 2022 (Table 1) on cliques, cycles, trees, grids, triangulations")
 
+
 def cell_curvature(edges, n_cells):
     """Per cell: mean and lowest curvature of its edges, and whether one of them is a bottleneck.
     It runs per-edge curvature into per-cell values. Needed for part 4
@@ -259,6 +272,7 @@ def cell_curvature(edges, n_cells):
     at_bottleneck = np.zeros(n_cells, bool)
     at_bottleneck[np.concatenate([edges.i[edges.bottleneck], edges.j[edges.bottleneck]])] = True
     return mean, lowest, at_bottleneck
+
 
 def part1(adata):
     """Curvature of every edge (saved per graph) and per cell (one table for all graphs).
@@ -274,7 +288,7 @@ def part1(adata):
         edges["sample"] = adata.obs["sample"].to_numpy()[edges.i]
         edges.rename(columns={"i": "cell_i", "j": "cell_j"}).to_csv(OUT / f"edges_{graph}.csv", index=False)
         edges_per_graph[graph] = edges
- 
+
         mean, lowest, at_bottleneck = cell_curvature(edges, adata.n_obs)
         cells.append(
             pd.DataFrame(
@@ -298,9 +312,10 @@ def part1(adata):
     cells.to_csv(OUT / "cells_curvature.csv", index=False)
     return edges_per_graph, cells
 
+
 def part2(edges_per_graph, cells):
     """Summary table per graph, histograms of the curvature, and curvature against edge length.
-    Compare the distribution: a summary table, a histogram of edge curvature, and a plot of curvature 
+    Compare the distribution: a summary table, a histogram of edge curvature, and a plot of curvature
     against edge length.
     """
     rows = {}
@@ -325,7 +340,7 @@ def part2(edges_per_graph, cells):
     summary = pd.DataFrame(rows).T
     summary.to_csv(OUT / "curvature_summary.csv")
     print("\nCurvature per graph\n" + summary.T.to_string(float_format=fmt))
- 
+
     fig, (ax_hist, ax_len) = plt.subplots(1, 2, figsize=(10.5, 3.8), gridspec_kw={"width_ratios": [1.15, 1]})
     bins = np.arange(-2, 2.0001, 0.1)
     top = 0
@@ -343,7 +358,7 @@ def part2(edges_per_graph, cells):
     ax_hist.set(xlim=(-2, 2), xlabel="Balanced Forman curvature of an edge", ylabel="density of edges")
     ax_hist.set_title("Curvature of the edges", loc="left")
     ax_hist.legend(loc="upper right", bbox_to_anchor=(1, 0.9), fontsize=8)
- 
+
     for graph, e in edges_per_graph.items():
         lo, hi = np.percentile(e.length, [0.5, 99.5])
         bin_edges = np.geomspace(max(lo, 1e-6), hi, 25)
@@ -366,9 +381,10 @@ def part2(edges_per_graph, cells):
     plt.close(fig)
     return summary
 
+
 def part3(adata, edges_per_graph, cells, sample=MAP_SAMPLE):
     """Top: every edge of one sample coloured by its curvature. Bottom: every cell coloured by its mean curvature.
-    It draws the curvature on the tissue for one sample by default the test sample. The figure has a grid of 2 rows and 
+    It draws the curvature on the tissue for one sample by default the test sample. The figure has a grid of 2 rows and
     3 columns, one column per graph
     """
     assert sample in set(adata.obs["sample"]), f"MAP_SAMPLE {sample!r} is not in {sorted(set(adata.obs['sample']))}"
@@ -383,7 +399,7 @@ def part3(adata, edges_per_graph, cells, sample=MAP_SAMPLE):
         axes[0, col].add_collection(lines)
         n_bottleneck = int(e.bottleneck.sum())
         axes[0, col].set_title(f"{graph}: edges\n{len(e):,} edges, {n_bottleneck} bottleneck (Thm 4)", loc="left")
- 
+
         c = cells[(cells.graph == graph) & (cells["sample"] == sample)].sort_values("curvature_mean", ascending=False)
         axes[1, col].scatter(*xy[c.cell].T, c=c.curvature_mean, cmap=CURVATURE_CMAP, norm=CURVATURE_NORM, s=5, lw=0)
         axes[1, col].set_title(f"{graph}: cells\nmean curvature of each cell's edges", loc="left")
@@ -397,6 +413,7 @@ def part3(adata, edges_per_graph, cells, sample=MAP_SAMPLE):
     fig.suptitle(f"Sample {sample}", x=0.02, ha="left", fontsize=11)
     fig.savefig(OUT / f"curvature_tissue_{sample}.png")
     plt.close(fig)
+
 
 # Part 4: Are cells in negatively curved regions predicted worse?
 def masked_errors(predict, data, n_groups, rounds, seed):
@@ -412,6 +429,7 @@ def masked_errors(predict, data, n_groups, rounds, seed):
             total[hidden] += ((prediction - x[hidden]) ** 2).mean(dim=1)
     return (total / rounds).numpy()
 
+
 def gnn_predictor(module):
     """The trained local GNN and its decoder, as in training (eval mode: no dropout)."""
 
@@ -420,6 +438,7 @@ def gnn_predictor(module):
         return module.predict(module(x_masked, edge_index))[hidden]
 
     return predict
+
 
 def neighbour_mean(x_masked, edge_index, hidden):
     """Mean expression of the visible cells that send the hidden cell a message; the sample mean if there are none."""
@@ -432,6 +451,7 @@ def neighbour_mean(x_masked, edge_index, hidden):
     prediction = sums / counts.clamp(min=1).unsqueeze(1)
     prediction[counts == 0] = x_masked[visible].mean(dim=0)
     return prediction[hidden]
+
 
 def load_model(adata, cfg):
     """The trained LocalModel saved by train_local.py, or None if it is not there yet."""
@@ -449,6 +469,7 @@ def load_model(adata, cfg):
     )
     return LocalModel.load(cfg.model.save, adata, cfg, local_component=True)
 
+
 def partial_spearman(x, y, covariates, sample):
     """Rank correlation of x and y after removing what the covariates (ranked) and the sample explain."""
     covariates = np.column_stack(
@@ -461,6 +482,7 @@ def partial_spearman(x, y, covariates, sample):
         coef, *_ = np.linalg.lstsq(covariates, v, rcond=None)
         residuals.append(v - covariates @ coef)
     return np.corrcoef(*residuals)[0, 1]
+
 
 def part4(adata, cells):
     """Error of every evaluation cell under every model, and how it changes with the cell's curvature."""
@@ -532,7 +554,7 @@ def part4(adata, cells):
     stats = pd.DataFrame(rows)
     stats.to_csv(OUT / "error_vs_curvature.csv", index=False)
     print("\nError on hidden cells vs curvature\n" + stats.to_string(index=False, float_format=fmt, na_rep="-"))
- 
+
     # Per decile of the cells' curvature (deciles per graph, so all models of a graph share the same cells):
     # top    each model's mean error divided by its mean error over all cells: a flat line at 1 does not depend on
     #        curvature, whatever the model's overall level (that is in the table)
@@ -570,6 +592,7 @@ def part4(adata, cells):
     plt.close(fig)
     return stats
 
+
 # Part 5: Summary
 def part5(summary, stats):
     """Graph properties next to each model's error and its sensitivity to curvature."""
@@ -580,6 +603,7 @@ def part5(summary, stats):
     table = summary[keep].join(wide).loc[GRAPHS]
     table.to_csv(OUT / "summary.csv")
     print("\nSummary (one column per graph)\n" + table.T.to_string(float_format=fmt, na_rep="-"))
+
 
 if __name__ == "__main__":
     OUT.mkdir(parents=True, exist_ok=True)
