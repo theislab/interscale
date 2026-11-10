@@ -148,6 +148,7 @@ class NodeMaskingTrainingPlan:
             lr_warmup=self._cfg.optim.lr_warmup,
             lr_max_epochs=self._cfg.optim.n_epochs,
             patience_in_steps=steps_per_epoch,
+            pearson_cell_weight=self._cfg.optim.pearson_cell_weight,
         )
 
         monitor, mode = self._resolve_monitor()

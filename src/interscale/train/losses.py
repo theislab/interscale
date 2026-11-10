@@ -39,7 +39,7 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
 
     def __init__(
         self,
-        cross_corr: Literal["gene", "cell"] | None = None,
+        cell_weight: float = 0.5,
         norm_by: Literal["mean", "nonzero_median"] = "mean",
         eps: float = 1e-8,
     ):
@@ -47,6 +47,9 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
 
         Parameter
         ---------
+        cell_weight
+            Weight of the across-cells correlation (one per gene), between 0 and 1. The across-genes
+            correlation (one per cell) gets ``1 - cell_weight``. 0.5 weights both equally, as before.
         rel_weight_gene: float = 1.0
             The relative weight to put on the across gene/tss correlation.
         rel_weight_cell: float = 1.0
@@ -58,21 +61,11 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
             epsilon
         """
         super().__init__()
+        if not 0.0 <= cell_weight <= 1.0:
+            raise ValueError(f"cell_weight must be between 0 and 1, got {cell_weight}.")
+        self.cell_weight = cell_weight
         self.eps = eps
         self.norm_by = norm_by
-        self.cross_corr = cross_corr
-
-        if self.cross_corr == "gene":
-            self.rel_weight_gene = 1.0
-            self.rel_weight_cell = 0.0
-        elif self.cross_corr == "cell":
-            self.rel_weight_gene = 0.0
-            self.rel_weight_cell = 1.0
-        elif self.cross_corr is None:
-            self.rel_weight_gene = 1.0
-            self.rel_weight_cell = 1.0
-        else:
-            raise ValueError("cross_corr must be either 'gene' or 'cell' or None.")
 
     def forward(self, preds: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         """Forward.
@@ -95,25 +88,16 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
             preds_avg_cell = nonzero_median(preds, 1, keepdim=True)
             targets_avg_cell = nonzero_median(targets, 1, keepdim=True)
 
-        r_tss = torch.nn.functional.cosine_similarity(
-            preds - preds_avg_gene,
-            targets - targets_avg_gene,
-            eps=self.eps,
-            dim=0,
-        )
-
-        r_celltype = torch.nn.functional.cosine_similarity(
-            preds - preds_avg_cell,
-            targets - targets_avg_cell,
-            eps=self.eps,
-        )
+        r_tss = F.cosine_similarity(preds - preds_avg_gene, targets - targets_avg_gene, dim=0, eps=self.eps)
+        r_celltype = F.cosine_similarity(preds - preds_avg_cell, targets - targets_avg_cell, dim=1, eps=self.eps)
 
         loss = self.rel_weight_gene * (1 - r_tss.mean()) + self.rel_weight_cell * (1 - r_celltype.mean())
 
         # norm the loss to 2 by half the sum of the relative weights
         loss = (loss * 2) / (self.rel_weight_gene + self.rel_weight_cell)
-
-        return loss
+        loss = self.cell_weight * (1 - r_tss.mean()) + (1 - self.cell_weight) * (1 - r_celltype.mean())
+        # to keep the loss in the same 0–4 range as before
+        return 2 * loss
 
 
 class SCELoss(torch.nn.Module):
