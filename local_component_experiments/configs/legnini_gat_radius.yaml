@@ -12,8 +12,8 @@ optim:
   patience: 50 # early stopping on val_loss (regression)
 dataset:
   h5ad_data: data/legnini_prepared.h5ad
-  name: legnini_radius_gnll_batch_2            # checkpoint files are named after this, so include the graph type
-  prediction_task: regression     ### sweep for classification and regression
+  name: legnini_radius_gnll_batch_2 # checkpoint files are named after this, so include the graph type
+  prediction_task: regression ### sweep for classification and regression
   prediction_level: node
   layer_key: log1p_norm # normalised layer
   sample_key: ["sample"] # one graph per organoid section
