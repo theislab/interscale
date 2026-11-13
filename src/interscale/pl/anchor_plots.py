@@ -35,6 +35,7 @@ from matplotlib.colors import TwoSlopeNorm
 from matplotlib.lines import Line2D
 from scipy.sparse import issparse
 
+from interscale.pl._utils import PanelFrame, bare_axes, panel_frame, panel_grid
 from interscale.tl.anchors import ZONE_CORE, ZONE_FAR, ZONE_NEAR, ZONE_ORDER
 
 __all__ = [
@@ -98,32 +99,6 @@ def _slides(adata, sample_key, samples):
     return [(s, np.where(grp == s)[0]) for s in labels]
 
 
-def _grid(n, ncols, panel_size, axes=None):
-    """(fig, flat list of axes) sized so every panel is `panel_size`."""
-    if axes is not None:
-        axes = np.atleast_1d(np.asarray(axes, dtype=object)).ravel().tolist()
-        if len(axes) < n:
-            raise ValueError(f"need {n} axes, got {len(axes)}")
-        return axes[0].get_figure(), axes[:n]
-    ncols = n if ncols is None else min(int(ncols), n)
-    nrows = int(np.ceil(n / ncols))
-    fig, ax = plt.subplots(nrows, ncols, figsize=(panel_size[0] * ncols, panel_size[1] * nrows), squeeze=False)
-    flat = ax.ravel().tolist()
-    for a in flat[n:]:
-        a.set_axis_off()
-    return fig, flat[:n]
-
-
-def _bare(ax, title=None):
-    ax.set_aspect("equal")
-    ax.set_xticks([])
-    ax.set_yticks([])
-    for side in ax.spines.values():
-        side.set_visible(False)
-    if title is not None:
-        ax.set_title(title, fontsize=10)
-
-
 def _expression(adata, rows, gene, layer):
     """One gene's values for `rows`, densified for those rows only."""
     j = int(np.where(adata.var_names == gene)[0][0])
@@ -139,6 +114,7 @@ def _expression(adata, rows, gene, layer):
 # --------------------------------------------------------------------------------------------
 
 
+@panel_frame(panel_size=(3.0, 3.0), colors=ANCHOR_COLORS)
 def anchor_map(
     adata,
     anchor,
@@ -147,15 +123,11 @@ def anchor_map(
     sample_key: str = "sample",
     spatial_key: str = "spatial",
     focus=None,
-    colors: dict | None = None,
     labels: tuple[str, str] = ("outside", "anchor core"),
     size: float = 6.0,
-    ncols: int | None = None,
-    panel_size: tuple[float, float] = (3.0, 3.0),
-    axes=None,
     legend: bool = True,
     titles: Sequence[str] | None = None,
-    show: bool = True,
+    frame: PanelFrame,
 ):
     """Where a dimension anchors: one panel per sample, anchor foci against the rest.
 
@@ -170,6 +142,7 @@ def anchor_map(
         than asserted.
     titles
         Panel titles, defaulting to the sample name plus its anchor-cell count.
+    {frame_params}
 
     Returns
     -------
@@ -177,11 +150,11 @@ def anchor_map(
     """
     anchor = _vector(adata, anchor, "anchor").astype(bool)
     focus = None if focus is None else _vector(adata, focus, "focus").astype(int)
-    colors = {**ANCHOR_COLORS, **(colors or {})}
+    colors = frame.colors
     xy = np.asarray(adata.obsm[spatial_key], dtype=float)
 
     panels = _slides(adata, sample_key, samples)
-    fig, axs = _grid(len(panels), ncols, panel_size, axes=axes)
+    axs = frame.grid(len(panels))
 
     for k, ((label, rows), ax) in enumerate(zip(panels, axs, strict=True)):
         inside = rows[anchor[rows]]
@@ -202,7 +175,7 @@ def anchor_map(
                     fontweight="bold",
                 )
         default = f"{label}\n{inside.size} anchor cells"
-        _bare(ax, default if titles is None else titles[k])
+        bare_axes(ax, default if titles is None else titles[k])
 
     if legend:
         axs[-1].legend(
@@ -215,12 +188,9 @@ def anchor_map(
             frameon=False,
             fontsize=9,
         )
-    fig.tight_layout()
-    if show:
-        plt.show()
-    return fig, axs
 
 
+@panel_frame(panel_size=(3.4, 3.0))
 def signed_distance_map(
     adata,
     dist,
@@ -232,12 +202,9 @@ def signed_distance_map(
     vmin: float | None = None,
     vmax: float | None = None,
     size: float = 6.0,
-    ncols: int | None = None,
-    panel_size: tuple[float, float] = (3.4, 3.0),
-    axes=None,
     colorbar: bool = True,
     titles: Sequence[str] | None = None,
-    show: bool = True,
+    frame: PanelFrame,
 ):
     """Signed distance to the anchor border: red inside a focus, blue away from it.
 
@@ -245,6 +212,10 @@ def signed_distance_map(
     *not* symmetric, because a focus is a few hundred um deep while the tissue outside it runs
     to several thousand: a symmetric range would flatten the core to a single shade. The
     colour scale is shared across panels so two slides are comparable.
+
+    Parameters
+    ----------
+    {frame_params}
 
     Returns
     -------
@@ -266,7 +237,7 @@ def signed_distance_map(
     hi = max(hi, 1e-6)
     norm = TwoSlopeNorm(vcenter=0.0, vmin=lo, vmax=hi)
 
-    fig, axs = _grid(len(panels), ncols, panel_size, axes=axes)
+    axs = frame.grid(len(panels))
     sm = None
     for k, ((label, rows), ax) in enumerate(zip(panels, axs, strict=True)):
         # A sample with no focus is all-nan, and scatter would simply not draw it -- an empty
@@ -280,18 +251,15 @@ def signed_distance_map(
         order = keep[np.argsort(-dist[keep])]
         if order.size:
             sm = ax.scatter(xy[order, 0], xy[order, 1], s=size, c=dist[order], cmap=cmap, norm=norm, linewidths=0)
-        _bare(ax, label if titles is None else titles[k])
+        bare_axes(ax, label if titles is None else titles[k])
 
     if colorbar and sm is not None:
-        cb = fig.colorbar(sm, ax=axs, fraction=0.03, pad=0.02)
+        cb = frame.fig.colorbar(sm, ax=axs, fraction=0.03, pad=0.02)
         cb.set_label("signed distance to anchor border [um]", fontsize=9)
-    else:
-        fig.tight_layout()
-    if show:
-        plt.show()
-    return fig, axs
+        frame.tight = False  # tight_layout and the colorbar fight over the same space
 
 
+@panel_frame(panel_size=(3.0, 3.0), colors=ZONE_COLORS)
 def zone_map(
     adata,
     zone,
@@ -299,14 +267,10 @@ def zone_map(
     samples: Sequence[str] | None = None,
     sample_key: str = "sample",
     spatial_key: str = "spatial",
-    colors: dict | None = None,
     size: float = 6.0,
-    ncols: int | None = None,
-    panel_size: tuple[float, float] = (3.0, 3.0),
-    axes=None,
     legend: bool = True,
     titles: Sequence[str] | None = None,
-    show: bool = True,
+    frame: PanelFrame,
 ):
     """``anchor core`` / ``near`` / ``far`` bands, one panel per sample.
 
@@ -315,16 +279,20 @@ def zone_map(
     band holds. Cells with an undefined zone -- a sample where the dimension found no focus --
     are drawn in ``NA_COLOR``.
 
+    Parameters
+    ----------
+    {frame_params}
+
     Returns
     -------
     (fig, axes)
     """
     zone = _vector(adata, zone, "zone").astype(object)
-    colors = {**ZONE_COLORS, **(colors or {})}
+    colors = frame.colors
     xy = np.asarray(adata.obsm[spatial_key], dtype=float)
 
     panels = _slides(adata, sample_key, samples)
-    fig, axs = _grid(len(panels), ncols, panel_size, axes=axes)
+    axs = frame.grid(len(panels))
 
     for k, ((label, rows), ax) in enumerate(zip(panels, axs, strict=True)):
         unassigned = rows[pd.isna(zone[rows])]
@@ -334,7 +302,7 @@ def zone_map(
             sel = rows[zone[rows] == z]
             if sel.size:
                 ax.scatter(xy[sel, 0], xy[sel, 1], s=size, c=colors[z], linewidths=0)
-        _bare(ax, label if titles is None else titles[k])
+        bare_axes(ax, label if titles is None else titles[k])
 
     if legend:
         axs[-1].legend(
@@ -344,12 +312,9 @@ def zone_map(
             frameon=False,
             fontsize=9,
         )
-    fig.tight_layout()
-    if show:
-        plt.show()
-    return fig, axs
 
 
+@panel_frame(panel_size=(2.8, 2.6), columns=False, tight=False)
 def gene_maps(
     adata,
     genes: Sequence[str],
@@ -362,9 +327,8 @@ def gene_maps(
     cmap: str = "viridis",
     vmax_quantile: float = 0.99,
     size: float = 6.0,
-    panel_size: tuple[float, float] = (2.8, 2.6),
     anchor_edge: str = "#D00000",
-    show: bool = True,
+    frame: PanelFrame,
 ):
     """Expression of a dimension's top genes, genes down the rows and slides across.
 
@@ -378,6 +342,7 @@ def gene_maps(
     anchor
         Optional boolean/obs key. Anchor cells get a coloured ring, which is what ties the
         expression pattern back to the foci the dimension was anchored on.
+    {frame_params}
 
     Returns
     -------
@@ -391,12 +356,9 @@ def gene_maps(
     xy = np.asarray(adata.obsm[spatial_key], dtype=float)
 
     panels = _slides(adata, sample_key, samples)
-    fig, axs = plt.subplots(
-        len(genes),
-        len(panels),
-        figsize=(panel_size[0] * len(panels) + 0.9, panel_size[1] * len(genes)),
-        squeeze=False,
-    )
+    w, h = frame.panel_size
+    # + 0.9 in width for the per-row colorbars, which sit outside the panels.
+    axs = frame.subplots(len(genes), len(panels), figsize=(w * len(panels) + 0.9, h * len(genes)))
 
     for i, gene in enumerate(genes):
         vals = {label: _expression(adata, rows, gene, layer) for label, rows in panels}
@@ -430,14 +392,10 @@ def gene_maps(
                         edgecolors=anchor_edge,
                         linewidths=0.35,
                     )
-            _bare(ax, label if i == 0 else None)
+            bare_axes(ax, label if i == 0 else None)
             if j == 0:
                 ax.set_ylabel(gene, fontsize=10, rotation=0, ha="right", va="center", labelpad=8)
-        fig.colorbar(sm, ax=axs[i, :].tolist(), fraction=0.025, pad=0.02).set_label(layer or "X", fontsize=8)
-
-    if show:
-        plt.show()
-    return fig, axs
+        frame.fig.colorbar(sm, ax=axs[i, :].tolist(), fraction=0.025, pad=0.02).set_label(layer or "X", fontsize=8)
 
 
 # --------------------------------------------------------------------------------------------
@@ -499,7 +457,7 @@ def distance_profile(
         color_of = {g: cyc[i % len(cyc)] for i, g in enumerate(genes)}
 
     if one_panel_per_gene:
-        fig, axs = _grid(len(genes), ncols, panel_size)
+        fig, axs = panel_grid(len(genes), ncols, panel_size)
         panels = [(g, axs[i]) for i, g in enumerate(genes)]
     elif ax is not None:
         fig, axs = ax.get_figure(), [ax]

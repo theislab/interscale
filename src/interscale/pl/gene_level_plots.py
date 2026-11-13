@@ -1,11 +1,10 @@
-import os
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import seaborn as sns
 
 from interscale.evaluation import _get_Z
+from interscale.pl._utils import Frame, figure_frame
 from interscale.pl.config import Plotting
 
 
@@ -61,35 +60,23 @@ def latent_correlation(
     return g
 
 
-def dim_importance_elbow(
-    results,
-    figsize=(8, 4.5),
-    fontsize=12,
-    title=None,
-    show=True,
-    ax=None,
-):
+@figure_frame(figsize=(8.0, 4.5), despine=())
+def dim_importance_elbow(results, *, fontsize=12, title=None, frame: Frame):
     """Plot dimension importance elbow plot with cumulative cutoff.
 
     Parameters
     ----------
     results : dict
         Dictionary returned from calculate_dim_importance().
-    figsize : tuple
-        Figure size (only used if ax is None).
     fontsize : int
         Font size for labels.
     title : str, optional
         Plot title. If None, auto-generated.
-    show : bool
-        Whether to show the plot.
-    ax : matplotlib.axes.Axes, optional
-        Axes to plot on. If None, creates new figure.
+    {frame_params}
 
     Returns
     -------
-    ax : matplotlib.axes.Axes
-        The axes object.
+    The axes if ``show = False``, otherwise ``None``.
     """
     y_plot = results["y_plot"]
     dim_plot = results["dim_plot"]
@@ -109,9 +96,7 @@ def dim_importance_elbow(
     K = len(y_plot)
     x = np.arange(K) * spacing
 
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-
+    ax = frame.axes()
     ax.plot(x, y_plot, marker="o", linewidth=1)
 
     ax.set_xticks(x)
@@ -137,30 +122,22 @@ def dim_importance_elbow(
     ax.tick_params(axis="both", labelsize=fontsize - 1)
     ax.grid(False)
 
-    if ax is None:
-        plt.tight_layout()
-
-    if show and ax is None:
-        plt.show()
-
     # Print cutoff info
     if n_dims_left is not None:
         print(f"\n{int(cumulative_cutoff * 100)}% cumulative variance reached with {n_dims_left} dimensions:")
         print("Embedding dimensions (sorted by importance):")
         print(dims_left.tolist())
 
-    return ax
 
-
+@figure_frame(figsize=(10.0, 10.0), despine=())
 def gene_ranks(
     merged_df: pd.DataFrame,
     *,
     top_n: int = 5,
-    save_dir: str = None,
-    post_fix: str = None,
     color_local: str = None,
     color_global: str = None,
     plotting_config: Plotting = None,
+    frame: Frame,
 ):
     """Plot gene ranks comparing local and global model predictions.
 
@@ -169,20 +146,21 @@ def gene_ranks(
 
     Parameters
     ----------
-        merged_df : pd.DataFrame
-            DataFrame with columns: gene, Local Rank, Global Rank, Rank Difference, Avg Rank
-        top_n : int, optional
-            Number of top genes to highlight in each category. Defaults to 5.
-        save_dir : str, optional
-            Directory to save the figure. If None, figure is not saved. Defaults to None.
-        post_fix : str, optional
-            Post-fix to append to the saved figure filename. Defaults to None.
-        color_local : str, optional
-            Hex color code for local-driven genes. If None, uses default from plotting config.
-        color_global : str, optional
-            Hex color code for global-driven genes. If None, uses default from plotting config.
-        plotting_config : Plotting, optional
-            Plotting configuration object. If None, uses default configuration.
+    merged_df : pd.DataFrame
+        DataFrame with columns: gene, Local Rank, Global Rank, Rank Difference, Avg Rank
+    top_n : int, optional
+        Number of top genes to highlight in each category. Defaults to 5.
+    color_local : str, optional
+        Hex color code for local-driven genes. If None, uses default from plotting config.
+    color_global : str, optional
+        Hex color code for global-driven genes. If None, uses default from plotting config.
+    plotting_config : Plotting, optional
+        Plotting configuration object. If None, uses default configuration.
+    {frame_params}
+
+    Returns
+    -------
+    The axes if ``show = False``, otherwise ``None``.
     """
     # Initialize plotting config if not provided
     if plotting_config is None:
@@ -192,10 +170,8 @@ def gene_ranks(
     general_cfg = plotting_config.config["plot_configs"]["general"]
     rank_cfg = plotting_config.config["plot_configs"].get("rank_genes_plots", {})
 
-    figsize = (10, 10)
     fontsize = general_cfg.get("title_fontsize", 14)
     legend_fontsize = general_cfg.get("legend_fontsize", 12)
-    dpi_save = general_cfg.get("dpi_save", 300)
 
     # Use defaults if colors not provided
     if color_local is None:
@@ -215,45 +191,37 @@ def gene_ranks(
         color_global = f"#{color_global}"
 
     # Plot all genes
-    plt.figure(figsize=figsize)
-    plt.scatter(merged_df["Local Rank"], merged_df["Global Rank"], alpha=0.6, label="All Genes", color="gray")
+    ax = frame.axes()
+    ax.scatter(merged_df["Local Rank"], merged_df["Global Rank"], alpha=0.6, label="All Genes", color="gray")
 
     # Plot and label top local genes
-    plt.scatter(top_local_genes["Local Rank"], top_local_genes["Global Rank"], color=color_local, label="Top Local")
+    ax.scatter(top_local_genes["Local Rank"], top_local_genes["Global Rank"], color=color_local, label="Top Local")
     for _, row in top_local_genes.iterrows():
-        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=fontsize - 4, color=color_local)
+        ax.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=fontsize - 4, color=color_local)
 
     # Plot and label top global genes
-    plt.scatter(top_global_genes["Local Rank"], top_global_genes["Global Rank"], color=color_global, label="Top Global")
+    ax.scatter(top_global_genes["Local Rank"], top_global_genes["Global Rank"], color=color_global, label="Top Global")
     for _, row in top_global_genes.iterrows():
-        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=fontsize - 4, color=color_global)
+        ax.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=fontsize - 4, color=color_global)
 
     # Plot and label best-predicted genes
-    plt.scatter(top_best_genes["Local Rank"], top_best_genes["Global Rank"], color="green", label="Best Predicted")
+    ax.scatter(top_best_genes["Local Rank"], top_best_genes["Global Rank"], color="green", label="Best Predicted")
     for _, row in top_best_genes.iterrows():
-        plt.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=fontsize - 4, color="green")
+        ax.text(row["Local Rank"], row["Global Rank"], row["gene"], fontsize=fontsize - 4, color="green")
 
     # Reference diagonal
     min_rank, max_rank = (
         merged_df[["Local Rank", "Global Rank"]].values.min(),
         merged_df[["Local Rank", "Global Rank"]].values.max(),
     )
-    plt.plot([min_rank, max_rank], [min_rank, max_rank], "r--", label="Equal Ranking (y=x)")
+    ax.plot([min_rank, max_rank], [min_rank, max_rank], "r--", label="Equal Ranking (y=x)")
 
     # Labels and legend
-    plt.xlabel("Local Model Rank", fontsize=fontsize)
-    plt.ylabel("Global Model Rank", fontsize=fontsize)
-    plt.title(
+    ax.set_xlabel("Local Model Rank", fontsize=fontsize)
+    ax.set_ylabel("Global Model Rank", fontsize=fontsize)
+    ax.set_title(
         "Gene Prediction Rank: Local vs. Global",
         fontsize=fontsize,
         fontweight=general_cfg.get("title_fontweight", "bold"),
     )
-    plt.legend(fontsize=legend_fontsize)
-
-    # Save figure if save_dir is provided
-    if save_dir is not None:
-        save_path = os.path.join(save_dir, f"gene_rank_analysis_{post_fix}.png")
-        plt.savefig(save_path, dpi=dpi_save, bbox_inches="tight")
-        print(f"Figure saved to: {save_path}")
-
-    plt.show()
+    ax.legend(fontsize=legend_fontsize)

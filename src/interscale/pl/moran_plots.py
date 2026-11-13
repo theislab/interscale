@@ -12,20 +12,18 @@ from __future__ import annotations
 
 import warnings
 from collections.abc import Mapping, Sequence
-from pathlib import Path
 from typing import Literal
 
 import anndata as ad
-import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.axes import Axes
+from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
+
+from interscale.pl._utils import CLASS_COLORS, COLOR_GLOBAL, COLOR_LOCAL, COLOR_OTHER, Frame, figure_frame
 
 __all__ = ["COLOR_LOCAL", "COLOR_GLOBAL", "COLOR_OTHER", "top_local_global", "moran_auc", "moran_curves"]
 
-COLOR_LOCAL = "#EE9B00"
-COLOR_GLOBAL = "#337F8F"
-COLOR_OTHER = "#BBBBBB"
 MAX_CURVES = 20  # more curves than this are hard to read
 
 
@@ -64,45 +62,24 @@ def top_local_global(
 
 
 def _class_colors(
-    names: Sequence[str],
-    top_local: Sequence[str],
-    top_global: Sequence[str],
-    color_local: str,
-    color_global: str,
-    color_other: str,
+    names: Sequence[str], top_local: Sequence[str], top_global: Sequence[str], colors: Mapping[str, str]
 ) -> list[str]:
-    return [color_local if g in top_local else color_global if g in top_global else color_other for g in names]
+    local, glob, other = colors["local"], colors["global"], colors["other"]
+    return [local if g in top_local else glob if g in top_global else other for g in names]
 
 
-def _finish(fig: plt.Figure, ax: Axes, save: str | Path | None, show: bool | None, own_fig: bool) -> Axes | None:
-    ax.spines[["top", "right"]].set_visible(False)
-    if save is not None:
-        fig.savefig(save, bbox_inches="tight")
-    if show is None:
-        show = own_fig  # an axes passed by the caller is part of a larger figure, which the caller shows
-    if show:
-        plt.show()
-        return None
-    return ax
-
-
+@figure_frame(colors=CLASS_COLORS)
 def moran_auc(
     adata: ad.AnnData,
     *,
     key: str = "moran_scale",
     features: Sequence[str] | None = None,
     n_top: int = 5,
-    color_local: str = COLOR_LOCAL,
-    color_global: str = COLOR_GLOBAL,
-    color_other: str = COLOR_OTHER,
     max_labels: int = 100,
     title: str | None = None,
-    ax: Axes | None = None,
-    figsize: tuple[float, float] | None = None,
-    dpi: int | None = None,
-    save: str | Path | None = None,
-    show: bool | None = None,
-) -> Axes | None:
+    legend_kw: Mapping[str, object] | None = None,
+    frame: Frame,
+) -> None:
     """Bar plot of the AUC of the Moran curve per feature, sorted by AUC, top local / global features colored.
 
     The AUC only orders the bars; the colors come from the local index (see :func:`top_local_global`).
@@ -117,20 +94,14 @@ def moran_auc(
         Features to show and rank (default: all, e.g. all genes).
     n_top
         Number of top local and of top global features to color.
-    color_local, color_global, color_other
-        Bar colors of the top local, top global and remaining features.
     max_labels
         With more features than this, only the colored features are labelled on the x-axis.
     title
         Axes title.
-    ax
-        Axes to plot into. If ``None``, a new figure is created.
-    figsize, dpi
-        Size and resolution of a new figure.
-    save
-        Path to save the figure to.
-    show
-        Show the figure. Default: only if a new figure was created. If ``False``, the axes are returned.
+    legend_kw
+        Extra arguments for ``ax.legend``, e.g. ``{"loc": "center left", "bbox_to_anchor": (1.0, 0.5)}``
+        to put the legend outside the axes, to the right.
+    {frame_params}
 
     Returns
     -------
@@ -142,14 +113,12 @@ def moran_auc(
     top_local, top_global = top_local_global(adata, key=key, n_top=n_top, features=stats.index)
     stats = stats.sort_values("auc", ascending=False)
     names = stats.index.tolist()
-    colors = _class_colors(names, top_local, top_global, color_local, color_global, color_other)
+    color_local, color_global = frame.colors["local"], frame.colors["global"]
+    colors = _class_colors(names, top_local, top_global, frame.colors)
 
     n = len(names)
-    own_fig = ax is None
-    if own_fig:
-        fig, ax = plt.subplots(figsize=figsize or (min(max(3.0, 0.15 * n + 1.5), 14.0), 4.0), dpi=dpi)
-    else:
-        fig = ax.figure
+    # The width grows with the number of bars, so a 40-gene panel is not 400 genes squeezed.
+    ax = frame.axes(figsize=(min(max(3.0, 0.15 * n + 1.5), 14.0), 4.0))
     x = np.arange(n)
     ax.bar(x, stats["auc"], color=colors, width=0.85 if n <= max_labels else 1.0, linewidth=0)
     if n <= max_labels:
@@ -173,12 +142,8 @@ def moran_auc(
             Patch(color=color_local, label=f"top {len(top_local)} local"),
             Patch(color=color_global, label=f"top {len(top_global)} global"),
         ],
-        frameon=False,
-        fontsize=8,
-        title="local index",
-        title_fontsize=8,
+        **{"frameon": False, "fontsize": 8, "title": "local index", "title_fontsize": 8, **(legend_kw or {})},
     )
-    return _finish(fig, ax, save, show, own_fig)
 
 
 def _label_line_ends(ax: Axes, x: float, ys: Sequence[float], labels: Sequence[str], colors: Sequence[str]) -> None:
@@ -197,6 +162,7 @@ def _label_line_ends(ax: Axes, x: float, ys: Sequence[float], labels: Sequence[s
     ax.set_ylim(lo, max(hi, pos.max() + gap))
 
 
+@figure_frame(figsize=(5.0, 4.0), colors=CLASS_COLORS)
 def moran_curves(
     adata: ad.AnnData,
     *,
@@ -205,17 +171,14 @@ def moran_curves(
     features: Sequence[str] | None = None,
     n_top: int = 3,
     palette: Mapping[str, str] | None = None,
-    color_local: str = COLOR_LOCAL,
-    color_global: str = COLOR_GLOBAL,
-    color_other: str = COLOR_OTHER,
     sd: bool = False,
+    log_scale: bool = False,
+    chord: bool = False,
+    normalize: bool = False,
     title: str | None = None,
-    ax: Axes | None = None,
-    figsize: tuple[float, float] = (5.0, 4.0),
-    dpi: int | None = None,
-    save: str | Path | None = None,
-    show: bool | None = None,
-) -> Axes | None:
+    legend_kw: Mapping[str, object] | None = None,
+    frame: Frame,
+) -> None:
     """Moran curves: Moran's I against the number of neighbors ``k`` (or the radius).
 
     Parameters
@@ -234,25 +197,35 @@ def moran_curves(
     palette
         Color per feature, with a legend. Features not in ``palette`` (or all, if ``None``) are colored by class:
         top local, top global or other, and labelled at the end of their curve.
-    color_local, color_global, color_other
-        Class colors.
     sd
         Shade ± 1 standard deviation over libraries (requires ``tl.moran_scale(..., per_library=True)``).
+    log_scale
+        Plot against ``log2`` of the scale. On this axis a decay with no preferred scale (the same ΔI per doubling
+        of ``k``) is a straight line.
+    chord
+        Draw each curve's chord, the straight line from ``I(k_min)`` to ``I(k_max)`` on the log2 axis, and the gap
+        between the chord and ``I(k_split)``: a curve sagging below its chord (convex) loses its autocorrelation
+        within small neighborhoods (local pattern), one bulging above it (concave) at tissue scale. The gap is the
+        stats column ``chord_gap``, a rescaled local index (see ``tl.delta_from_profile``). ``k_min``, ``k_split``
+        and ``k_max`` are drawn filled, the scales the index does not use hollow. Requires ``log_scale``.
+    normalize
+        Rescale each curve to ``(I - I(k_max)) / (I(k_min) - I(k_max))``, so every curve runs from 1 to 0 and all
+        share one chord (the diagonal). Makes the curvature of strongly and weakly autocorrelated features
+        comparable.
     title
         Axes title.
-    ax
-        Axes to plot into. If ``None``, a new figure is created.
-    figsize, dpi
-        Size and resolution of a new figure.
-    save
-        Path to save the figure to.
-    show
-        Show the figure. Default: only if a new figure was created. If ``False``, the axes are returned.
+    legend_kw
+        Extra arguments for ``ax.legend``, e.g. ``{"loc": "center left", "bbox_to_anchor": (1.0, 0.5)}``
+        to put the legend outside the axes, to the right. Only curves colored by ``palette`` get a legend
+        entry; class-colored curves are labelled at their right end instead.
+    {frame_params}
 
     Returns
     -------
     The axes if ``show = False``, otherwise ``None``.
     """
+    if chord and not log_scale:
+        raise ValueError("`chord=True` requires `log_scale=True`: the chord is the no-preferred-scale line on log2 k.")
     res = _results(adata, key)
     params = res["params"]
     scale_col, split = params["scale_col"], params["split"]
@@ -274,35 +247,68 @@ def moran_curves(
         if "profile_per_library" not in res:
             raise ValueError("`sd=True` requires `tl.moran_scale(..., per_library=True)`.")
         I_sd = res["profile_per_library"].pivot_table(index="feature", columns=scale_col, values="I", aggfunc="std")
+        I_sd = I_sd.reindex(index=I.index, columns=I.columns)
+    if normalize:
+        span = I.iloc[:, 0] - I.iloc[:, -1]
+        flat = [g for g in genes if not abs(span[g]) > 1e-12]
+        if flat:
+            raise ValueError(f"Cannot normalize features with I(k_min) == I(k_max): {flat}.")
+        I = I.sub(I.iloc[:, -1], axis=0).div(span, axis=0)
+        if sd:
+            I_sd = I_sd.div(span.abs(), axis=0)
+    x = np.log2(scales) if log_scale else scales
+    split_x = np.log2(split) if log_scale else split
+    i_split = int(np.argmin(np.abs(scales - split)))
     palette = {} if palette is None else palette
-    class_colors = _class_colors(genes, top_local, top_global, color_local, color_global, color_other)
+    class_colors = _class_colors(genes, top_local, top_global, frame.colors)
     colors = [palette.get(g, c) for g, c in zip(genes, class_colors)]
 
-    own_fig = ax is None
-    if own_fig:
-        fig, ax = plt.subplots(figsize=figsize, dpi=dpi)
-    else:
-        fig = ax.figure
+    ax = frame.axes()
+    used = np.zeros(len(scales), dtype=bool)
+    used[[0, i_split, -1]] = True  # the three scales the local index is computed from
+    curves = []
     for g, c in zip(genes, colors):
-        ax.plot(scales, I.loc[g], marker="o", ms=4, color=c, label=g)
+        y = I.loc[g].to_numpy(dtype=float)
+        if chord:
+            curves.append(ax.plot(x, y, color=c, label=g)[0])
+            ax.plot(x[used], y[used], "o", ms=5, color=c)
+            ax.plot(x[~used], y[~used], "o", ms=4, mfc="white", mec=c)
+            y_chord = y[0] + (y[-1] - y[0]) * (split_x - x[0]) / (x[-1] - x[0])
+            if not normalize:
+                ax.plot(x[[0, -1]], y[[0, -1]], ls="--", lw=0.9, color=c, alpha=0.7)
+            ax.plot([split_x, split_x], [y_chord, y[i_split]], lw=3, color=c, alpha=0.5, solid_capstyle="butt")
+        else:
+            curves.append(ax.plot(x, y, marker="o", ms=4, color=c, label=g)[0])
         if sd:
-            ax.fill_between(scales, I.loc[g] - I_sd.loc[g], I.loc[g] + I_sd.loc[g], color=c, alpha=0.15, lw=0)
-    ax.axvline(split, ls=":", color="grey", lw=1)
+            s_ = I_sd.loc[g].to_numpy(dtype=float)
+            ax.fill_between(x, y - s_, y + s_, color=c, alpha=0.15, lw=0)
+    if chord and normalize:
+        ax.plot(x[[0, -1]], [1, 0], ls="--", lw=1, color="grey")
+    ax.axvline(split_x, ls=":", color="grey", lw=1)
     ax.axhline(0, ls="--", lw=0.8, color="grey")
-    ax.set_xlabel("Number of neighbors (k)" if scale_col == "k" else "Radius")
-    ax.set_ylabel("Moran's I")
+    name = "Number of neighbors (k)" if scale_col == "k" else "Radius"
+    if log_scale:
+        ax.set_xticks(x, [f"{v:g}" for v in scales])
+        name += ", log2 scale"
+    ax.set_xlabel(name)
+    ax.set_ylabel("Moran's I, rescaled (1 at k_min, 0 at k_max)" if normalize else "Moran's I")
     if title is not None:
         ax.set_title(title, fontsize=10)
 
     in_palette = [g in palette for g in genes]
-    if any(in_palette):
-        handles = [h for h, keep in zip(ax.get_lines(), in_palette) if keep]
-        ax.legend(handles=handles, frameon=False, fontsize=8)
+    handles = [h for h, keep in zip(curves, in_palette) if keep]
+    if chord:
+        handles += [
+            Line2D([], [], ls="--", color="grey", label="chord: no preferred scale"),
+            Line2D([], [], lw=3, color="grey", alpha=0.5, label="gap = chord − I(k_split)"),
+            Line2D([], [], ls="", marker="o", mfc="white", mec="grey", label="not used in the index"),
+        ]
+    if handles:
+        ax.legend(handles=handles, **{"frameon": False, "fontsize": 8, **(legend_kw or {})})
     if not all(in_palette):
         # class-colored curves share a color, so they are labelled directly
-        ax.set_xlim(right=scales[-1] + 0.18 * (scales[-1] - scales[0]))
+        ax.set_xlim(right=x[-1] + 0.18 * (x[-1] - x[0]))
         idx = [i for i, keep in enumerate(in_palette) if not keep]
         _label_line_ends(
-            ax, scales[-1], [I.loc[genes[i]].iloc[-1] for i in idx], [genes[i] for i in idx], [colors[i] for i in idx]
+            ax, x[-1], [I.loc[genes[i]].iloc[-1] for i in idx], [genes[i] for i in idx], [colors[i] for i in idx]
         )
-    return _finish(fig, ax, save, show, own_fig)
