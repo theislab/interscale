@@ -23,6 +23,8 @@ def get_model_cfg(cfg):
     cfg.model.decoder.type = "linear"  # [linear, nonlinear, linear-lse]
     cfg.model.decoder.hidden_dims = [256, 128]
     cfg.model.decoder.dropout_decoder = 0.1
+    cfg.model.decoder.mean_offset = False
+    cfg.model.decoder.offset_weight_scale = 0.01
     cfg.model.decoder.dual_decoder = (
         False  # [True, False] If True, use dual decoder for combined module. Both local and global decoders are used.
     )

@@ -32,17 +32,9 @@ def get_dataset_cfg(cfg):
     cfg.dataset.num_features = -1
     cfg.dataset.num_classes = -1
 
-    # Reconstruction corruption. "node" blanks whole cells and scores all G genes of them;
-    # "gene" blanks individual (cell, gene) entries in every cell and scores those entries only.
-    # See interscale.tl.masking for why the two objectives behave so differently -- under "node"
-    # the target cell contributes nothing about itself, so the population mean is already a
-    # strong solution. "node" stays the default so every existing config is unchanged.
     cfg.dataset.mask_strategy = "node"
-    # One rate, not one per strategy: mask_strategy already says what a unit is, so a second key
-    # would only ever be the inert half of the pair -- and setting the wrong one silently gives a
-    # run with no masking. Note the two strategies are not comparable at equal values: a per-entry
-    # rate is a different quantity from a per-cell one (MAE/GraphMAE use 0.25-0.75 for features).
     cfg.dataset.mask_percentage = 0.2
+    cfg.dataset.mask_value = -1.0
 
     # Segmentation robustness parameters
     cfg.dataset.segmentation_robustness = None  # [node_fraction, overflow_fraction] or None
