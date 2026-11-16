@@ -4,8 +4,7 @@ import pandas as pd
 import seaborn as sns
 
 from interscale.evaluation import _get_Z
-from interscale.pl._utils import Frame, figure_frame
-from interscale.pl.config import Plotting
+from interscale.pl._utils import CLASS_COLORS, Frame, figure_frame
 
 
 def latent_correlation(
@@ -129,14 +128,11 @@ def dim_importance_elbow(results, *, fontsize=12, title=None, frame: Frame):
         print(dims_left.tolist())
 
 
-@figure_frame(figsize=(10.0, 10.0), despine=())
+@figure_frame(figsize=(10.0, 10.0), despine=(), colors=CLASS_COLORS)
 def gene_ranks(
     merged_df: pd.DataFrame,
     *,
     top_n: int = 5,
-    color_local: str = None,
-    color_global: str = None,
-    plotting_config: Plotting = None,
     frame: Frame,
 ):
     """Plot gene ranks comparing local and global model predictions.
@@ -150,49 +146,25 @@ def gene_ranks(
         DataFrame with columns: gene, Local Rank, Global Rank, Rank Difference, Avg Rank
     top_n : int, optional
         Number of top genes to highlight in each category. Defaults to 5.
-    color_local : str, optional
-        Hex color code for local-driven genes. If None, uses default from plotting config.
-    color_global : str, optional
-        Hex color code for global-driven genes. If None, uses default from plotting config.
-    plotting_config : Plotting, optional
-        Plotting configuration object. If None, uses default configuration.
     {frame_params}
 
     Returns
     -------
     The axes if ``show = False``, otherwise ``None``.
     """
-    # Initialize plotting config if not provided
-    if plotting_config is None:
-        plotting_config = Plotting()
-
-    # Get plotting parameters from config
-    general_cfg = plotting_config.config["plot_configs"]["general"]
-    rank_cfg = plotting_config.config["plot_configs"].get("rank_genes_plots", {})
-
-    fontsize = general_cfg.get("title_fontsize", 14)
-    legend_fontsize = general_cfg.get("legend_fontsize", 12)
-
-    # Use defaults if colors not provided
-    if color_local is None:
-        color_local = rank_cfg.get("color_local", "EE9B00")
-    if color_global is None:
-        color_global = rank_cfg.get("color_global", "005F73")
+    color_local, color_global = frame.colors["local"], frame.colors["global"]
+    fontsize, legend_fontsize = 14, 12
 
     # Get top_n genes in each category
     top_local_genes = merged_df.nsmallest(top_n, "Rank Difference")  # More local-driven
     top_global_genes = merged_df.nlargest(top_n, "Rank Difference")  # More global-driven
     top_best_genes = merged_df.nlargest(top_n, "Avg Rank")  # Best overall predicted genes
 
-    # Ensure colors have '#' prefix
-    if not color_local.startswith("#"):
-        color_local = f"#{color_local}"
-    if not color_global.startswith("#"):
-        color_global = f"#{color_global}"
-
     # Plot all genes
     ax = frame.axes()
-    ax.scatter(merged_df["Local Rank"], merged_df["Global Rank"], alpha=0.6, label="All Genes", color="gray")
+    ax.scatter(
+        merged_df["Local Rank"], merged_df["Global Rank"], alpha=0.6, label="All Genes", color=frame.colors["other"]
+    )
 
     # Plot and label top local genes
     ax.scatter(top_local_genes["Local Rank"], top_local_genes["Global Rank"], color=color_local, label="Top Local")
@@ -222,6 +194,6 @@ def gene_ranks(
     ax.set_title(
         "Gene Prediction Rank: Local vs. Global",
         fontsize=fontsize,
-        fontweight=general_cfg.get("title_fontweight", "bold"),
+        fontweight="bold",
     )
     ax.legend(fontsize=legend_fontsize)
