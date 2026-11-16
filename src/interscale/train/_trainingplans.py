@@ -12,7 +12,7 @@ from interscale.module.base._base_module import BaseModule
 from interscale.nn import CosineWarmupScheduler
 from interscale.tl.masking import masked_loss
 
-from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss
+from .losses import BalancedPearsonCorrelationLoss, NBLoss, SCE_EntropyATT_Loss, SCELoss
 
 
 class RunningCosineSimilarity(torchmetrics.Metric):
@@ -116,8 +116,13 @@ def _masked_moments(y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torc
     return {k: v.double() for k, v in moments.items()}
 
 
-def _masked_metrics_from_moments(moments: dict[str, torch.Tensor], eps: float = 1e-8) -> dict[str, torch.Tensor]:
-    """The metrics of :func:`masked_regression_metrics`, from (possibly accumulated) moments."""
+def per_gene_metrics_from_moments(moments: dict[str, torch.Tensor], eps: float = 1e-8) -> dict[str, torch.Tensor]:
+    """Per-gene ``[G]`` metric vectors from (possibly accumulated) moments.
+
+    Keys: ``r2``, ``pearson_corr``, ``concordance_corr``, ``cosine_similarity``. Genes without a
+    defined value are NaN. ``cosine_similarity`` here is the cosine over the cells of one gene,
+    unlike the per-cell cosine that training logs.
+    """
     n_gene = moments["n_gene"]
     ng = n_gene.clamp(min=1)
 
@@ -130,7 +135,6 @@ def _masked_metrics_from_moments(moments: dict[str, torch.Tensor], eps: float = 
 
     # Squared error per gene, sum((p - t)^2) expanded into the accumulated sums.
     ss_res = moments["sum_pp"] - 2 * moments["sum_pt"] + moments["sum_tt"]
-    mse = ss_res.sum() / n_gene.sum().clamp(min=1)
 
     # A gene with fewer than two masked cells, or with no spread in either vector, has no
     # correlation defined; NaN it out and let nanmean skip it, exactly as the unmasked path
@@ -146,11 +150,23 @@ def _masked_metrics_from_moments(moments: dict[str, torch.Tensor], eps: float = 
     ss_tot = var_t * ng
     r2 = torch.where(usable, 1 - ss_res / ss_tot.clamp(min=eps), nan)
 
+    denom = (moments["sum_pp"] * moments["sum_tt"]).sqrt()
+    cosine = torch.where(usable & (denom > eps), moments["sum_pt"] / denom.clamp(min=eps), nan)
+
+    return {"r2": r2, "pearson_corr": pearson, "concordance_corr": concordance, "cosine_similarity": cosine}
+
+
+def _masked_metrics_from_moments(moments: dict[str, torch.Tensor], eps: float = 1e-8) -> dict[str, torch.Tensor]:
+    """The metrics of :func:`masked_regression_metrics`, from (possibly accumulated) moments."""
+    n_gene = moments["n_gene"]
+    per_gene = per_gene_metrics_from_moments(moments, eps=eps)
+    # Squared error per gene, sum((p - t)^2) expanded into the accumulated sums.
+    ss_res = moments["sum_pp"] - 2 * moments["sum_pt"] + moments["sum_tt"]
     return {
-        "mse": mse,
-        "r2": torch.nanmean(r2),
-        "pearson_corr": torch.nanmean(pearson),
-        "concordance_corr": torch.nanmean(concordance),
+        "mse": ss_res.sum() / n_gene.sum().clamp(min=1),
+        "r2": torch.nanmean(per_gene["r2"]),
+        "pearson_corr": torch.nanmean(per_gene["pearson_corr"]),
+        "concordance_corr": torch.nanmean(per_gene["concordance_corr"]),
         "cosine_similarity": moments["cos_total"] / moments["n_rows"].clamp(min=1),
     }
 
@@ -236,6 +252,7 @@ REGRESSION_LOSSES = [
     "BalancedPearsonCorrelationLoss",
     "SCELoss",
     "SCE_EntropyATT_Loss",
+    "NB",
 ]
 
 
@@ -283,6 +300,7 @@ class TrainingPlan(pl.LightningModule):
         lr: float = 1e-3,
         lr_warmup: int = 0,
         lr_max_epochs: int = 100000,
+        sce_alpha: float = 3.0,
         patience_in_steps: int = 100000,
         **kwargs,
     ):
@@ -291,6 +309,8 @@ class TrainingPlan(pl.LightningModule):
         self.prediction_task = prediction_task
         self.prediction_level = prediction_level
         self.loss_type = loss
+        # Must be set before _setup_regression_loss() below, which reads it.
+        self.sce_alpha = sce_alpha
         self.cross_corr = cross_corr
         self.batch_size = batch_size
         self.class_weights = class_weights
@@ -373,9 +393,12 @@ class TrainingPlan(pl.LightningModule):
         elif loss == "BalancedPearsonCorrelationLoss":
             return BalancedPearsonCorrelationLoss(None)
         elif loss == "SCELoss":
-            return SCELoss()
+            return SCELoss(alpha=self.sce_alpha)
         elif loss == "SCE_EntropyATT_Loss":
-            return SCE_EntropyATT_Loss()
+            return SCE_EntropyATT_Loss(alpha=self.sce_alpha)
+        elif loss == "NB":
+            # Per-gene dispersion lives on the loss; configure_optimizers must pick it up.
+            return NBLoss(n_genes=self.module.n_output)
 
     @staticmethod
     def _setup_classification_metrics(num_outputs: int, class_labels: list[str] | None = None):
@@ -770,6 +793,11 @@ class TrainingPlan(pl.LightningModule):
         """Configure optimizers and learning rate schedulers."""
         params = []
         params.extend(filter(lambda p: p.requires_grad, self.module.parameters()))
+        # Some losses carry learnable parameters of their own (NBLoss's per-gene dispersion).
+        # self.module.parameters() does not reach them, and an un-optimised dispersion is a
+        # SILENT failure: training proceeds and theta simply never moves off its initialisation.
+        if isinstance(getattr(self, "loss", None), torch.nn.Module):
+            params.extend(filter(lambda p: p.requires_grad, self.loss.parameters()))
         # if self.model.local_component is not None:
         #     params.extend(filter(lambda p: p.requires_grad, self.module.local_component.parameters()))
         # if self.model.global_component is not None:
