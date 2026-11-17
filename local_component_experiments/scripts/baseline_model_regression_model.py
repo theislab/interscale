@@ -117,6 +117,7 @@ def score(predict):
         r2.append(m["r2"].item())
     return np.mean(pearson), np.mean(r2)
 
+
 # fit and score
 print(f"\n{'':26s}{'val_masked_pearson_corr':>25s}{'val_masked_r2':>15s}")
 p, r = score(lambda x_nb: x_nb)
