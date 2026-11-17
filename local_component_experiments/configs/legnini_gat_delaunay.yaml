@@ -5,11 +5,13 @@ model:
   decoder: { type: linear }
   save: results/checkpoints/
 optim:
-  loss: SCELoss # regression loss
+  loss: BalancedPearsonCorrelationLoss # regression loss
   accelerator: cpu
+  pearson_cell_weight: 0.75
   n_epochs: 2000
   min_epochs: 100
   patience: 50 # early stopping on val_loss (regression)
+  monitor: val_masked_pearson_corr
 dataset:
   h5ad_data: data/legnini_prepared.h5ad
   name: legnini_delaunay_csel_batch_2 # checkpoint files are named after this
@@ -20,6 +22,8 @@ dataset:
   split_key: split
   batch_size: 2
   connectivity_key: delaunay_connectivities
+  mask_strategy: node  
+  mask_percentage: 0.2 
 wandb:
   use: true
   project_name: legnini-graphs

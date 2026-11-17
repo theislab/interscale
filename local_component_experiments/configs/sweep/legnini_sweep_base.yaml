@@ -1,0 +1,46 @@
+# 3 graphs x 3 losses x 3 GNNs = 27 runs.
+sweep_config:
+  method: grid
+  parameters:
+    arm:
+      values: [radius_mse, radius_sce, radius_bpc, knn_mse, knn_sce, knn_bpc, delaunay_mse, delaunay_sce, delaunay_bpc]
+    model.local_component.name:
+      values: [GCN, GAT, GIN]
+
+arms:
+  radius_mse:
+    dataset.connectivity_key: radius_connectivities
+    optim.loss: MSELoss
+    dataset.name: legnini_radius_mse
+  radius_sce:
+    dataset.connectivity_key: radius_connectivities
+    optim.loss: SCELoss
+    dataset.name: legnini_radius_sce
+  radius_bpc:
+    dataset.connectivity_key: radius_connectivities
+    optim.loss: BalancedPearsonCorrelationLoss
+    dataset.name: legnini_radius_bpc
+  knn_mse:
+    dataset.connectivity_key: knn_connectivities
+    optim.loss: MSELoss
+    dataset.name: legnini_knn_mse
+  knn_sce:
+    dataset.connectivity_key: knn_connectivities
+    optim.loss: SCELoss
+    dataset.name: legnini_knn_sce
+  knn_bpc:
+    dataset.connectivity_key: knn_connectivities
+    optim.loss: BalancedPearsonCorrelationLoss
+    dataset.name: legnini_knn_bpc
+  delaunay_mse:
+    dataset.connectivity_key: delaunay_connectivities
+    optim.loss: MSELoss
+    dataset.name: legnini_delaunay_mse
+  delaunay_sce:
+    dataset.connectivity_key: delaunay_connectivities
+    optim.loss: SCELoss
+    dataset.name: legnini_delaunay_sce
+  delaunay_bpc:
+    dataset.connectivity_key: delaunay_connectivities
+    optim.loss: BalancedPearsonCorrelationLoss
+    dataset.name: legnini_delaunay_bpc
