@@ -1,0 +1,24 @@
+sweep_config:
+  method: grid
+  parameters:
+    arm:
+      values: [radius_bpc_node, knn_bpc_node, delaunay_bpc_node]
+    model.local_component.name:
+      values: [GCN, GAT, GIN]
+
+arms:
+  radius_bpc_node:
+    dataset.connectivity_key: radius_connectivities
+    optim.loss: BalancedPearsonCorrelationLoss
+    dataset.mask_strategy: node
+    dataset.name: legnini_radius_bpc_node
+  knn_bpc_node:
+    dataset.connectivity_key: knn_connectivities
+    optim.loss: BalancedPearsonCorrelationLoss
+    dataset.mask_strategy: node
+    dataset.name: legnini_knn_bpc_node
+  delaunay_bpc_node:
+    dataset.connectivity_key: delaunay_connectivities
+    optim.loss: BalancedPearsonCorrelationLoss
+    dataset.mask_strategy: node
+    dataset.name: legnini_delaunay_bpc_node
