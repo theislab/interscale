@@ -35,7 +35,9 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
     # adjusted from seq2cells
     # https://github.com/GSK-AI/seq2cells/blob/main/seq2cells/metrics_and_losses/losses.py
     # accessed on 28 August 2025
-    """Pearson Corr balances between across gene and cell performance"""
+    """Pearson Corr balances between across gene and cell performance.
+    InterScale passes ``[cells x genes]`` (seq2cells used ``[genes x cells]``).
+    """
 
     def __init__(
         self,
@@ -54,7 +56,7 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
             The relative weight to put on the across gene/tss correlation.
         rel_weight_cell: float = 1.0
             The relative weight to put on the across cells correlation.
-        norm_by:  Literal['mean', 'nonzero_median'] = 'nonzero_median'
+        norm_by: Literal['mean', 'nonzero_median'] = 'mean'
             What to use as across gene / cell average to subtract from the
             signal to normalise it. Mean or the Median of the non zero entries.
         eps: float 1e-8
@@ -91,10 +93,6 @@ class BalancedPearsonCorrelationLoss(torch.nn.Module):
         r_tss = F.cosine_similarity(preds - preds_avg_gene, targets - targets_avg_gene, dim=0, eps=self.eps)
         r_celltype = F.cosine_similarity(preds - preds_avg_cell, targets - targets_avg_cell, dim=1, eps=self.eps)
 
-        loss = self.rel_weight_gene * (1 - r_tss.mean()) + self.rel_weight_cell * (1 - r_celltype.mean())
-
-        # norm the loss to 2 by half the sum of the relative weights
-        loss = (loss * 2) / (self.rel_weight_gene + self.rel_weight_cell)
         loss = self.cell_weight * (1 - r_tss.mean()) + (1 - self.cell_weight) * (1 - r_celltype.mean())
         # to keep the loss in the same 0–4 range as before
         return 2 * loss
