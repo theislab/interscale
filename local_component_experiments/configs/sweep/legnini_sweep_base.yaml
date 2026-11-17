@@ -2,7 +2,24 @@ sweep_config:
   method: grid
   parameters:
     arm:
-      values: [radius_mse_node, radius_mse_gene, radius_sce_node, radius_sce_gene, radius_bpc_node, knn_mse_node, knn_mse_gene, knn_sce_node, knn_sce_gene, knn_bpc_node, delaunay_mse_node, delaunay_mse_gene, delaunay_sce_node, delaunay_sce_gene, delaunay_bpc_node]
+      values:
+        [
+          radius_mse_node,
+          radius_mse_gene,
+          radius_sce_node,
+          radius_sce_gene,
+          radius_bpc_node,
+          knn_mse_node,
+          knn_mse_gene,
+          knn_sce_node,
+          knn_sce_gene,
+          knn_bpc_node,
+          delaunay_mse_node,
+          delaunay_mse_gene,
+          delaunay_sce_node,
+          delaunay_sce_gene,
+          delaunay_bpc_node,
+        ]
     model.local_component.name:
       values: [GCN, GAT, GIN]
 
