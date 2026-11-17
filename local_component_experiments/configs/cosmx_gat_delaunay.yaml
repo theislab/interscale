@@ -21,8 +21,8 @@ dataset:
   split_key: split
   batch_size: 2
   connectivity_key: delaunay_connectivities
-  mask_strategy: node  
-  mask_percentage: 0.2 
+  mask_strategy: node
+  mask_percentage: 0.2
 wandb:
   use: true
   project_name: cosmx-graphs
