@@ -7,8 +7,8 @@ model:
 optim:
   loss: GaussianNLL # regression loss
   accelerator: auto
-  n_epochs: 500
-  min_epochs: 100
+  n_epochs: 2000
+  min_epochs: 500
   patience: 50 # early stopping on val_loss (regression)
   monitor: val_masked_pearson_corr
 dataset:
