@@ -1,6 +1,8 @@
 import math
 import os
 
+import numpy as np
+
 import lightning as L
 import lightning.pytorch as pl
 import torch
@@ -235,6 +237,22 @@ class NodeMaskingTrainingPlan:
             accelerator=self._cfg.optim.accelerator,  # Default to CPU (can be overridden via trainer_kwargs)
             **trainer_kwargs,
         )
+
+        # starting each gene's prediction at its average over the training cells, so the model 
+        # doesn't end up spending its first epochs learning the gene levels
+        if (self.prediction_task == "regression" and self.prediction_level == "node" and
+            self._cfg.model.decoder.type == "linear"):
+            X = self._adata.layers[self._cfg.dataset.layer_key]
+            # true when the cell's split column says "train"
+            is_train = (self._adata.obs[self._cfg.dataset.split_key] == "train").to_numpy()
+            # how many training cells there are
+            n_cells = int(is_train.sum())
+            # one average per gene, over the training cells only
+            gene_mean = torch.tensor(np.asarray(X[is_train].mean(axis=0)).ravel())
+            # putting average into the decoder
+            with torch.no_grad():
+                self.module.decoder.decoder.bias.copy_(gene_mean)
+            print(f"Decoder bias set to the gene means of {n_cells} training cells")
 
         trainer.fit(training_plan, datamodule)
 
