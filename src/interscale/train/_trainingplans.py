@@ -284,10 +284,12 @@ class TrainingPlan(pl.LightningModule):
         lr_warmup: int = 0,
         lr_max_epochs: int = 100000,
         patience_in_steps: int = 100000,
+        pearson_cell_weight: float = 0.5,
         **kwargs,
     ):
         super().__init__()
         self.module = module
+        self.pearson_cell_weight = pearson_cell_weight
         self.prediction_task = prediction_task
         self.prediction_level = prediction_level
         self.loss_type = loss
@@ -371,7 +373,7 @@ class TrainingPlan(pl.LightningModule):
         elif loss == "SmoothL1":
             return nn.SmoothL1Loss()
         elif loss == "BalancedPearsonCorrelationLoss":
-            return BalancedPearsonCorrelationLoss(None)
+            return BalancedPearsonCorrelationLoss(cell_weight=self.pearson_cell_weight)
         elif loss == "SCELoss":
             return SCELoss()
         elif loss == "SCE_EntropyATT_Loss":

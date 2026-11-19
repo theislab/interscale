@@ -1,20 +1,50 @@
 import numpy as np
 from geome import ann2data, iterables, transforms
+from scanpy import logging as logg
 from yacs.config import CfgNode as CN
+
+
+def _edge_index_transform(cfg: CN, library_key: str):
+    """
+    When connectivity key is provided, it reads the graph stored in ``adata.obsp`` and squidpy
+    is not involved at all.
+    """
+    connectivity_key = getattr(cfg.dataset, "connectivity_key", None)
+    if connectivity_key is not None:
+        return transforms.AddEdgeIndexFromAdj(adj_matrix_loc=f"obsp/{connectivity_key}", edge_index_key="edge_index")
+    cfg.dataset.spatial_neigbors_kwargs.merge_from_list(["library_key", library_key])
+    spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
+    logg.warning(
+        "dataset.connectivity_key is not set, so the spatial graph is built per sample with "
+        f"squidpy.gr.spatial_neighbors({dict(spatial_neigbors_kwargs)}), library_key='{library_key}'. "
+        "To use a graph built beforehand, store it in adata.obsp and set dataset.connectivity_key."
+    )
+    return transforms.AddEdgeIndex(
+        spatial_key="spatial",
+        key_added="adj_matrix",
+        func_args=spatial_neigbors_kwargs,
+        edge_index_key="edge_index",
+    )
+
+
+def _check_connectivity_key(adata, cfg: CN):
+    """In case if precomputed graph is missing, fails early"""
+    connectivity_key = getattr(cfg.dataset, "connectivity_key", None)
+    if connectivity_key is not None and connectivity_key not in adata.obsp:
+        raise KeyError(
+            f"'{connectivity_key}' not found in adata.obsp (available: {list(adata.obsp.keys())}). "
+            f"Build the graph beforehand."
+        )
 
 
 def prepare_a2d_dataset(cfg: CN):
     """ """
-    adj_matrix_loc = "adj_matrix"
 
     category_to_iterate_list = cfg.dataset.sample_key
     prediction_obs = cfg.dataset.prediction_obs
     layer_key = cfg.dataset.layer_key
 
     for category_to_iterate in category_to_iterate_list:
-        cfg.dataset.spatial_neigbors_kwargs.merge_from_list(["library_key", category_to_iterate])
-        spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
-
         one_hot_encode_list = [prediction_obs]
 
         X_key = f"layers/{layer_key}" if layer_key is not None else "X"
@@ -46,16 +76,7 @@ def prepare_a2d_dataset(cfg: CN):
         if obsm_key is not None:
             fields["embeddings"] = [f"obsm/{obsm_key}"]
 
-        transform = transforms.Compose(
-            [
-                transforms.AddEdgeIndex(
-                    edge_index_key="edge_index",
-                    func_args=spatial_neigbors_kwargs,
-                    spatial_key="spatial",
-                    key_added=adj_matrix_loc,
-                ),
-            ]
-        )
+        transform = transforms.Compose([_edge_index_transform(cfg, category_to_iterate)])
 
         return ann2data.Ann2DataBasic(
             fields=fields,
@@ -78,6 +99,7 @@ def prepare_geome_dataset(adata, cfg: CN):
     assert isinstance(cfg.dataset.sample_key, list)
     assert len(cfg.dataset.sample_key) >= 0
     assert all(item in adata.obs for item in cfg.dataset.sample_key), "Not all library_keys are in adata.obs_names"
+    _check_connectivity_key(adata, cfg)
 
     # Check for duplicate observation names
     adata.obs_names = [
@@ -92,7 +114,6 @@ def prepare_geome_dataset(adata, cfg: CN):
         if key in adata.obs.columns:
             adata.obs[key] = adata.obs[key].astype("category")
 
-    adj_matrix_loc = "adj_matrix"
     prediction_obs = cfg.dataset.prediction_obs
     category_to_iterate_list = cfg.dataset.sample_key
     layer_key = cfg.dataset.layer_key
@@ -107,9 +128,6 @@ def prepare_geome_dataset(adata, cfg: CN):
     datas_train, datas_val, datas_test = list(), list(), list()
 
     for category_to_iterate in category_to_iterate_list:
-        cfg.dataset.spatial_neigbors_kwargs.merge_from_list(["library_key", category_to_iterate])
-        spatial_neigbors_kwargs = cfg.dataset.spatial_neigbors_kwargs
-
         one_hot_encode_list = [prediction_obs]
         X_key = f"layers/{layer_key}" if layer_key is not None else "X"
 
@@ -147,16 +165,7 @@ def prepare_geome_dataset(adata, cfg: CN):
             if obsm_key not in adata.obsm:
                 raise ValueError(f"Precomputed embeddings key '{obsm_key}' not found in adata.obsm")
             fields["embeddings"] = [f"obsm/{obsm_key}"]
-        transform = transforms.Compose(
-            [
-                transforms.AddEdgeIndex(
-                    edge_index_key="edge_index",
-                    func_args=spatial_neigbors_kwargs,
-                    spatial_key="spatial",
-                    key_added=adj_matrix_loc,
-                ),
-            ]
-        )
+        transform = transforms.Compose([_edge_index_transform(cfg, category_to_iterate)])
 
         a2d = ann2data.Ann2DataBasic(
             fields=fields,
