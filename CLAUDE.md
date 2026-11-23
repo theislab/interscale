@@ -53,6 +53,7 @@ Ruff config lives in `pyproject.toml` (`[tool.ruff]`): line length 120, numpy do
 ### Config-driven design (yacs)
 
 Everything is driven by a single `yacs` `CfgNode` (`cfg`), built via `interscale.config.load_config(cfg_path)`:
+
 - `get_cfg_defaults()` assembles defaults from `config/{wandb,model,optim,dataset}_config.py`.
 - `load_config` additionally loads component-specific defaults based on `cfg.model.local_component.name` / `cfg.model.global_component.name` (from `local_component_config.py` / `global_component_config.py`) _before_ merging the user's YAML file, then freezes the config.
 - User-facing YAML files (see `config_files/legnini_example.yaml`) only need to override values relevant to their run — everything else falls back to defaults.
@@ -61,11 +62,13 @@ Everything is driven by a single `yacs` `CfgNode` (`cfg`), built via `interscale
 ### Model hierarchy (`interscale.model`)
 
 `BaseModel` (`model/base/_base_model.py`) mimics the `scvi-tools` model API pattern:
+
 - Uses an `scvi.data.AnnDataManager` (registered via `_setup_anndata`/`register_fields`) to validate and access fields on the `AnnData` object (expression layer, sample/library keys, prediction obs, split key). This is why models require `ModelClass._setup_anndata(...)` to be called before instantiation — it registers the manager keyed by an AnnData UUID stored in `adata.uns`.
 - `prediction_task` is `"classification"` or `"regression"`; `prediction_level` is `"node"` or `"graph"` — these gate a lot of branching throughout the codebase (loss selection, decoder output shape, evaluation output storage).
 - `save`/`load` persist only the module `state_dict`, with filenames derived from `tl.utils.get_model_filename_prefix(cfg, local_component, global_component)`. `load` includes legacy state-dict key remapping (`global_module.module.` → `global_module.`, stripped `module.` prefixes, and `tl.utils.detect_and_remap_state_dict_keys`) to stay compatible with older/wandb-saved checkpoints.
 
 Three concrete models subclass `BaseModel`, differing in which components they instantiate and which module class they wrap:
+
 - `LocalModel` — local (graph) component only.
 - `GlobalModel` — global (transformer) component only.
 - `CombinedModel` — both; wraps either `CombinedModule` or `DualDecoderCombinedModule` (when `cfg.model.decoder.dual_decoder` is `True`, both local and global components get their own decoder instead of sharing one).
@@ -75,6 +78,7 @@ Three concrete models subclass `BaseModel`, differing in which components they i
 ### Module hierarchy (`interscale.module`)
 
 Mirrors the model hierarchy at the `pytorch_lightning`/`LightningModule` level:
+
 - `BaseModule` (`module/base/_base_module.py`) owns the decoder (`interscale.nn`: `LinearDecoder`, `LinearLSEDecoder`, `NonLinearDecoder`, or `None` when a wrapping combined module owns decoding), and shared masking logic (`tl.masking.apply_mask`, via `_common_step_masking`) used for self-supervised/robustness training. `_common_step_masking` returns `(batch_masked, mask_idx, entry_mask)`; every `_common_step` returns `(local_emb, global_emb, y_pred, y_true, attn, entry_mask)`, and `entry_mask` is what restricts the loss and metrics under gene masking.
 - `module/local_modules/` — local (graph) encoders: `GCN`, `GIN`, `Precomputed` (precomputed embeddings), `SCVI` (SCVI-based encoder).
 - `module/global_modules/` — transformer-based global encoder (`TransformerNodeEncoderHook`) plus supporting transformer encoder/layer/utils, encoding whole-sample (long-range) context across cells.
@@ -83,6 +87,7 @@ Mirrors the model hierarchy at the `pytorch_lightning`/`LightningModule` level:
 ### Data pipeline: AnnData → PyG graphs
 
 `interscale.tl.geome_utils.prepare_geome_dataset` / `prepare_a2d_dataset` bridge AnnData and PyTorch Geometric using `geome`:
+
 - Iterates per-sample/library (`cfg.dataset.sample_key`), builds a spatial neighbor graph per sample (`squidpy`-style `spatial_neigbors_kwargs`, converted to an edge index via `geome.transforms.AddEdgeIndex`), and yields one PyG `Data` object per sample.
 - Splits data by `cfg.dataset.split_key` (an `adata.obs` column that must contain `train`/`val`, optionally `test`) — this must exist in the AnnData before calling `prepare_geome_dataset`.
 - Handles both classification (one-hot encodes `prediction_obs`) and regression prediction tasks, and optionally attaches precomputed embeddings (`cfg.model.global_component.parameters.type_gex_embedding == "Precomputed"`) from `adata.obsm`.
@@ -113,7 +118,6 @@ The registered ablation pairs are `<dataset>/node_reg` (cell) vs `<dataset>/node
 ### Datasets (`interscale.datasets`)
 
 - `datasets/_legnini.py` provides `legnini()`, a loader for the Legnini et al. 2023 molecular cartography dataset used in the manuscript/tutorials — downloads from Zenodo and caches to `~/.cache/interscale/legnini_2023.h5ad`.
-
 
 ### Evaluation (`interscale.evaluation`)
 
