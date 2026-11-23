@@ -4,7 +4,7 @@ requires = [ "hatchling" ]
 
 [project]
 name = "interscale"
-version = "0.0.1"
+version = "0.2.1"
 description = "Multi-scale cell interaction model for spatial transcriptomics data."
 readme = "README.md"
 license = "BSD-3-Clause"
@@ -97,10 +97,25 @@ envs.hatch-test.overrides.matrix.deps.env-vars = [
 ]
 
 [tool.uv]
-# fix build deps when building from source
-extra-build-dependencies.torch-cluster = [ "torch" ]
-extra-build-dependencies.torch-scatter = [ "torch" ]
-extra-build-dependencies.torch-sparse = [ "torch" ]
+# geome declares torch-cluster/torch-scatter/torch-sparse, but neither geome nor InterScale
+# imports them, and torch-geometric >= 2.3 covers everything they provide. PyPI carries only
+# their 2023 source distributions, which have to be compiled against the installed torch --
+# the "old and broken versions" of #59, and the reason CI had to pin a torch-specific PyG
+# wheel index. Drop them from the resolution by restating geome's metadata without them.
+# Revisit when geome changes its dependencies (https://github.com/theislab/geome).
+[[tool.uv.dependency-metadata]]
+name = "geome"
+requires-dist = [
+  "anndata",
+  "numpy",
+  "pandas",
+  "pytorch-lightning",
+  "scipy",
+  "session-info",
+  "squidpy",
+  "torch",
+  "torch-geometric",
+]
 
 [tool.ruff]
 line-length = 120
