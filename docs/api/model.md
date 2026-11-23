@@ -78,8 +78,6 @@ Two combined modules are available. `DualDecoderCombinedModule` is the default a
     module.TransformerNodeEncoderHook
 ```
 
-
-
 ## Usage example
 
 ```

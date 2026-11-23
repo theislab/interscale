@@ -15,6 +15,7 @@ where `${/path/to/new/virtual/environment}` should be replaced with the path whe
 ## PyPi
 
 Install InterScale via pip:
+
 ```
 uv pip install interscale
 ```
@@ -29,6 +30,7 @@ The [Docker] container was set up with [viash].
 
 To use InterScale, you first need to install some external libraries. These
 include:
+
 - [PyTorch]
 - [PyTorch Scatter]
 - [PyTorch Sparse]
@@ -57,7 +59,6 @@ uv pip install torch-scatter torch-sparse torch-cluster \
 uv pip install torch-geometric pytorch-lightning wandb yacs scvi-tools
 uv pip install geome
 ```
-
 
 [Mambaforge]: https://github.com/conda-forge/miniforge
 [python-venv]: https://docs.python.org/3/library/venv.html
