@@ -14,13 +14,10 @@ authors = [
   { name = "Francesca Drummer" },
   { name = "Sara Jimenez" },
 ]
-# The scverse stack InterScale sits on -- anndata, scanpy, squidpy, scvi-tools -- all
-# require >= 3.12. Claiming 3.11 only made the resolver back-solve to years-old releases
-# of them on that interpreter (#59).
-requires-python = ">=3.12"
+# The scverse stack InterScale sits on -- anndata, scanpy, squidpy, scvi-tools -- all require >= 3.13.
+requires-python = ">=3.13"
 classifiers = [
   "Programming Language :: Python :: 3 :: Only",
-  "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
   "Programming Language :: Python :: 3.15",
@@ -31,8 +28,7 @@ dependencies = [
   "fast-array-utils[accel]",
   "geome",
   "lightning>=2",
-  # No floor on numpy/scipy: requires-python >= 3.12 already rules out everything older than
-  # their first cp312 wheels, and the remaining floors below are API gates, not install gates.
+  # No floor on numpy/scipy: `requires-python` already rules out old versions
   "numpy",
   "pandas",
   "scanpy",
@@ -91,7 +87,7 @@ envs.docs.scripts.open = "python -m webbrowser -t docs/_build/html/index.html"
 envs.docs.dependency-groups = [ "doc" ]
 envs.hatch-test.matrix = [
   # Test the lowest and highest supported Python versions with normal deps
-  { deps = [ "stable" ], python = [ "3.12", "3.14" ] },
+  { deps = [ "stable" ], python = [ "3.13", "3.14" ] },
   # Test the newest supported Python version also with pre-release deps
   { deps = [ "pre" ], python = [ "3.14" ] },
 ]
