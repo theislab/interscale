@@ -1,10 +1,9 @@
 import math
 import os
 
-import numpy as np
-
 import lightning as L
 import lightning.pytorch as pl
+import numpy as np
 import torch
 import wandb
 from lightning.pytorch.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
@@ -238,10 +237,13 @@ class NodeMaskingTrainingPlan:
             **trainer_kwargs,
         )
 
-        # starting each gene's prediction at its average over the training cells, so the model 
+        # starting each gene's prediction at its average over the training cells, so the model
         # doesn't end up spending its first epochs learning the gene levels
-        if (self.prediction_task == "regression" and self.prediction_level == "node" and
-            self._cfg.model.decoder.type == "linear"):
+        if (
+            self.prediction_task == "regression"
+            and self.prediction_level == "node"
+            and self._cfg.model.decoder.type == "linear"
+        ):
             X = self._adata.layers[self._cfg.dataset.layer_key]
             # true when the cell's split column says "train"
             is_train = (self._adata.obs[self._cfg.dataset.split_key] == "train").to_numpy()

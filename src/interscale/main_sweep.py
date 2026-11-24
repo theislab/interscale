@@ -4,7 +4,6 @@ import os
 import traceback
 import warnings
 
-import numpy as np
 import psutil
 import scanpy as sc
 import squidpy as sq
