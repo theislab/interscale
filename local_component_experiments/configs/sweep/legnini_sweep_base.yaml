@@ -22,6 +22,8 @@ sweep_config:
         ]
     model.local_component.name:
       values: [GCN, GAT, GIN]
+    optim.seed:
+      values: [40, 41, 42]
 
 arms:
   radius_mse_node:
