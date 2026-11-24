@@ -64,8 +64,14 @@ if cfg.dataset.segmentation_robustness is not None:
     from interscale.pp import apply_segmentation_noise
 
     node_fraction, overflow_fraction = cfg.dataset.segmentation_robustness
-    sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
-    adata = apply_segmentation_noise(adata, node_fraction, overflow_fraction)
+    if cfg.dataset.connectivity_key is None:
+        # no stored graph: build one, like main.py
+        sq.gr.spatial_neighbors(adata, **cfg.dataset.spatial_neigbors_kwargs)
+        adjacency_key = "spatial_connectivities"
+    else:
+        # stored graph: add the noise along it, like main.py
+        adjacency_key = cfg.dataset.connectivity_key
+    adata = apply_segmentation_noise(adata, node_fraction, overflow_fraction, adjacency_key=adjacency_key)
 datas, _ = prepare_geome_dataset(adata, cfg)
 
 dm = GraphAnnDataModule(
@@ -133,17 +139,19 @@ print(f"rows per gene model (where that gene is hidden): {rows_per_gene.min()} t
 
 # validation
 # the val masks were drawn once in dm.setup("fit") and stay the same
-own_parts, hid_parts, nb_parts, y_parts = [], [], [], []
+batch_sizes, own_parts, hid_parts, nb_parts, y_parts = [], [], [], [], []
 for batch in dm.val_dataloader():
     gene_mask = batch.gene_mask.bool()
     own_parts.append(torch.where(gene_mask, MASK_VALUE, batch.x))
     hid_parts.append(gene_mask)
     nb_parts.append(neigh_avg(batch.x, batch.edge_index, gene_mask))
     y_parts.append(batch.x)
+    batch_sizes.append(batch.num_nodes)
 OWN_VAL = torch.cat(own_parts).numpy()
 HID_VAL = torch.cat(hid_parts).numpy()
 NB_VAL = torch.cat(nb_parts).numpy()
 Y_VAL = torch.cat(y_parts).numpy()
+print(f"val batches: {len(batch_sizes)}")
 print(f"val: {Y_VAL.shape[0]} cells, {HID_VAL.sum()} hidden entries to predict")
 
 
@@ -174,14 +182,21 @@ def fit_and_predict(version, alpha):
     return pred
 
 
-# scoring metrics
 def score(pred):
-    """Masked metrics over all val cells at once, like the GNN's val_masked_* values."""
-    # float64 so the sums over all val cells stay precise
-    m = masked_regression_metrics(
-        torch.from_numpy(pred).double(), torch.from_numpy(Y_VAL).double(), torch.from_numpy(HID_VAL)
-    )
-    return m["pearson_corr"].item(), m["r2"].item()
+    """Masked metrics per val batch, then the plain mean over batches, like in logs"""
+    pearsons, r2s = [], []
+    start = 0
+    for n in batch_sizes:
+        rows = slice(start, start + n)
+        m = masked_regression_metrics(
+            torch.from_numpy(pred[rows]).double(),
+            torch.from_numpy(Y_VAL[rows]).double(),
+            torch.from_numpy(HID_VAL[rows]),
+        )
+        pearsons.append(m["pearson_corr"].item())
+        r2s.append(m["r2"].item())
+        start += n
+    return np.mean(pearsons), np.mean(r2s)
 
 
 # fit and score
