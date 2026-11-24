@@ -1,13 +1,14 @@
-# Legnini, GCN, Delaunay graph: predict the hidden cells' expression (regression) with InterScale's LocalModel.
+# Legnini, GAT, Delaunay graph: predict the hidden cells' expression (regression) with InterScale's LocalModel.
 model:
   local_component: { name: GAT }
   global_component: { name: self-attn-transformer } # not used by LocalModel, need to have to avoid errors
   decoder: { type: linear }
+  n_embed: 64
   save: results/checkpoints/
 optim:
   loss: BalancedPearsonCorrelationLoss # regression loss
   accelerator: cpu
-  pearson_cell_weight: 0.75
+  pearson_cell_weight: 0.5
   n_epochs: 2000
   min_epochs: 100
   patience: 50 # early stopping on val_loss (regression)
