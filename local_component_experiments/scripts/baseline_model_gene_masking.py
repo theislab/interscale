@@ -50,7 +50,7 @@ VERSIONS = ["cell alone", "cell + neighbours"]
 
 # 1. Training set up
 # gene masking only
-cfg = load_config(sys.argv[1])
+cfg = load_config(sys.argv[1], overrides=sys.argv[2:])
 # checking the yaml file
 if cfg.dataset.mask_strategy != "gene":
     raise SystemExit("This baseline is for gene masking")
