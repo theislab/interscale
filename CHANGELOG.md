@@ -67,8 +67,8 @@ and this project adheres to [Semantic Versioning][].
   `DualDecoderCombinedModule.compute_separate_losses` takes it as an optional fifth argument.
 - `LocalModule._common_step` returned a 4-tuple where the training plan unpacked 5; it now
   matches the 6-tuple contract of the other modules.
-- **`requires-python` is now `>=3.12`**, was `>=3.11`, and the test matrix's lower rung moves
-  with it. anndata, scanpy, squidpy and scvi-tools all require 3.12 already, so the 3.11 claim
+- **`requires-python` is now `>=3.13`**, was `>=3.11`, and the test matrix's lower rung moves with it.
+  anndata, scanpy, squidpy and scvi-tools all require 3.12 already, so the 3.11 claim
   only told the resolver to back-solve to years-old releases of them on that interpreter — the
   "old and broken versions" of #59.
 - Dependency bounds were loosened (#59). `scanpy` no longer carries a `<1.13` upper bound: the
