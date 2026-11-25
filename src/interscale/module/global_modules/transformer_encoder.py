@@ -1,3 +1,5 @@
+import warnings
+
 import torch
 from torch import nn
 
@@ -25,6 +27,7 @@ class TransformerNodeEncoderHook(GlobalModule):
         dim_feedforward: int = 2048,
         dropout_global: float = 0.1,
         long_range_attention: bool = True,
+        local_mask_hops: int = 1,
         **base_module_kwargs,
     ):
 
@@ -38,6 +41,22 @@ class TransformerNodeEncoderHook(GlobalModule):
         self.dim_feedforward = dim_feedforward
         self.dropout_global = dropout_global
         self.long_range_attention = long_range_attention
+        # Radius of the neighbourhood the transformer is blocked from, in message-passing steps.
+        # It has to match the local component's depth: blocking 1 hop while the GCN mixes 2 leaves
+        # the second hop reachable by both components, which is the duplication the mask exists
+        # to prevent. The model passes the local module's `receptive_field_hops`; 0 means nothing
+        # was mixed, so only self-attention is blocked, exactly as without long-range masking.
+        if local_mask_hops < 0:
+            raise ValueError(f"local_mask_hops must be >= 0, got {local_mask_hops}.")
+        self.local_mask_hops = local_mask_hops
+        if long_range_attention and local_mask_hops == 0:
+            warnings.warn(
+                "long_range_attention is on, but the local component mixes no neighbours into the "
+                "embeddings (there is none, or it does no message passing), so there is nothing to "
+                "block beyond the cell itself. The mask is the self-only default.",
+                UserWarning,
+                stacklevel=2,
+            )
 
         # Create Transformer Encoder
         encoder_layer = CustomTransformerEncoderLayer(
@@ -97,20 +116,25 @@ class TransformerNodeEncoderHook(GlobalModule):
             else keep_indices,  # Add parameter to ensure masked nodes are kept (not during evaluation)
         )
 
-        if self.long_range_attention:
-            # INSERT_YOUR_CODE
-            raise NotImplementedError("Long-range attention mask feature is currently not implemented.")
+        if self.long_range_attention and self.local_mask_hops > 0:
+            # Block everything the local component has already seen, so the transformer can only
+            # contribute what the GNN could not.
             attention_mask = create_transformer_attention_mask_from_edges(
-                batched_data.edge_index, len(batched_data.obs_names), batched_data.batch, index_nodes, self.n_heads
+                batched_data.edge_index,
+                batched_data.batch.numel(),
+                batched_data.batch,
+                index_nodes,
+                self.n_heads,
+                n_hops=self.local_mask_hops,
+                device=emb.device,
             )
-            # Convert attention_mask to same dtype as src_padding_mask
-            attention_mask = attention_mask.to(dtype=src_padding_mask.dtype)
         else:
-            # attention_mask = None
-            # default: mask diagonal with -inf; no attention to self
+            # default: no attention to self, everything else open
             attention_mask = attn_mask_diagonal(batched_data.batch, index_nodes, self.n_heads, emb.device)
 
-        attention_mask = attention_mask.to(dtype=src_padding_mask.dtype)
+        # Boolean throughout: True is blocked. Keeping it out of float space is what stops the
+        # 0 * -inf that an "inverse adjacency" built by arithmetic would produce.
+        attention_mask = attention_mask.to(dtype=torch.bool)
 
         return padded_emb, src_padding_mask, index_nodes, attention_mask
 
@@ -223,5 +247,7 @@ class TransformerNodeEncoderHook(GlobalModule):
             f"n_heads: {self.n_heads}, \n"
             f"act_func: {self.act_func}, \n"
             f"num_layers: {self.num_layers}, \n"
+            f"long_range_attention: {self.long_range_attention}, \n"
+            f"local_mask_hops: {self.local_mask_hops}, \n"
         )
         return summary

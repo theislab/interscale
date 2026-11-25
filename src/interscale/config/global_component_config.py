@@ -16,9 +16,10 @@ def get_global_component_cfg(cfg, global_component_name):
         cfg.model.global_component.parameters.max_seq_len = (
             2000  # optionally adjust to maximum number of cells, ideally shouldnt be larger than 4000
         )
-        cfg.model.global_component.parameters.long_range_attention = (
-            False  # if True, takes inverse of adjacency matrix as long-range attention mask
-        )
+        # If True, blocks attention inside the local component's receptive field. There is no
+        # radius to set: the mask always covers exactly what the local module mixed (its
+        # `receptive_field_hops`), so the two components stay disjoint by construction.
+        cfg.model.global_component.parameters.long_range_attention = False
         cfg.model.global_component.parameters.type_gex_embedding = None
         cfg.model.global_component.latent_obsm_key = None  # Use the obms key where precomputed embeddings are stored, only if type_gex_embedding is "Precomputed"
     return cfg

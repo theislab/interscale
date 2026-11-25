@@ -354,7 +354,15 @@ class GlobalModule(BaseModule):
 
     # acts as a factory method to create a module from a config
     @staticmethod
-    def from_config(cfg, **kwargs):
+    def from_config(cfg, *, local_mask_hops: int, **kwargs):
+        """Build the configured global module.
+
+        ``local_mask_hops`` is how many hops the local component has already mixed into each
+        embedding -- its ``receptive_field_hops``, or 0 for a model without one -- and is what the
+        long-range mask blocks. It is a required argument rather than a config key because only
+        the caller knows which local module it built; reading it from the config used a key that
+        did not exist, and every model silently fell back to one hop.
+        """
         module_name = cfg.model.global_component.name
         params = cfg.model.global_component.parameters.copy()  # Make a copy to avoid modifying the original
 
@@ -369,6 +377,7 @@ class GlobalModule(BaseModule):
                 num_layers=params["num_layers"],
                 dim_feedforward=params["dim_feedforward"],
                 long_range_attention=params["long_range_attention"],
+                local_mask_hops=local_mask_hops,
                 **kwargs,
             )
         # Add more elifs for other modules

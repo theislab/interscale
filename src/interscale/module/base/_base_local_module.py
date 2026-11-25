@@ -1,6 +1,8 @@
 from abc import abstractmethod
 from typing import Literal
 
+from torch_geometric.nn import MessagePassing
+
 from ._base_module import BaseModule
 
 
@@ -15,6 +17,18 @@ class LocalModule(BaseModule):
     @abstractmethod
     def forward(self):
         """Forward pass."""
+
+    @property
+    def receptive_field_hops(self) -> int:
+        """How many hops of the spatial graph this module mixes into each cell's embedding.
+
+        This is the neighbourhood the transformer's long-range mask has to block. It is counted
+        from the module as built -- one hop per message-passing layer -- rather than read from the
+        config: SCVI's config carries a ``num_layers`` too, its encoder depth, although it never
+        looks at a neighbour. A layer that reaches further than one hop (``TAGConv``, ``APPNP``)
+        would have to override this.
+        """
+        return sum(isinstance(m, MessagePassing) for m in self.modules())
 
     def predict(self, local_embedding, prediction_level: Literal["node", "graph"] | None = None):
         """Predict with the decoder.

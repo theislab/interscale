@@ -28,10 +28,10 @@ class GlobalModel(NodeMaskingTrainingPlan, BaseModel):
         self.local_component = False
         self.global_component = True
 
-        # self.module = self._register_global_component()
-
         self.module = GlobalModule.from_config(
             cfg,
+            # No local component, so nothing has been mixed that the long-range mask could block.
+            local_mask_hops=0,
             n_input=self.n_input,
             n_output=self.n_output,
             n_embed=self.n_embed,
