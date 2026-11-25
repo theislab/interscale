@@ -18,6 +18,7 @@ from interscale.geome_dataloader import GraphAnnDataModule
 from interscale.pp.segmentation_noise import apply_segmentation_noise
 from interscale.tl import prepare_geome_dataset, remove_zero_expression_cells, set_full_reproducibility
 from interscale.tl.utils import get_model_filename_prefix
+from interscale.train import metric_direction
 
 # geome calls the deprecated `sq.gr.spatial_neighbors` entrypoint; silence its
 # FutureWarnings so they don't flood the training logs.
@@ -357,9 +358,11 @@ if __name__ == "__main__":
         "--metric_goal",
         dest="metric_goal",
         type=str,
-        default="maximize",
+        default=None,
         choices=["maximize", "minimize"],
-        help="Direction for --metric (default: maximize).",
+        help="Direction for --metric. Default: inferred from its name by "
+        "train.metric_direction, the rule optim.monitor uses -- names ending in loss, error or "
+        "mse are minimised, everything else maximised.",
     )
     args = parser.parse_args()
 
@@ -389,11 +392,25 @@ if __name__ == "__main__":
     with open(args.sweep_cfg) as f:
         yaml_config = yaml.safe_load(f)
 
+    # The sweep's goal comes from the same rule as the in-trial monitor direction, so wandb and
+    # early stopping cannot disagree. A fixed "maximize" default ranked a sweep on an error
+    # (val_mse, val_scaled_cosine_error) by its worst trial unless the flag was remembered.
+    metric = None
+    if args.metric:
+        inferred_goal = "minimize" if metric_direction(args.metric) == "min" else "maximize"
+        metric_goal = args.metric_goal or inferred_goal
+        if metric_goal != inferred_goal:
+            print(
+                f"Warning: --metric_goal {metric_goal} for {args.metric}, whose name implies "
+                f"{inferred_goal}. Early stopping / checkpointing on optim.monitor will {inferred_goal} it."
+            )
+        metric = {"name": args.metric, "goal": metric_goal}
+
     sweep_config, sweep_params = build_sweep_config(
         yaml_config,
         prediction_task=prediction_task,
         model_type=args.model_type,
-        metric=({"name": args.metric, "goal": args.metric_goal} if args.metric else None),
+        metric=metric,
     )
     print(sweep_config)
 

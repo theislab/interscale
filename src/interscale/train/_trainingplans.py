@@ -10,9 +10,10 @@ from torchmetrics import MetricCollection
 
 from interscale.module.base._base_module import BaseModule
 from interscale.nn import CosineWarmupScheduler
-from interscale.tl.masking import masked_loss
+from interscale.tl.masking import cosine_scorable_rows, masked_loss
 
-from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss
+from ._utils import metric_direction
+from .losses import BalancedPearsonCorrelationLoss, SCE_EntropyATT_Loss, SCELoss, scaled_cosine_error
 
 
 class RunningCosineSimilarity(torchmetrics.Metric):
@@ -52,6 +53,35 @@ class RunningCosineSimilarity(torchmetrics.Metric):
         return self.total / self.count
 
 
+class RunningScaledCosineError(torchmetrics.Metric):
+    """Mean per-cell scaled cosine error ``(1 - cos) ** gamma`` (GraphMAE), from a running sum.
+
+    The metric twin of ``SCELoss``: with the same ``gamma`` and the same cells it is the same
+    number, so a run trained on another criterion can still be read on the SCE scale. Two scalars
+    of state, for the reason ``RunningCosineSimilarity`` gives.
+    """
+
+    is_differentiable = False
+    higher_is_better = False
+    full_state_update = False
+
+    def __init__(self, gamma: float = 3.0, **kwargs):
+        super().__init__(**kwargs)
+        self.gamma = float(gamma)
+        self.add_state("total", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("count", default=torch.tensor(0.0), dist_reduce_fx="sum")
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor) -> None:
+        """Accumulate the summed per-cell scaled cosine error and the number of cells."""
+        sce = scaled_cosine_error(preds, target, self.gamma)
+        self.total = self.total + sce.sum()
+        self.count = self.count + sce.numel()
+
+    def compute(self) -> torch.Tensor:
+        """Mean per-cell scaled cosine error over everything seen since the last reset."""
+        return self.total / self.count
+
+
 class MeanPearsonCorrCoef(torchmetrics.PearsonCorrCoef):
     """``PearsonCorrCoef`` over ``num_outputs`` genes, reduced to the NaN-skipping mean.
 
@@ -84,23 +114,35 @@ class SingleClassF1Score(torchmetrics.classification.MulticlassF1Score):
         return super().compute()[self.class_idx]
 
 
-_MASKED_MOMENTS = ("n_gene", "sum_p", "sum_t", "sum_pp", "sum_tt", "sum_pt", "cos_total", "n_rows")
+_MASKED_MOMENTS = ("n_gene", "sum_p", "sum_t", "sum_pp", "sum_tt", "sum_pt", "cos_total", "sce_total", "n_rows")
 
 
-def _masked_moments(y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torch.Tensor) -> dict[str, torch.Tensor]:
+def _masked_moments(
+    y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torch.Tensor, sce_gamma: float = 3.0
+) -> dict[str, torch.Tensor]:
     """Additive sufficient statistics for :func:`masked_regression_metrics`.
 
     Every entry that is not masked is multiplied by zero before any sum is taken, and zeros
     contribute nothing to a sum, so each moment is exactly the moment over the masked entries.
     Every quantity is a plain sum, so moments of several batches add up to the moments of their
     union -- which is what lets :class:`MaskedRegressionMetric` report an exact epoch-level value.
+
+    The per-cell terms (``cos_total``, ``sce_total``, ``n_rows``) cover the cosine-scorable cells
+    only; see :func:`interscale.tl.masking.cosine_scorable_rows`.
     """
     m = entry_mask.to(y_pred.dtype)
     p_ = y_pred * m
     t_ = y_true * m
     # Per-cell cosine over that cell's masked genes: the zeroed entries drop out of both the dot
-    # product and the two norms, so this is the cosine on the masked coordinates.
-    cosine = nn.functional.cosine_similarity(p_, t_, dim=1)
+    # product and the two norms, so this is the cosine on the masked coordinates. Summed over the
+    # cells that HAVE a masked, non-zero target only. A cell with no masked gene has no masked
+    # coordinates, and its all-zero row would enter the mean as a cosine of 0 -- under cell masking
+    # that is every unmasked cell, which scaled the reported cosine by the fraction of cells
+    # masked. A cell whose masked genes are all zero in the target is left out too: its cosine is 0
+    # for any prediction (see tl.masking.cosine_scorable_rows).
+    scored = cosine_scorable_rows(y_true, entry_mask)
+    cosine = nn.functional.cosine_similarity(p_[scored], t_[scored], dim=1)
+    sce = scaled_cosine_error(p_[scored], t_[scored], sce_gamma)
     moments = {
         "n_gene": m.sum(dim=0),  # [G] masked cells per gene
         "sum_p": p_.sum(dim=0),
@@ -109,6 +151,7 @@ def _masked_moments(y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torc
         "sum_tt": (t_**2).sum(dim=0),
         "sum_pt": (p_ * t_).sum(dim=0),
         "cos_total": cosine.sum(),
+        "sce_total": sce.sum(),
         "n_rows": torch.tensor(float(cosine.numel()), device=y_pred.device),
     }
     # float64: the variances below are differences of sums, which loses precision in float32
@@ -152,6 +195,7 @@ def _masked_metrics_from_moments(moments: dict[str, torch.Tensor], eps: float = 
         "pearson_corr": torch.nanmean(pearson),
         "concordance_corr": torch.nanmean(concordance),
         "cosine_similarity": moments["cos_total"] / moments["n_rows"].clamp(min=1),
+        "scaled_cosine_error": moments["sce_total"] / moments["n_rows"].clamp(min=1),
     }
 
 
@@ -166,24 +210,28 @@ class MaskedRegressionMetric(torchmetrics.Metric):
     Parameters
     ----------
     name
-        One of ``mse``, ``r2``, ``pearson_corr``, ``concordance_corr``, ``cosine_similarity``.
+        One of ``mse``, ``r2``, ``pearson_corr``, ``concordance_corr``, ``cosine_similarity``,
+        ``scaled_cosine_error``.
     num_outputs
         Number of genes ``G``.
+    sce_gamma
+        The exponent of the scaled cosine error, as for ``SCELoss``.
     """
 
     is_differentiable = False
     full_state_update = False
 
-    def __init__(self, name: str, num_outputs: int, **kwargs):
+    def __init__(self, name: str, num_outputs: int, sce_gamma: float = 3.0, **kwargs):
         super().__init__(**kwargs)
         self.name = name
+        self.sce_gamma = float(sce_gamma)
         for key in _MASKED_MOMENTS:
             shape = (num_outputs,) if key.startswith(("n_gene", "sum_")) else ()
             self.add_state(key, default=torch.zeros(shape, dtype=torch.float64), dist_reduce_fx="sum")
 
     def update(self, preds: torch.Tensor, target: torch.Tensor, entry_mask: torch.Tensor) -> None:
         """Add this batch's masked-entry moments to the running sums."""
-        for key, value in _masked_moments(preds, target, entry_mask).items():
+        for key, value in _masked_moments(preds, target, entry_mask, self.sce_gamma).items():
             setattr(self, key, getattr(self, key) + value)
 
     def compute(self) -> torch.Tensor:
@@ -193,7 +241,7 @@ class MaskedRegressionMetric(torchmetrics.Metric):
 
 
 def masked_regression_metrics(
-    y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torch.Tensor, eps: float = 1e-8
+    y_pred: torch.Tensor, y_true: torch.Tensor, entry_mask: torch.Tensor, eps: float = 1e-8, sce_gamma: float = 3.0
 ) -> dict[str, torch.Tensor]:
     """The regression metrics of ``_setup_regression_metrics``, restricted to the masked entries.
 
@@ -216,15 +264,18 @@ def masked_regression_metrics(
         ``[N, G]`` boolean marking the masked entries.
     eps
         Guard for degenerate (zero-variance) genes.
+    sce_gamma
+        The exponent of the scaled cosine error, as for ``SCELoss``.
 
     Returns
     -------
     dict
         Unprefixed metric names mapped to scalar tensors, matching the keys that
         ``_setup_regression_metrics`` produces: ``mse``, ``r2`` (per-gene, uniform average),
-        ``pearson_corr``, ``concordance_corr``, ``cosine_similarity`` (per cell).
+        ``pearson_corr``, ``concordance_corr``, and per cell ``cosine_similarity`` and
+        ``scaled_cosine_error``.
     """
-    metrics = _masked_metrics_from_moments(_masked_moments(y_pred, y_true, entry_mask), eps=eps)
+    metrics = _masked_metrics_from_moments(_masked_moments(y_pred, y_true, entry_mask, sce_gamma), eps=eps)
     return {k: v.to(y_pred.dtype) for k, v in metrics.items()}
 
 
@@ -265,6 +316,12 @@ class TrainingPlan(pl.LightningModule):
 
     lr_scheduler: None | Literal["ReduceLROnPlateau", "CosineWarmupScheduler"] = None
         Learning rate scheduler to use. Default is None. CosineWarmupScheduler reduces LR at each step, ReduceLROnPlateau reduces LR with a patience if no improvement is seen.
+    monitor: str | None = None
+        Metric ReduceLROnPlateau watches. ``NodeMaskingTrainingPlan.train`` passes the one
+        ``_resolve_monitor`` gives the EarlyStopping / ModelCheckpoint callbacks
+        (``optim.monitor``). Default: ``val_f1_macro`` for classification, ``val_r2`` for regression.
+    monitor_mode: Literal["min", "max"] | None = None
+        Direction of ``monitor``. Default: inferred from its name by ``metric_direction``.
     """
 
     def __init__(
@@ -284,6 +341,9 @@ class TrainingPlan(pl.LightningModule):
         lr_warmup: int = 0,
         lr_max_epochs: int = 100000,
         patience_in_steps: int = 100000,
+        sce_gamma: float = 3.0,
+        monitor: str | None = None,
+        monitor_mode: Literal["min", "max"] | None = None,
         **kwargs,
     ):
         super().__init__()
@@ -301,6 +361,9 @@ class TrainingPlan(pl.LightningModule):
         self.lr_warmup = lr_warmup
         self.lr_max_epochs = lr_max_epochs
         self.lr = lr
+        # The exponent of the scaled cosine error: used by SCELoss / SCE_EntropyATT_Loss when one
+        # is the criterion, and by the `scaled_cosine_error` metrics whatever the criterion is.
+        self.sce_gamma = float(sce_gamma)
         if self.prediction_task == "regression":
             if self.cross_corr == "gene":
                 print("cross-gene per cell correlation metrics")
@@ -325,12 +388,17 @@ class TrainingPlan(pl.LightningModule):
             # LR-scheduler monitor. "val_f1" never existed; only val_f1_micro/macro/<class> do.
             self.monitor_metric = "val_f1_macro"
         elif "regression" in self.prediction_task:
-            metrics = self._setup_regression_metrics(self.module.n_output)
-            masked_metrics = self._setup_masked_regression_metrics(self.module.n_output)
+            metrics = self._setup_regression_metrics(self.module.n_output, self.sce_gamma)
+            masked_metrics = self._setup_masked_regression_metrics(self.module.n_output, self.sce_gamma)
             self.loss = self._setup_regression_loss(self.loss_type)
             self.monitor_metric = "val_r2"
         else:
             raise ValueError("Prediction task must define 'classification' or 'regression'.")
+        if monitor is not None:
+            self.monitor_metric = monitor
+        # ReduceLROnPlateau was hardcoded to mode="min" while monitoring val_r2 / val_f1_macro, both
+        # higher-is-better: it cut the LR whenever the score stopped *falling*, i.e. on improvement.
+        self.monitor_mode = monitor_mode or metric_direction(self.monitor_metric)
 
         self.train_metrics = metrics.clone(prefix="train_")
         self.valid_metrics = metrics.clone(prefix="val_")
@@ -373,9 +441,9 @@ class TrainingPlan(pl.LightningModule):
         elif loss == "BalancedPearsonCorrelationLoss":
             return BalancedPearsonCorrelationLoss(None)
         elif loss == "SCELoss":
-            return SCELoss()
+            return SCELoss(gamma=self.sce_gamma)
         elif loss == "SCE_EntropyATT_Loss":
-            return SCE_EntropyATT_Loss()
+            return SCE_EntropyATT_Loss(gamma=self.sce_gamma)
 
     @staticmethod
     def _setup_classification_metrics(num_outputs: int, class_labels: list[str] | None = None):
@@ -392,7 +460,7 @@ class TrainingPlan(pl.LightningModule):
         return MetricCollection(metrics)
 
     @staticmethod
-    def _setup_regression_metrics(num_outputs: int):
+    def _setup_regression_metrics(num_outputs: int, sce_gamma: float = 3.0):
         return MetricCollection(
             {
                 "mse": torchmetrics.MeanSquaredError(),
@@ -409,17 +477,27 @@ class TrainingPlan(pl.LightningModule):
                 # Not torchmetrics.CosineSimilarity: see RunningCosineSimilarity for why its
                 # list state cannot be used on a dataset this size. Same value, O(1) memory.
                 "cosine_similarity": RunningCosineSimilarity(),
+                # GraphMAE's scaled cosine error with the configured gamma: the SCELoss value on
+                # the same cells, tracked whatever the criterion. gamma = 1 is 1 - cosine.
+                "scaled_cosine_error": RunningScaledCosineError(sce_gamma),
             }
         )
 
     @staticmethod
-    def _setup_masked_regression_metrics(num_outputs: int):
-        # compute_groups=False: the five share identical state, but letting MetricCollection merge
+    def _setup_masked_regression_metrics(num_outputs: int, sce_gamma: float = 3.0):
+        # compute_groups=False: the six share identical state, but letting MetricCollection merge
         # them would be an optimisation whose correctness depends on its state-equality check.
         return MetricCollection(
             {
-                name: MaskedRegressionMetric(name, num_outputs)
-                for name in ("mse", "r2", "pearson_corr", "concordance_corr", "cosine_similarity")
+                name: MaskedRegressionMetric(name, num_outputs, sce_gamma)
+                for name in (
+                    "mse",
+                    "r2",
+                    "pearson_corr",
+                    "concordance_corr",
+                    "cosine_similarity",
+                    "scaled_cosine_error",
+                )
             },
             compute_groups=False,
         )
@@ -486,8 +564,12 @@ class TrainingPlan(pl.LightningModule):
             if entry_mask is None:
                 loss = self.loss(y_pred, y_true, attn)
             else:
-                m = entry_mask.to(y_pred.dtype)
-                loss = self.loss(y_pred * m, y_true * m, attn)
+                # Only the cells with a masked, non-zero target: any other cell would enter the
+                # cosine with an all-zero target, i.e. as an error of 1 that no prediction can
+                # change (see cosine_scorable_rows). The attention term is kept either way.
+                rows = cosine_scorable_rows(y_true, entry_mask)
+                m = entry_mask[rows].to(y_pred.dtype)
+                loss = self.loss(y_pred[rows] * m, y_true[rows] * m, attn)
         else:
             loss = masked_loss(self.loss, self.loss_type, y_pred, y_true, entry_mask)
 
@@ -776,8 +858,10 @@ class TrainingPlan(pl.LightningModule):
         #     params.extend(filter(lambda p: p.requires_grad, self.model.global_component.parameters()))
         optimizer = torch.optim.AdamW(params, lr=self.lr, weight_decay=self.weight_decay)
         if self.lr_scheduler == "ReduceLROnPlateau":
+            # No `verbose`: deprecated since torch 2.2 and since removed, where it raises a
+            # TypeError. LearningRateMonitor logs the LR anyway.
             lr_scheduler = ReduceLROnPlateau(
-                optimizer, mode="min", factor=0.1, patience=self.patience_in_steps, verbose=True
+                optimizer, mode=self.monitor_mode, factor=0.1, patience=self.patience_in_steps
             )
         elif self.lr_scheduler == "CosineWarmupScheduler":
             lr_scheduler = CosineWarmupScheduler(optimizer, warmup=self.lr_warmup, max_epochs=self.lr_max_epochs)

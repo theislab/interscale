@@ -275,9 +275,12 @@ def _reference_metrics(y_pred, y_true, m):
         per_gene_r2.append(torchmetrics.R2Score()(p, t).item())
         per_gene_r.append(torchmetrics.PearsonCorrCoef()(p, t).item())
         per_gene_ccc.append(torchmetrics.ConcordanceCorrCoef()(p, t).item())
+    # Per cell over its masked genes, for the cells that have any: a cell with none has no
+    # masked coordinates to compare.
     per_cell_cos = [
         torch.nn.functional.cosine_similarity(y_pred[i, m[i]], y_true[i, m[i]], dim=0).item()
         for i in range(y_true.shape[0])
+        if m[i].any()
     ]
     return {
         "mse": ((y_pred[m] - y_true[m]) ** 2).mean().item(),
@@ -285,6 +288,7 @@ def _reference_metrics(y_pred, y_true, m):
         "pearson_corr": float(np.mean(per_gene_r)),
         "concordance_corr": float(np.mean(per_gene_ccc)),
         "cosine_similarity": float(np.mean(per_cell_cos)),
+        "scaled_cosine_error": float(np.mean([(1 - c) ** 3 for c in per_cell_cos])),
     }
 
 

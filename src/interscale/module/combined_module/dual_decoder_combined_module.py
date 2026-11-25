@@ -45,6 +45,8 @@ class DualDecoderCombinedModule(BaseModule):
         # Global module with decoder
         self.global_module = GlobalModule.from_config(
             cfg,
+            # The long-range mask blocks exactly what the local module above already mixed.
+            local_mask_hops=self.local_module.receptive_field_hops,
             n_input=self.n_input,
             n_output=self.n_output,
             n_embed=self.n_embed,
