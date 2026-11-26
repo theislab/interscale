@@ -36,17 +36,24 @@ def get_average_local_and_global_size(
     scale = pixel_size_um if coord_units == "pixels" else 1.0
 
     ## Local: avg direct-neighbor count * n_layers
-    if "spatial_connectivities" not in adata.obsp:
-        kwargs = dict(cfg.dataset.spatial_neigbors_kwargs)
-        # library_key is only filled in by prepare_geome_dataset, so pick the first sample key here
-        kwargs["library_key"] = kwargs.get("library_key") or cfg.dataset.sample_key[0]
-        adata.obs[kwargs["library_key"]] = adata.obs[kwargs["library_key"]].astype("category")
-        sq.gr.spatial_neighbors(adata, **kwargs)
+    conn_key = getattr(cfg.dataset, "connectivity_key", None)
+    if conn_key is None:
+        conn_key = "spatial_connectivities"
+        if conn_key not in adata.obsp:
+            kwargs = dict(cfg.dataset.spatial_neigbors_kwargs)
+            # library_key is only filled in by prepare_geome_dataset, so pick the first sample key here
+            kwargs["library_key"] = kwargs.get("library_key") or cfg.dataset.sample_key[0]
+            adata.obs[kwargs["library_key"]] = adata.obs[kwargs["library_key"]].astype("category")
+            sq.gr.spatial_neighbors(adata, **kwargs)
+    dist_key = conn_key.removesuffix("_connectivities") + "_distances"
+    missing = [key for key in (conn_key, dist_key) if key not in adata.obsp]
+    if missing:
+        raise KeyError(f"{dist_key} not found in adata.obsp")
     n_layers = cfg.model.local_component.parameters.num_layers
-    conn = adata.obsp["spatial_connectivities"].tocsr()
+    conn = adata.obsp[conn_key].tocsr()
     local_cells = conn.getnnz(axis=1).mean() * n_layers
     # reach in micrometers: avg edge length walked over n_layers hops
-    local_dist_um = adata.obsp["spatial_distances"].data.mean() * n_layers * scale
+    local_dist_um = adata.obsp[dist_key].data.mean() * n_layers * scale
 
     ## Global: avg cells and avg extent per sample (or per sliding window, whichever sample_key defines)
     groups = adata.obs.groupby(list(cfg.dataset.sample_key), observed=True)

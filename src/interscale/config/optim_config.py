@@ -34,4 +34,6 @@ def get_optim_cfg(cfg):
     # Metric driving EarlyStopping / ModelCheckpoint / the LR scheduler.
     # "auto" -> val_f1_macro for classification, val_loss for regression.
     cfg.optim.monitor = "auto"
+    # BalancedPearsonCorrelationLoss only
+    cfg.optim.pearson_cell_weight = 0.5
     return cfg

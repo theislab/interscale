@@ -1,0 +1,101 @@
+sweep_config:
+  method: grid
+  parameters:
+    arm:
+      values:
+        [
+          radius_mse_node,
+          radius_mse_gene,
+          radius_sce_node,
+          radius_sce_gene,
+          radius_bpc_node,
+          knn_mse_node,
+          knn_mse_gene,
+          knn_sce_node,
+          knn_sce_gene,
+          knn_bpc_node,
+          delaunay_mse_node,
+          delaunay_mse_gene,
+          delaunay_sce_node,
+          delaunay_sce_gene,
+          delaunay_bpc_node,
+        ]
+    model.local_component.name:
+      values: [GCN, GAT, GIN]
+
+arms:
+  radius_mse_node:
+    dataset.connectivity_key: radius_connectivities
+    optim.loss: MSELoss
+    dataset.mask_strategy: node
+    dataset.name: cosmx_radius_mse_node
+  radius_mse_gene:
+    dataset.connectivity_key: radius_connectivities
+    optim.loss: MSELoss
+    dataset.mask_strategy: gene
+    dataset.name: cosmx_radius_mse_gene
+  radius_sce_node:
+    dataset.connectivity_key: radius_connectivities
+    optim.loss: SCELoss
+    dataset.mask_strategy: node
+    dataset.name: cosmx_radius_sce_node
+  radius_sce_gene:
+    dataset.connectivity_key: radius_connectivities
+    optim.loss: SCELoss
+    dataset.mask_strategy: gene
+    dataset.name: cosmx_radius_sce_gene
+  radius_bpc_node:
+    dataset.connectivity_key: radius_connectivities
+    optim.loss: BalancedPearsonCorrelationLoss
+    dataset.mask_strategy: node
+    dataset.name: cosmx_radius_bpc_node
+  knn_mse_node:
+    dataset.connectivity_key: knn_connectivities
+    optim.loss: MSELoss
+    dataset.mask_strategy: node
+    dataset.name: cosmx_knn_mse_node
+  knn_mse_gene:
+    dataset.connectivity_key: knn_connectivities
+    optim.loss: MSELoss
+    dataset.mask_strategy: gene
+    dataset.name: cosmx_knn_mse_gene
+  knn_sce_node:
+    dataset.connectivity_key: knn_connectivities
+    optim.loss: SCELoss
+    dataset.mask_strategy: node
+    dataset.name: cosmx_knn_sce_node
+  knn_sce_gene:
+    dataset.connectivity_key: knn_connectivities
+    optim.loss: SCELoss
+    dataset.mask_strategy: gene
+    dataset.name: cosmx_knn_sce_gene
+  knn_bpc_node:
+    dataset.connectivity_key: knn_connectivities
+    optim.loss: BalancedPearsonCorrelationLoss
+    dataset.mask_strategy: node
+    dataset.name: cosmx_knn_bpc_node
+  delaunay_mse_node:
+    dataset.connectivity_key: delaunay_connectivities
+    optim.loss: MSELoss
+    dataset.mask_strategy: node
+    dataset.name: cosmx_delaunay_mse_node
+  delaunay_mse_gene:
+    dataset.connectivity_key: delaunay_connectivities
+    optim.loss: MSELoss
+    dataset.mask_strategy: gene
+    dataset.name: cosmx_delaunay_mse_gene
+  delaunay_sce_node:
+    dataset.connectivity_key: delaunay_connectivities
+    optim.loss: SCELoss
+    dataset.mask_strategy: node
+    dataset.name: cosmx_delaunay_sce_node
+  delaunay_sce_gene:
+    dataset.connectivity_key: delaunay_connectivities
+    optim.loss: SCELoss
+    dataset.mask_strategy: gene
+    dataset.name: cosmx_delaunay_sce_gene
+  delaunay_bpc_node:
+    dataset.connectivity_key: delaunay_connectivities
+    optim.loss: BalancedPearsonCorrelationLoss
+    dataset.mask_strategy: node
+    dataset.name: cosmx_delaunay_bpc_node
